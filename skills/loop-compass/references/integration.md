@@ -6,7 +6,7 @@ rewriting its semantics so each host shares one trigger contract.
 ## Codex
 
 Merge the canonical policy into the closest repository `AGENTS.md` that governs tool-using agents.
-When a delegated worker may not inherit repository instructions, add only the one-line reminder
+When a delegated worker may not inherit repository instructions, add only the compact reminder
 from the policy to its brief.
 
 Skill availability and project-instruction inheritance vary by Codex surface. Treat both as
@@ -29,7 +29,7 @@ fallback behavior in project instructions.
 ## Other hosts
 
 Place the canonical policy in the host's inherited project-instruction surface. If the host has no
-such surface, include the one-line reminder in every tool-using delegation and provide a resolvable
+such surface, include the compact reminder in every tool-using delegation and provide a resolvable
 path to the installed skill or repository `.loopcompass` directories.
 
 ## Conformance

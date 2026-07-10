@@ -7,13 +7,18 @@ requires: [<capability>]
 owner: <agent-or-operator>
 opened: <YYYY-MM-DD>
 containment_expires: null
+consulted: []
 ---
+
+<!-- status: detected | escalated | repairing | blocked | verified -->
 
 # <Repair the broken mechanism>
 
 ## Failure
 
-<Expected behavior, observed behavior, and minimal reproduction.>
+Normal path: <The intended operation that failed.>
+
+Evidence: <Expected behavior, observed behavior, and minimal reproduction.>
 
 ## Repair
 

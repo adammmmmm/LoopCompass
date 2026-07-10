@@ -62,6 +62,11 @@ improves availability where supported, while direct `.loopcompass` search provid
 fallback.
 See [project integration](skills/loop-compass/references/integration.md).
 
+Automatic here means consultation, classification, repair within available authority, and
+escalation. Durable recovery creation remains approval-gated by default so unverified agent output
+cannot silently become shared operational knowledge. Repository policy may explicitly authorize
+automatic persistence after verification.
+
 ## Install
 
 Install or copy [`skills/loop-compass`](skills/loop-compass) into the skill directory supported by

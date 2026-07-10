@@ -16,7 +16,7 @@ contradictory evidence appears.
 Lifecycle:
 
 ```text
-candidate -> verified -> active -> stale -> deleted or superseded
+candidate -> verified -> stale -> deleted or superseded
 ```
 
 ### Incident lane
@@ -66,6 +66,24 @@ trigger.
 Project instructions provide best-effort automatic behavior rather than a cross-host guarantee.
 Skill preloading improves availability but does not enforce use. A worker without the skill searches
 `.loopcompass` directly and continues fail-open if retrieval is unavailable.
+
+Automatic consultation does not imply automatic persistence. Durable recoveries require operator
+approval by default unless repository policy explicitly authorizes verified agents to create them.
+
+## Artifact identity and concurrency
+
+Normalize signatures by removing volatile paths, IDs, timestamps, and secret-bearing values. Derive
+the artifact slug mechanically from the exact normalized signature: lowercase it, replace each
+maximal run outside ASCII `a-z` and `0-9` with one hyphen, trim it, truncate it to 96 characters,
+and trim it again. Use `failure` when empty. The ID is the slug and the filename is `<slug>.md`.
+Search recoveries and incidents for the exact signature immediately before writing.
+
+When a matching artifact exists, update or supersede it rather than creating another. Parallel
+writes that still race should resolve around the deterministic artifact path, making the conflict
+visible instead of silently creating divergent knowledge.
+
+If the deterministic path contains a different signature, append the lowest available integer
+suffix beginning with `-2`. Agents must not invent alternate descriptive filenames.
 
 ## Escalation ladder
 
@@ -164,3 +182,4 @@ automation.
 10. Escalation reaches a capable agent or terminates at the operator.
 11. Consultation failure does not recursively invoke LoopCompass.
 12. Manual invocation exercises the same classification path as policy-triggered use.
+13. Two agents handling the same signature converge on one deterministic artifact path.

@@ -7,11 +7,14 @@ scope:
   shell: <any-or-specific>
   tool: <tool-name>
   versions: <version-range-or-unknown>
-status: verified
+status: candidate
 first_seen: <YYYY-MM-DD>
-last_verified: <YYYY-MM-DD>
+last_verified: null
 expires_after_days: <integer>
+supersedes: null
 ---
+
+<!-- status: candidate | verified | stale | superseded -->
 
 # <Correct path in one line>
 
@@ -25,7 +28,7 @@ expires_after_days: <integer>
 
 ## Verification
 
-<Evidence that the recovery caused the intended outcome.>
+<Evidence that the recovery caused the intended outcome, or "Pending" while status is candidate.>
 
 ## Limits
 

@@ -21,5 +21,6 @@ fail-open and report that the consultation was skipped.
 Include this one-line reminder in briefs for delegated agents that may use tools when repository
 instruction inheritance is uncertain:
 
-> On an unexpected operational failure, apply the repository LoopCompass rule before retrying; if
-> the skill is unavailable, search `.loopcompass` directly and continue fail-open.
+> On an unexpected operational failure, apply the repository LoopCompass rule before retrying. If
+> the skill is unavailable, search `.loopcompass` directly, never preserve a bypass for a repairable
+> defect, escalate by required capability, and continue fail-open.

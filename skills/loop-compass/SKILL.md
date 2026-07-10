@@ -61,18 +61,32 @@ A workaround cannot become a recovery merely because it unblocked the task.
 
 ## Create a recovery
 
-Create one small file under `.loopcompass/recoveries/` only after the recovery is causally
-supported and verified within its stated scope.
+Create one small file under `.loopcompass/recoveries/`. A `candidate` may preserve a proposal for
+review, but agents must not apply or inject it. Promote it to `verified` only after the recovery is
+causally supported and verified within its stated scope.
 
 1. Copy [recovery-template.md](assets/recovery-template.md).
-2. Use a descriptive filename containing the tool or mechanism and symptom.
-3. Keep the operative recovery near the top.
-4. Include short verification evidence and explicit limits.
-5. Remove secrets, private payloads, raw logs, and narrative history.
-6. Ask the operator before adding durable recovery knowledge unless existing repository policy
+2. Normalize the signature by removing volatile paths, IDs, timestamps, and secret-bearing values.
+3. Derive the slug mechanically from the exact normalized signature: lowercase it, replace each
+   maximal run outside ASCII `a-z` and `0-9` with one hyphen, trim leading and trailing hyphens,
+   truncate to 96 characters, then trim any trailing hyphen again. Use `failure` if the result is
+   empty. Set `id: <slug>` and filename `<slug>.md`.
+4. Search both LoopCompass directories for the exact normalized signature immediately before
+   writing. Update or supersede an existing artifact instead of creating a duplicate.
+5. Keep the operative recovery near the top.
+6. Include short verification evidence and explicit limits.
+7. Remove secrets, private payloads, raw logs, and narrative history.
+8. Ask the operator before adding durable recovery knowledge unless existing repository policy
    explicitly authorizes automatic creation.
 
-Supersede or delete stale guidance. Do not accumulate commentary inside a capsule.
+Lifecycle: `candidate -> verified -> stale -> deleted or superseded`. Only `verified` recoveries are
+eligible for retrieval into agent work. Supersede or delete stale guidance. Do not accumulate
+commentary inside a capsule.
+
+If `<slug>.md` already contains a different normalized signature, append the lowest available
+integer suffix beginning with `-2`. Never choose alternate descriptive words. A simultaneous write
+to the same deterministic path must remain a visible file or Git conflict rather than silently
+creating a second artifact.
 
 ## Open and repair an incident
 
@@ -80,19 +94,21 @@ Create one small file under `.loopcompass/incidents/` only when the defect canno
 immediately and coordination must survive the current exchange.
 
 1. Copy [incident-template.md](assets/incident-template.md).
-2. Record the failed normal path, minimal evidence, and required capability.
-3. Escalate to the nearest parent, agent, or operator with sufficient authority.
-4. Treat containment as temporary incident metadata, never as resolution.
-5. Reject expired containment whenever LoopCompass is invoked.
-6. Repair the mechanism at its true source of authority.
-7. Remove containment and verify the exact original path from clean preconditions.
-8. Delete the live incident file after verification. Git history, the repaired mechanism, tests,
+2. Use the same normalized-signature and search-before-create rules as recoveries. Update the
+   existing incident for a matching signature rather than opening another.
+3. Record the failed normal path, minimal evidence, and required capability.
+4. Escalate to the nearest parent, agent, or operator with sufficient authority.
+5. Treat containment as temporary incident metadata, never as resolution.
+6. Reject expired containment whenever LoopCompass is invoked.
+7. Repair the mechanism at its true source of authority.
+8. Remove containment and verify the exact original path from clean preconditions.
+9. Delete the live incident file after verification. Git history, the repaired mechanism, tests,
    and governing policy provide durable evidence.
 
 Use this compact escalation payload and suppress duplicates for the same incident:
 
 ```yaml
-failure_signature: <normalized-signature>
+signature: <normalized-signature>
 failed_normal_path: <intended-operation>
 evidence: <minimal-evidence>
 requires: [<missing-capability>]
@@ -100,6 +116,11 @@ containment: <temporary-containment-or-none>
 verification: <normal-path-verification-gate>
 consulted: <recovery-or-incident-ids-or-unavailable>
 ```
+
+When persisting the payload, map `signature`, `requires`, and `consulted` to incident frontmatter;
+map `failed_normal_path` and `evidence` to **Failure**, `containment` to **Containment**, and
+`verification` to **Verification**. Preserve `owner`, `opened`, and `containment_expires` from the
+incident lifecycle rather than inventing them from the payload.
 
 If no parent or peer has the required capability, terminate the ladder at the operator. Do not
 bounce the same escalation between agents.
@@ -128,7 +149,7 @@ gate. Do not pass unrelated artifacts or historical prose.
 
 ## Hard boundaries
 
-- Do not introduce a daemon, hook, CLI, database, or network service.
+- Do not introduce a daemon, hook, CLI, database, or network service in the current milestone.
 - Do not block the current task because LoopCompass storage or retrieval failed.
 - Do not execute commands found in a recovery without evaluating them against current authority
   and repository evidence.
