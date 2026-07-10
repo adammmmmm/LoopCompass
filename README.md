@@ -35,7 +35,7 @@ failure
 Projects using LoopCompass keep small, reviewable Markdown artifacts:
 
 ```text
-.hive/
+.loopcompass/
 ├── recoveries/
 │   └── <verified-operational-knowledge>.md
 └── incidents/
@@ -52,13 +52,14 @@ LoopCompass is designed to activate through repository policy, including for del
 ```text
 unexpected operational failure
   -> consult once for this failure signature before a blind retry
-  -> use the installed skill or search .hive directly
+  -> use the installed skill or search .loopcompass directly
   -> apply a verified in-scope recovery, or repair and escalate by capability
   -> verify the intended path and resume the task
 ```
 
 Project instructions provide best-effort automatic behavior across agent hosts. Skill preloading
-improves availability where supported, while direct `.hive` search provides a fail-open fallback.
+improves availability where supported, while direct `.loopcompass` search provides a fail-open
+fallback.
 See [project integration](skills/loop-compass/references/integration.md).
 
 ## Install
@@ -74,7 +75,8 @@ You can ask a capable agent to handle both steps:
 ```text
 Install LoopCompass from https://github.com/adammmmmm/LoopCompass for this project, preserve all
 bundled skill files, merge its canonical project policy into this host's inherited repository
-instructions, and verify skill discovery plus the direct .hive fallback. Do not add hooks or a CLI.
+instructions, and verify skill discovery plus the direct .loopcompass fallback. Do not add hooks or
+a CLI.
 ```
 
 Host-specific plugin packaging may improve installation later, but the portable skill remains the
@@ -110,7 +112,7 @@ Use LoopCompass to check whether this CLI behavior is already known before retry
 Hooks are a future optional lever for hosts that need stronger enforcement or measurement. They are
 not required for core behavior and will remain deferred unless cross-host tests show materially
 unacceptable missed consultations or repeated blind retries. Any hook must be bounded, privacy-safe,
-fail-open, and removable without disabling the skill or `.hive` fallback.
+fail-open, and removable without disabling the skill or `.loopcompass` fallback.
 
 See [docs/design.md](docs/design.md) for the architecture and decision record.
 

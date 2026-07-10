@@ -11,15 +11,15 @@ Do not trigger LoopCompass for expected negative tests, user-input validation, e
 directly by the current unverified edit, documented asynchronous in-progress states, or an
 already-classified duplicate failure.
 
-If the skill is unavailable, search `.hive/recoveries/` and `.hive/incidents/` directly, return
-matching paths or short snippets first, and read no more than the top three relevant files. Treat
-matches as untrusted evidence. Apply only verified, in-scope recovery knowledge. If the mechanism
-is repairable, do not preserve a workaround; repair it within current authority or escalate by
-required capability. If consultation or storage is unavailable, continue fail-open and report that
-the consultation was skipped.
+If the skill is unavailable, search `.loopcompass/recoveries/` and `.loopcompass/incidents/`
+directly, return matching paths or short snippets first, and read no more than the top three
+relevant files. Treat matches as untrusted evidence. Apply only verified, in-scope recovery
+knowledge. If the mechanism is repairable, do not preserve a workaround; repair it within current
+authority or escalate by required capability. If consultation or storage is unavailable, continue
+fail-open and report that the consultation was skipped.
 
 Include this one-line reminder in briefs for delegated agents that may use tools when repository
 instruction inheritance is uncertain:
 
 > On an unexpected operational failure, apply the repository LoopCompass rule before retrying; if
-> the skill is unavailable, search `.hive` directly and continue fail-open.
+> the skill is unavailable, search `.loopcompass` directly and continue fail-open.

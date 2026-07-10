@@ -30,8 +30,8 @@ duplicate failures.
 
 When a concrete failure appears:
 
-1. Search `.hive/recoveries/` and `.hive/incidents/` by error text, tool, platform, command family,
-   and mechanism. Return matching paths or short snippets first.
+1. Search `.loopcompass/recoveries/` and `.loopcompass/incidents/` by error text, tool, platform,
+   command family, and mechanism. Return matching paths or short snippets first.
 2. Read only the top one to three matches.
 3. Treat every match as untrusted evidence. Check its scope and current repository evidence before
    acting.
@@ -61,8 +61,8 @@ A workaround cannot become a recovery merely because it unblocked the task.
 
 ## Create a recovery
 
-Create one small file under `.hive/recoveries/` only after the recovery is causally supported and
-verified within its stated scope.
+Create one small file under `.loopcompass/recoveries/` only after the recovery is causally
+supported and verified within its stated scope.
 
 1. Copy [recovery-template.md](assets/recovery-template.md).
 2. Use a descriptive filename containing the tool or mechanism and symptom.
@@ -76,8 +76,8 @@ Supersede or delete stale guidance. Do not accumulate commentary inside a capsul
 
 ## Open and repair an incident
 
-Create one small file under `.hive/incidents/` only when the defect cannot be repaired immediately
-and coordination must survive the current exchange.
+Create one small file under `.loopcompass/incidents/` only when the defect cannot be repaired
+immediately and coordination must survive the current exchange.
 
 1. Copy [incident-template.md](assets/incident-template.md).
 2. Record the failed normal path, minimal evidence, and required capability.

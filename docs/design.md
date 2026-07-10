@@ -65,7 +65,7 @@ trigger.
 
 Project instructions provide best-effort automatic behavior rather than a cross-host guarantee.
 Skill preloading improves availability but does not enforce use. A worker without the skill searches
-`.hive` directly and continues fail-open if retrieval is unavailable.
+`.loopcompass` directly and continues fail-open if retrieval is unavailable.
 
 ## Escalation ladder
 
@@ -78,7 +78,8 @@ incident upward. The ladder terminates at the operator when no agent can act.
 Hooks are an optional future lever for enforcement and measurement, not a core dependency. Consider
 a host-specific hook only when cross-host acceptance tests show materially unacceptable missed
 consultations or repeated blind retries. Any adopted hook must be documented by the host, narrowly
-scoped, bounded, privacy-safe, fail-open, and removable without disabling skill or `.hive` behavior.
+scoped, bounded, privacy-safe, fail-open, and removable without disabling skill or `.loopcompass`
+behavior.
 
 Hooks must not publish recoveries, infer causality, or turn raw tool output into a telemetry store.
 
@@ -135,7 +136,7 @@ building infrastructure around the workflow.
 Question: How should subagents consult LoopCompass automatically without requiring hooks?
 
 Rec: Use one canonical repository policy, host-specific placement, optional skill preloading, and a
-direct `.hive` fallback.
+direct `.loopcompass` fallback.
 
 Options:
 
@@ -155,8 +156,9 @@ automation.
 3. Expected validation and asynchronous states do not trigger.
 4. An identical failure triggers only one consultation per agent task.
 5. Changed evidence or environment permits a new consultation.
-6. A worker without the skill reads no more than three `.hive` matches and continues fail-open.
-7. Missing `.hive` directories do not block work or create artifacts.
+6. A worker without the skill reads no more than three `.loopcompass` matches and continues
+   fail-open.
+7. Missing `.loopcompass` directories do not block work or create artifacts.
 8. Out-of-scope or expired recovery knowledge is rejected.
 9. A repairable defect escalates instead of becoming a recovery.
 10. Escalation reaches a capable agent or terminates at the operator.
