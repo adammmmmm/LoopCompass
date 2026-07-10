@@ -1,24 +1,38 @@
-# LoopCompass
+<div align="center">
 
-> Agents remember the right path and repair the broken one.
+# 🧭 LoopCompass
 
-LoopCompass is a lightweight, provider-neutral skill for agent workflows. It turns recurring
-failures into one of two outcomes:
+**Agents remember the right path and repair the broken one.**
+
+A lightweight, provider-neutral skill for agent workflows.<br>
+No daemon, no CLI, no database, no model API, no hosted service. Just small, reviewable files.
+
+[How it works](#the-classification-gate) · [What it stores](#what-lives-in-your-repository) · [Install](#install) · [Design](#design-principles)
+
+</div>
+
+---
+
+## Every agent is lost in the same forest
+
+Agents repeatedly hit the same environment, tool, permission, API, CI, and workflow failures.
+Useful recoveries disappear into transcripts, while clever workarounds harden into folklore.
+
+|                        | 🌲 Without a compass             | 🧭 With LoopCompass                            |
+| ---------------------- | -------------------------------- | ---------------------------------------------- |
+| A failure appears      | Blind retry, again               | Consult once before retrying                   |
+| A recovery works       | Vanishes with the transcript     | Verified, then preserved                       |
+| A workaround sticks    | Hardens into folklore            | Classified: keep it, or fix the root cause     |
+| Same wall, next week   | Walk in circles                  | Follow the needle straight past it             |
+
+LoopCompass turns recurring failures into one of two outcomes:
 
 1. **Verified operational knowledge** when the recovery is the correct way to use a tool or respect
    a legitimate constraint.
 2. **Root-cause repair** when a permission, configuration, wrapper, workflow, or other mechanism
    should not remain broken.
 
-It does not require a daemon, hook, CLI, database, model API, or hosted service.
-
-## Why LoopCompass
-
-Agents repeatedly encounter the same environment, tool, permission, API, CI, and workflow
-failures. Useful recoveries disappear into transcripts, while clever workarounds can harden into
-folklore.
-
-LoopCompass adds a classification gate:
+## The classification gate
 
 ```text
 failure
@@ -30,7 +44,14 @@ failure
      -> bypass or coincidence -> preserve nothing
 ```
 
-## Repository state
+| The failure was really…        | LoopCompass…                                          | What survives           |
+| ------------------------------ | ----------------------------------------------------- | ----------------------- |
+| **Correct operating behavior** | verifies the recovery and keeps it concise            | 🧠 a recovery           |
+| **Repairable defect**          | escalates, repairs, verifies the normal path, closes  | 🔧 a closed incident    |
+| **External defect**            | tracks expiring containment until upstream repair     | ⏳ an expiring incident |
+| **Bypass or coincidence**      | preserves nothing                                     | 🚫 nothing              |
+
+## What lives in your repository
 
 Projects using LoopCompass keep small, reviewable Markdown artifacts:
 
@@ -59,21 +80,21 @@ unexpected operational failure
 
 Project instructions provide best-effort automatic behavior across agent hosts. Skill preloading
 improves availability where supported, while direct `.loopcompass` search provides a fail-open
-fallback.
-See [project integration](skills/loop-compass/references/integration.md).
+fallback. See [project integration](skills/loop-compass/references/integration.md).
 
-Automatic here means consultation, classification, repair within available authority, and
-escalation. Durable recovery creation remains approval-gated by default so unverified agent output
-cannot silently become shared operational knowledge. Repository policy may explicitly authorize
-automatic persistence after verification.
+> [!NOTE]
+> **"Automatic" means agents consult, classify, repair, and escalate on their own.** Saving a new
+> recovery still asks for your approval by default, so nothing unverified sneaks into shared
+> knowledge. Once you trust the verification, repository policy can turn on automatic saves too.
 
 ## Install
 
-Install or copy [`skills/loop-compass`](skills/loop-compass) into the skill directory supported by
-your agent host, then merge the canonical
-[`project-policy.md`](skills/loop-compass/assets/project-policy.md) block into the repository's
-inherited project instructions. The core uses the open `SKILL.md` format and ordinary file
-operations.
+1. Install or copy [`skills/loop-compass`](skills/loop-compass) into the skill directory supported
+   by your agent host.
+2. Merge the canonical [`project-policy.md`](skills/loop-compass/assets/project-policy.md) block
+   into the repository's inherited project instructions.
+
+The core uses the open `SKILL.md` format and ordinary file operations.
 
 You can ask a capable agent to handle both steps:
 
@@ -91,8 +112,6 @@ source of behavior.
 
 Normal use is policy-triggered. Explicit invocation is useful for installation checks and ad hoc
 diagnosis:
-
-Example requests:
 
 ```text
 Use LoopCompass to classify this Git permission failure and coordinate the correct repair.
@@ -112,21 +131,32 @@ Use LoopCompass to check whether this CLI behavior is already known before retry
 - Fail open if the learning layer is unavailable.
 - Add automation only when measured failure modes justify it.
 
-## Planned optional hooks
+<details>
+<summary><b>Planned optional hooks</b></summary>
+<br>
 
 Hooks are a future optional lever for hosts that need stronger enforcement or measurement. They are
 not required for core behavior and will remain deferred unless cross-host tests show materially
 unacceptable missed consultations or repeated blind retries. Any hook must be bounded, privacy-safe,
 fail-open, and removable without disabling the skill or `.loopcompass` fallback.
 
+</details>
+
 See [docs/design.md](docs/design.md) for the architecture and decision record.
 
 ## Status
 
-LoopCompass is an early design and skill implementation. The first milestone is to validate the
-two-lane workflow and policy-triggered consultation across multiple agent hosts before adding
-scripts, plugins, or enforcement automation.
+> [!IMPORTANT]
+> LoopCompass is an early design and skill implementation. The first milestone is to validate the
+> two-lane workflow and policy-triggered consultation across multiple agent hosts before adding
+> scripts, plugins, or enforcement automation.
 
 ## License
 
 [MIT](LICENSE)
+
+---
+
+<div align="center">
+<sub>Lost in the loop? Follow the needle. 🧭</sub>
+</div>
