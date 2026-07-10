@@ -1,0 +1,4 @@
+interface:
+  display_name: "LoopCompass"
+  short_description: "Learn recoveries and repair agent workflows"
+  default_prompt: "Use $loop-compass to classify this agent failure, retrieve verified operational knowledge, or coordinate a root-cause repair."
