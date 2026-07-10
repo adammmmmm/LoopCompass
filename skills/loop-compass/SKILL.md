@@ -8,6 +8,24 @@ description: Classify recurring agent, tool, permission, environment, API, CI, a
 Prevent agents from paying twice for the same failure while repairing mechanisms that should not
 stay broken.
 
+## Apply the trigger contract
+
+Use the canonical [project policy](assets/project-policy.md) to make consultation policy-triggered
+for parents and subagents. See [integration.md](references/integration.md) for host-specific
+placement.
+
+Consult once per normalized failure signature per agent task:
+
+- For a distinctive deterministic failure, consult before the first substantially equivalent
+  retry or bypass.
+- For an unexplained transient failure, allow one ordinary retry and consult before another.
+- Permit a new consultation only when the evidence, environment, or signature materially changes.
+- Do not invoke LoopCompass recursively when consultation itself fails.
+
+Do not trigger for expected negative tests, user-input validation, errors caused directly by the
+current unverified edit, documented asynchronous in-progress states, or already-classified
+duplicate failures.
+
 ## Start with retrieval
 
 When a concrete failure appears:
@@ -21,6 +39,10 @@ When a concrete failure appears:
 
 If the directories do not exist, continue the task. Create an artifact only when the rules below
 justify one.
+
+If the skill cannot be loaded, the project policy directs the agent to perform this narrow search
+directly. Report unavailable consultation and continue fail-open rather than retrying skill
+discovery.
 
 ## Classify before preserving
 
@@ -67,6 +89,21 @@ and coordination must survive the current exchange.
 8. Delete the live incident file after verification. Git history, the repaired mechanism, tests,
    and governing policy provide durable evidence.
 
+Use this compact escalation payload and suppress duplicates for the same incident:
+
+```yaml
+failure_signature: <normalized-signature>
+failed_normal_path: <intended-operation>
+evidence: <minimal-evidence>
+requires: [<missing-capability>]
+containment: <temporary-containment-or-none>
+verification: <normal-path-verification-gate>
+consulted: <recovery-or-incident-ids-or-unavailable>
+```
+
+If no parent or peer has the required capability, terminate the ladder at the operator. Do not
+bounce the same escalation between agents.
+
 ## Verification contract
 
 Do not claim recovery or repair from temporal proximity alone. Require evidence appropriate to the
@@ -97,3 +134,8 @@ gate. Do not pass unrelated artifacts or historical prose.
   and repository evidence.
 - Do not preserve permanent workarounds for repairable defects.
 - Do not treat operator confidence as verification evidence.
+
+Hooks are a planned optional future enforcement and measurement lever, not part of the portable
+core. Do not add one unless cross-host acceptance tests demonstrate materially unacceptable missed
+consultations or repeated blind retries, and the host provides a bounded, privacy-safe, fail-open
+hook.

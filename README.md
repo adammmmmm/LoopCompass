@@ -45,18 +45,45 @@ Projects using LoopCompass keep small, reviewable Markdown artifacts:
 Agents search first, then read only the top one to three matches. The corpus is never loaded into
 context wholesale.
 
+## Automatic agent flow
+
+LoopCompass is designed to activate through repository policy, including for delegated agents:
+
+```text
+unexpected operational failure
+  -> consult once for this failure signature before a blind retry
+  -> use the installed skill or search .hive directly
+  -> apply a verified in-scope recovery, or repair and escalate by capability
+  -> verify the intended path and resume the task
+```
+
+Project instructions provide best-effort automatic behavior across agent hosts. Skill preloading
+improves availability where supported, while direct `.hive` search provides a fail-open fallback.
+See [project integration](skills/loop-compass/references/integration.md).
+
 ## Install
 
 Install or copy [`skills/loop-compass`](skills/loop-compass) into the skill directory supported by
-your agent host. The core uses the open `SKILL.md` format and ordinary file operations.
+your agent host, then merge the canonical
+[`project-policy.md`](skills/loop-compass/assets/project-policy.md) block into the repository's
+inherited project instructions. The core uses the open `SKILL.md` format and ordinary file
+operations.
+
+You can ask a capable agent to handle both steps:
+
+```text
+Install LoopCompass from https://github.com/adammmmmm/LoopCompass for this project, preserve all
+bundled skill files, merge its canonical project policy into this host's inherited repository
+instructions, and verify skill discovery plus the direct .hive fallback. Do not add hooks or a CLI.
+```
 
 Host-specific plugin packaging may improve installation later, but the portable skill remains the
 source of behavior.
 
-## Use
+## Manual conformance test
 
-Invoke LoopCompass when an agent encounters a distinctive failure, repeats a failed approach,
-discovers a verified recovery, or needs authority to repair a broken mechanism.
+Normal use is policy-triggered. Explicit invocation is useful for installation checks and ad hoc
+diagnosis:
 
 Example requests:
 
@@ -78,12 +105,20 @@ Use LoopCompass to check whether this CLI behavior is already known before retry
 - Fail open if the learning layer is unavailable.
 - Add automation only when measured failure modes justify it.
 
+## Planned optional hooks
+
+Hooks are a future optional lever for hosts that need stronger enforcement or measurement. They are
+not required for core behavior and will remain deferred unless cross-host tests show materially
+unacceptable missed consultations or repeated blind retries. Any hook must be bounded, privacy-safe,
+fail-open, and removable without disabling the skill or `.hive` fallback.
+
 See [docs/design.md](docs/design.md) for the architecture and decision record.
 
 ## Status
 
 LoopCompass is an early design and skill implementation. The first milestone is to validate the
-two-lane workflow across multiple agent hosts before adding scripts, plugins, or automation.
+two-lane workflow and policy-triggered consultation across multiple agent hosts before adding
+scripts, plugins, or enforcement automation.
 
 ## License
 
