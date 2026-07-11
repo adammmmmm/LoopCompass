@@ -1,4 +1,4 @@
-<img src="docs/assets/logo.svg" alt="LoopCompass" width="280"/>
+<img src="docs/assets/brand-mark.svg" alt="LoopCompass" width="280"/>
 
 **Agents remember the right path and repair the broken one.**
 
