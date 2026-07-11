@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="96" viewBox="0 0 480 96" fill="none" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="88" viewBox="0 0 440 88" fill="none" role="img" aria-labelledby="t d">
   <title id="t">LoopCompass</title>
   <desc id="d">LoopCompass logo: geometric compass mark and wordmark.</desc>
   <style>
-    .ring { stroke: #1f2328; }
-    .tick { stroke: #1f2328; }
+    .ring { stroke: #1f2328; fill: none; }
+    .tick { stroke: #1f2328; fill: none; }
     .needle { fill: #0969da; }
     .hub { fill: #1f2328; }
     .word { fill: #1f2328; }
@@ -18,23 +18,17 @@
     }
   </style>
 
-  <!-- Mark -->
-  <g transform="translate(8 8)">
-    <circle class="ring" cx="40" cy="40" r="36" stroke-width="1.5" fill="none"/>
-    <circle class="ring" cx="40" cy="40" r="28" stroke-width="1" fill="none" opacity="0.45"/>
-    <!-- cardinal ticks -->
-    <path class="tick" d="M40 6v8M40 66v8M6 40h8M66 40h8" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- intercardinal ticks -->
-    <path class="tick" d="M15.3 15.3l5.7 5.7M59 59l5.7 5.7M64.7 15.3l-5.7 5.7M21 59l-5.7 5.7" stroke-width="1" stroke-linecap="round" opacity="0.55"/>
-    <!-- needle -->
-    <path class="needle" d="M40 14 L46 40 L40 66 L34 40 Z" opacity="0.95"/>
-    <circle class="hub" cx="40" cy="40" r="3.5"/>
-    <!-- subtle orbit loop -->
-    <path class="ring" d="M12 28c8-18 48-18 56 0" stroke-width="1" fill="none" opacity="0.35" stroke-linecap="round"/>
-    <path class="ring" d="M12 52c8 18 48 18 56 0" stroke-width="1" fill="none" opacity="0.35" stroke-linecap="round"/>
+  <g transform="translate(4 8)">
+    <circle class="ring" cx="36" cy="36" r="34" stroke-width="1.5"/>
+    <circle class="ring" cx="36" cy="36" r="26" stroke-width="1" opacity="0.4"/>
+    <path class="tick" d="M36 4v7M36 61v7M4 36h7M61 36h7" stroke-width="1.5" stroke-linecap="round"/>
+    <path class="tick" d="M13.2 13.2l5 5M53.8 53.8l5 5M58.8 13.2l-5 5M18.2 53.8l-5 5" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+    <path class="needle" d="M36 12l5.5 24L36 60l-5.5-24z"/>
+    <circle class="hub" cx="36" cy="36" r="3.25"/>
+    <path class="ring" d="M10 26c7-16 45-16 52 0" stroke-width="1" opacity="0.3" stroke-linecap="round"/>
+    <path class="ring" d="M10 46c7 16 45 16 52 0" stroke-width="1" opacity="0.3" stroke-linecap="round"/>
   </g>
 
-  <!-- Wordmark -->
-  <text class="word" x="108" y="52" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="34" font-weight="650" letter-spacing="-0.03em">LoopCompass</text>
-  <text class="tag" x="110" y="74" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" font-weight="500" letter-spacing="0.04em">REMEMBER THE PATH · REPAIR THE REST</text>
+  <text class="word" x="96" y="46" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="32" font-weight="600" letter-spacing="-0.025em">LoopCompass</text>
+  <text class="tag" x="98" y="68" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="500" letter-spacing="0.08em">REMEMBER THE PATH  ·  REPAIR THE REST</text>
 </svg>
