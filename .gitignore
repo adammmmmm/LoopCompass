@@ -1,7 +1,9 @@
-# Host-local agent state (never commit)
+# Host-local agent state and driver instructions (never commit)
 .claude/
 .Codex/
+AGENTS.md
 CLAUDE.md
+
 
 # Build / OS
 .DS_Store
