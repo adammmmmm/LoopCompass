@@ -1,17 +1,45 @@
-name: validate-manifest
+name: verify
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 jobs:
-  validate:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Validate release inventory
-        run: node scripts/release.mjs validate
+      - name: Verify (tests + release inventory)
+        run: node scripts/verify.mjs
+
+  release-package:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Require manifest commit matches tag commit
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          manifest_commit="$(node -e "const fs=require('fs');const t=fs.readFileSync('skills/loop-compass/manifest.yaml','utf8');const m=t.match(/^commit:\\s*(\\S+)/m);if(!m)process.exit(2);process.stdout.write(m[1])")"
+          echo "HEAD=$head_sha"
+          echo "manifest.commit=$manifest_commit"
+          test "$head_sha" = "$manifest_commit"
+      - name: Package release archive
+        run: node scripts/release.mjs package
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: loopcompass-release-dist
+          path: |
+            dist/loopcompass-v*.tar.gz
+            dist/SHA256SUMS

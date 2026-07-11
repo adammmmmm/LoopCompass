@@ -166,6 +166,7 @@ Expanded one-liners (belt-and-suspenders) are in
 Maintainer tooling (not required for consumers):
 
 ```text
+node scripts/verify.mjs             # tests + release validate
 node scripts/release.mjs generate   # write skills/loop-compass/manifest.yaml
 node scripts/release.mjs validate   # digests and policy markers
 node scripts/release.mjs package    # dist archive + SHA256SUMS
@@ -214,16 +215,27 @@ Any hook must be bounded, privacy-safe, fail-open, and removable without disabli
 | --- | --- |
 | [docs/design.md](docs/design.md) | Architecture and decisions |
 | [docs/update-strategy-v1.md](docs/update-strategy-v1.md) | Install, update, check, rollback |
+| [docs/verification.md](docs/verification.md) | Tests, fixtures, release hygiene |
+| [docs/host-matrix.md](docs/host-matrix.md) | Multi-host verification checklist |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
 | [skills/loop-compass/SKILL.md](skills/loop-compass/SKILL.md) | Portable skill |
+
+### Verify
+
+```text
+node scripts/verify.mjs
+```
+
+Runs unit/fixture/dry-run tests and `scripts/release.mjs validate`.
 
 ---
 
 ## Status
 
-Early design and skill implementation. Near-term goal: validate the two-lane workflow and
-policy-triggered consultation across agent hosts. V1 updates are release-based and explicit.
-Silent update checks during ordinary use remain deferred.
+Skill + Markdown core with executable mechanical verification (signatures, fixtures, install/update
+dry-runs, release digests). Near-term product goal: dogfood recoveries in real multi-agent repos and
+complete the host matrix. V1 updates are release-based and explicit. Silent update checks during
+ordinary use remain deferred.
 
 ## License
 

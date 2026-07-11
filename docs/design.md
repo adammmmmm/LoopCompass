@@ -214,4 +214,15 @@ discovery remains a future host-plugin opportunity.
 
 Update-contract acceptance tests live in [update-strategy-v1.md](update-strategy-v1.md).
 
-Update-contract acceptance tests live in [update-strategy-v1.md](update-strategy-v1.md).
+## Executable verification
+
+Mechanical rules are covered by `node scripts/verify.mjs`:
+
+- signature normalization and slug derivation (`scripts/lib/signature.mjs`, `tests/signature.test.mjs`);
+- classification fixtures (`fixtures/classification/cases.json`);
+- artifact field checks and template contract alignment;
+- project-local install / update dry-runs;
+- release inventory validate (`scripts/release.mjs validate`).
+
+Behavioral policy acceptance tests (1-13 above) remain host-agent scenarios. Host coverage notes
+live in [host-matrix.md](host-matrix.md).

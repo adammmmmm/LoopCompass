@@ -1,5 +1,5 @@
 ---
-id: <stable-descriptive-id>
+id: <slug-from-normalized-signature>
 schema: 1
 signature: "<normalized symptom or error>"
 scope:
@@ -15,6 +15,7 @@ supersedes: null
 ---
 
 <!-- status: candidate | verified | stale | superseded -->
+<!-- id and filename must be the mechanical slug of signature (see SKILL.md) -->
 
 # <Correct path in one line>
 

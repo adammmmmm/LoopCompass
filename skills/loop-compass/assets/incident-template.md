@@ -1,5 +1,5 @@
 ---
-id: <stable-descriptive-id>
+id: <slug-from-normalized-signature>
 schema: 1
 signature: "<normalized symptom or error>"
 status: detected
@@ -10,7 +10,9 @@ containment_expires: null
 consulted: []
 ---
 
-<!-- status: detected | escalated | repairing | blocked | verified -->
+<!-- status: detected | escalated | repairing | verified -->
+<!-- blocked is metadata on an open incident, not a terminal status value in the filename lifecycle -->
+<!-- id and filename must be the mechanical slug of signature (see SKILL.md) -->
 
 # <Repair the broken mechanism>
 

@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "description": "Classification goldens for LoopCompass lane selection. Signatures are sanitized; lanes follow skills/loop-compass/references/classification.md.",
+  "cases": [
+    {
+      "id": "correct-tool-contract-async-poll",
+      "failure": "CLI session still running; exit code 0 only after poll on Windows.pid=48291 at 2026-07-11T12:00:00Z",
+      "lane": "recovery",
+      "rationale": "Correct operating behavior for async process sessions, not a broken mechanism."
+    },
+    {
+      "id": "git-push-permission-denied",
+      "failure": "git push rejected: permission denied to repository adammmmmm/LoopCompass via token ghp_EXAMPLETOKENVALUE000000",
+      "lane": "incident",
+      "rationale": "Permission/config is within reach; repair auth or remote, do not store a bypass."
+    },
+    {
+      "id": "wrapper-script-hardcodes-dev-path",
+      "failure": "build wrapper failed: cannot execute C:\\Users\\dev\\project\\scripts\\build.ps1 - path missing on CI runner",
+      "lane": "incident",
+      "rationale": "Broken wrapper/mechanism should be fixed at source of authority."
+    },
+    {
+      "id": "upstream-api-429-rate-limit",
+      "failure": "exchange REST returned HTTP 429 rate limit for market stream; vendor documented limit, no project-side fix",
+      "lane": "external",
+      "rationale": "External defect; containment may expire but incident is not closed by ignoring limits."
+    },
+    {
+      "id": "lucky-retry-no-cause",
+      "failure": "websocket connect failed twice then succeeded on third try with identical config; no code or network change",
+      "lane": "none",
+      "rationale": "Coincidence without causal explanation must not become a recovery."
+    },
+    {
+      "id": "bypass-chmod-777",
+      "failure": "permission error on config file; agent ran chmod 777 as workaround and continued",
+      "lane": "none",
+      "rationale": "Workaround violates intended permission model; not preservable knowledge."
+    },
+    {
+      "id": "expected-negative-test",
+      "failure": "unit test asserts reject on invalid input and received ValidationError as expected",
+      "lane": "none",
+      "rationale": "Expected negative test outcome is not an operational failure trigger."
+    },
+    {
+      "id": "uv-cache-on-ephemeral-fs",
+      "failure": "uv sync failed writing cache under /home/runner/.cache/uv with disk full on ephemeral runner",
+      "lane": "recovery",
+      "rationale": "Correct operating constraint: set UV_CACHE_DIR to a durable writable path for this host class."
+    },
+    {
+      "id": "sequence-gap-requires-reseed",
+      "failure": "book delta sequence gap detected; process continued on partial book without REST snapshot reseed",
+      "lane": "incident",
+      "rationale": "Collector mechanism must reseed; continuing is a broken normal path, not correct ops."
+    },
+    {
+      "id": "vendor-websocket-hard-cap",
+      "failure": "provider WS rejects >N concurrent multiplexed markets; documented platform limit, not local misconfig",
+      "lane": "external",
+      "rationale": "Legitimate external constraint with hard cap; track containment until product design adapts."
+    },
+    {
+      "id": "secret-in-error-stripped",
+      "failure": "auth failed for user agent@example.com with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaa.bbb and path /Users/op/secrets/key.pem",
+      "lane": "incident",
+      "rationale": "Auth failure is repairable; normalization must strip secret/path/email before persistence."
+    },
+    {
+      "id": "uuid-path-collision-shape",
+      "failure": "task worktree missing at /tmp/worktrees/TASK-042-abc with id 550e8400-e29b-41d4-a716-446655440000",
+      "lane": "incident",
+      "rationale": "Local workflow/path mechanism issue; volatile id/path must not create unique folklore filenames."
+    }
+  ]
+}

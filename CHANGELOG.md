@@ -7,6 +7,20 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Executable verification: `node scripts/verify.mjs` (Node test suite + release validate).
+- Deterministic signature normalize/slug helpers in `scripts/lib/signature.mjs`.
+- Classification fixtures in `fixtures/classification/cases.json`.
+- Install/update dry-run tests and artifact field validation.
+- Host matrix checklist (`docs/host-matrix.md`) and verification guide (`docs/verification.md`).
+- Tag CI job to package release archives when `manifest.commit` matches the tag SHA.
+
+### Fixed
+
+- Recovery/incident templates require mechanical slug ids.
+- Duplicate line in design acceptance section.
+
 ## [0.1.0] - 2026-07-11
 
 ### Added
