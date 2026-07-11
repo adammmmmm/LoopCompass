@@ -1,0 +1,12 @@
+# Canonical text is LF so release digests match Linux CI and git blob content.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tgz binary
