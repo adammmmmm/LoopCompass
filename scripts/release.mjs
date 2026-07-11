@@ -53,7 +53,16 @@ function die(message) {
 }
 
 function sha256File(filePath) {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+  // Hash LF-normalized bytes so Windows working trees and Linux CI agree.
+  // Git stores these skill files as LF (see git ls-files --eol); digests must match
+  // the canonical text form, not platform checkout line endings.
+  const raw = readFileSync(filePath);
+  const asText = raw.toString("utf8");
+  const normalized =
+    asText.includes("\0")
+      ? raw
+      : Buffer.from(asText.replace(/\r\n/g, "\n").replace(/\r/g, "\n"), "utf8");
+  return createHash("sha256").update(normalized).digest("hex");
 }
 
 function readVersion() {
