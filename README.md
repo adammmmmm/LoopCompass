@@ -143,6 +143,8 @@ fail-open, and removable without disabling the skill or `.loopcompass` fallback.
 </details>
 
 See [docs/design.md](docs/design.md) for the architecture and decision record.
+See [docs/update-strategy-v1.md](docs/update-strategy-v1.md) for the explicit v1 installation
+update and rollback contract.
 
 ## Status
 

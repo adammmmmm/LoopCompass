@@ -1,4 +1,4 @@
-<!-- loopcompass-policy: 1 -->
+<!-- loopcompass:start policy=1 -->
 ## LoopCompass
 
 On the first distinctive, unexpected tool, permission, environment, API, CI, or workflow failure,
@@ -24,3 +24,4 @@ instruction inheritance is uncertain:
 > On an unexpected operational failure, apply the repository LoopCompass rule before retrying. If
 > the skill is unavailable, search `.loopcompass` directly, never preserve a bypass for a repairable
 > defect, escalate by required capability, and continue fail-open.
+<!-- loopcompass:end -->
