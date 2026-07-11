@@ -1,4 +1,11 @@
 .Codex/
-.claude/
+# Keep project policy and task board trackable; ignore host-local agent state only.
+.claude/*
+!.claude/project.json
+!.claude/tasks/
+!.claude/tasks/**
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
 .DS_Store
 Thumbs.db
+dist/

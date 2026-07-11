@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "projectType": "library",
+    "productionAdjacent": false,
+    "defaultBranch": "main",
+    "runCommand": null,
+    "buildCommand": null,
+    "deployCommand": null
+  },
+  "modules": {
+    "timeTracking": { "enabled": true },
+    "taskBoard": { "enabled": true, "staleMinutes": 20, "handoffSizeCap": 400 },
+    "delegation": { "enabled": true },
+    "statusline": { "enabled": true }
+  },
+  "policy": {
+    "denyProcessPatterns": [],
+    "extraSecretPaths": [],
+    "protectedBranches": ["main"],
+    "deployOnPush": "safe"
+  }
+}

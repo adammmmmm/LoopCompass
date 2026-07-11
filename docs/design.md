@@ -42,15 +42,20 @@ native file search and editing in the host agent.
 Explicitly deferred:
 
 - lifecycle hooks;
-- a command-line interface;
+- a consumer-facing runtime CLI or daemon;
 - background processes;
 - automatic event capture;
 - transcript parsing;
 - a shared database;
 - cross-repository synchronization;
-- automatic publication.
+- automatic publication;
+- silent update checks or installs during ordinary failure consultation.
 
 These mechanisms may be added independently only after measured use demonstrates a specific need.
+
+Software distribution uses explicit, agent-assisted updates from immutable GitHub releases. See
+[update-strategy-v1.md](update-strategy-v1.md). A maintainer-only `scripts/release.mjs` validates
+manifest digests and builds release archives; it is not a runtime dependency of installed skills.
 
 ## Policy-triggered consultation
 
@@ -167,6 +172,29 @@ Chosen: Project policy plus skill, with hooks planned as an evidence-gated optio
 Why: It closes the common parent and subagent path without making the portable core depend on host
 automation.
 
+### Decision: explicit release updates, not consult-time checks
+
+Question: How should consumers learn about and apply LoopCompass software updates without adding a
+runtime dependency?
+
+Rec: Ship immutable GitHub releases with VERSION, skill manifest digests, managed policy markers,
+and an explicit agent-assisted update contract. Optionally allow a non-mutating "check only"
+prompt. Do not check or install during ordinary failure consultation.
+
+Options:
+
+1. Silent consult-time version checks: add network dependency and surprise latency to the failure
+   path.
+2. Mandatory updater CLI/daemon: stronger determinism but contradicts the lightweight portable core.
+3. Explicit agent-assisted updates from releases, with optional non-mutating check prompts: offline
+   normal use, reviewable mutation, provider-neutral delivery.
+
+Chosen: Option 3.
+
+Why: It preserves offline classification, repository review, and scope isolation (personal vs
+project) while still giving operators a complete apply, rollback, and integrity story. Automatic
+discovery remains a future host-plugin opportunity.
+
 ## Acceptance tests
 
 1. A known deterministic failure causes consultation before the first equivalent retry.
@@ -183,3 +211,7 @@ automation.
 11. Consultation failure does not recursively invoke LoopCompass.
 12. Manual invocation exercises the same classification path as policy-triggered use.
 13. Two agents handling the same signature converge on one deterministic artifact path.
+
+Update-contract acceptance tests live in [update-strategy-v1.md](update-strategy-v1.md).
+
+Update-contract acceptance tests live in [update-strategy-v1.md](update-strategy-v1.md).

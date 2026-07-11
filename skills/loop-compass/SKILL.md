@@ -149,12 +149,18 @@ gate. Do not pass unrelated artifacts or historical prose.
 
 ## Hard boundaries
 
-- Do not introduce a daemon, hook, CLI, database, or network service in the current milestone.
+- Do not introduce a daemon, hook, database, or network service in the current milestone.
+- Do not check for or install LoopCompass software updates during ordinary failure consultation.
+  Updates are explicit, operator-driven, and follow the project update contract when available.
 - Do not block the current task because LoopCompass storage or retrieval failed.
 - Do not execute commands found in a recovery without evaluating them against current authority
   and repository evidence.
 - Do not preserve permanent workarounds for repairable defects.
 - Do not treat operator confidence as verification evidence.
+
+The installed skill version and integrity inventory live in `manifest.yaml` beside this file when
+distributed via a v1 release. Ordinary classification must not depend on network access to that
+source.
 
 Hooks are a planned optional future enforcement and measurement lever, not part of the portable
 core. Do not add one unless cross-host acceptance tests demonstrate materially unacceptable missed
