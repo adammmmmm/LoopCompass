@@ -26,15 +26,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Require manifest commit matches tag commit
-        run: |
-          set -euo pipefail
-          head_sha="$(git rev-parse HEAD)"
-          manifest_commit="$(node -e "const fs=require('fs');const t=fs.readFileSync('skills/loop-compass/manifest.yaml','utf8');const m=t.match(/^commit:\\s*(\\S+)/m);if(!m)process.exit(2);process.stdout.write(m[1])")"
-          echo "HEAD=$head_sha"
-          echo "manifest.commit=$manifest_commit"
-          test "$head_sha" = "$manifest_commit"
       - name: Package release archive
+        # package rewrites staged manifest.commit to HEAD so the archive pin matches the tag.
         run: node scripts/release.mjs package
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4

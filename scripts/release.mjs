@@ -345,6 +345,7 @@ function copyTree(src, dest) {
 function cmdPackage() {
   cmdValidate();
   const version = readVersion();
+  const head = gitCommit();
   const distDir = path.join(ROOT, "dist");
   mkdirSync(distDir, { recursive: true });
 
@@ -359,6 +360,16 @@ function cmdPackage() {
 
   copyFileSync(VERSION_PATH, path.join(releaseRoot, "VERSION"));
   copyTree(SKILL_DIR, path.join(releaseRoot, "skills", "loop-compass"));
+  // Pin packaged manifest commit to the tree being archived (HEAD), without
+  // requiring a second git commit just to rewrite skills/.../manifest.yaml.
+  const stagedManifest = path.join(releaseRoot, "skills", "loop-compass", "manifest.yaml");
+  if (existsSync(stagedManifest) && head !== "unknown") {
+    const text = readFileSync(stagedManifest, "utf8").replace(
+      /^commit:\s*.+$/m,
+      `commit: ${head}`,
+    );
+    writeFileSync(stagedManifest, text, "utf8");
+  }
   for (const doc of readdirSync(path.join(ROOT, "docs"))) {
     if (doc.endsWith(".md")) {
       copyFileSync(

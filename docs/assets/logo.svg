@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none" role="img" aria-labelledby="t d">
+  <title id="t">LoopCompass mark</title>
+  <desc id="d">An open loop with a compass needle pointing out through the gap.</desc>
+  <style>
+    .loop { stroke: #1f2328; }
+    .needleS { fill: #59636e; opacity: 0.4; }
+    .needleN { fill: url(#ngl); }
+    .hub { fill: #1f2328; }
+    @media (prefers-color-scheme: dark) {
+      .loop { stroke: #e6edf3; }
+      .needleS { fill: #9198a1; opacity: 0.45; }
+      .needleN { fill: url(#ngd); }
+      .hub { fill: #e6edf3; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="ngl" x1="24" y1="3.5" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0891b2"/><stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="ngd" x1="24" y1="3.5" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <path class="loop" d="M30.51 9.38A16 16 0 1 1 17.49 9.38" stroke-width="3" stroke-linecap="round"/>
+  <path class="needleN" d="M24 3.5L28 24H20Z"/>
+  <path class="needleS" d="M24 36.5L28 24H20Z"/>
+  <circle class="hub" cx="24" cy="24" r="1.9"/>
+</svg>

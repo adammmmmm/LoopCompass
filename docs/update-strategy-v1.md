@@ -116,6 +116,26 @@ must preserve every byte of project instruction content outside that block.
 Missing, duplicated, nested, malformed, or overlapping markers are a hard stop. The updater reports
 the problem and requests operator direction rather than guessing which content it owns.
 
+### Legacy one-line marker (migration)
+
+Some early installs used only:
+
+```markdown
+<!-- loopcompass-policy: 1 -->
+## LoopCompass
+...policy body without an end marker...
+```
+
+That form is **not** a managed block under this contract (no end boundary). A conformant update must
+not invent an end marker. One-time operator-approved migration:
+
+1. Replace the legacy open line with `<!-- loopcompass:start policy=N -->` (same policy body).
+2. Insert `<!-- loopcompass:end -->` immediately after the policy body (before the next project
+   section).
+3. Confirm exactly one start and one end marker, then run the normal project update.
+
+After migration, only the start/end pair is valid.
+
 ## Protected project state
 
 Software updates must not create, edit, move, migrate, or delete:
