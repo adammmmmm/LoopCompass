@@ -1,31 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="360" height="56" viewBox="0 0 360 56" fill="none" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="56" viewBox="0 0 320 56" fill="none" role="img" aria-labelledby="t d">
   <title id="t">LoopCompass</title>
-  <desc id="d">LoopCompass logo: geometric compass mark and wordmark.</desc>
+  <desc id="d">LoopCompass logo: an open loop with a compass needle pointing out through the gap, and wordmark.</desc>
   <style>
-    .ring { stroke: #1f2328; fill: none; }
-    .tick { stroke: #1f2328; fill: none; }
-    .needle { fill: #0969da; }
+    .loop { stroke: #1f2328; }
+    .needleS { fill: #59636e; opacity: 0.4; }
+    .needleN { fill: url(#ngl); }
     .hub { fill: #1f2328; }
     .word { fill: #1f2328; }
     @media (prefers-color-scheme: dark) {
-      .ring { stroke: #e6edf3; }
-      .tick { stroke: #e6edf3; }
-      .needle { fill: #58a6ff; }
+      .loop { stroke: #e6edf3; }
+      .needleS { fill: #9198a1; opacity: 0.45; }
+      .needleN { fill: url(#ngd); }
       .hub { fill: #e6edf3; }
       .word { fill: #e6edf3; }
     }
   </style>
+  <defs>
+    <linearGradient id="ngl" x1="24" y1="3.5" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0891b2"/><stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="ngd" x1="24" y1="3.5" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
 
-  <g transform="translate(1 4)">
-    <circle class="ring" cx="24" cy="24" r="23" stroke-width="1.5"/>
-    <circle class="ring" cx="24" cy="24" r="17" stroke-width="1" opacity="0.4"/>
-    <path class="tick" d="M24 2.5v5M24 40.5v5M2.5 24h5M40.5 24h5" stroke-width="1.5" stroke-linecap="round"/>
-    <path class="tick" d="M8.5 8.5l3.4 3.4M36.1 36.1l3.4 3.4M39.5 8.5l-3.4 3.4M11.9 36.1l-3.4 3.4" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
-    <path class="needle" d="M24 8l3.6 16L24 40l-3.6-16z"/>
-    <circle class="hub" cx="24" cy="24" r="2.4"/>
-    <path class="ring" d="M6.5 17c5-11 30-11 35 0" stroke-width="1" opacity="0.3" stroke-linecap="round"/>
-    <path class="ring" d="M6.5 31c5 11 30 11 35 0" stroke-width="1" opacity="0.3" stroke-linecap="round"/>
+  <g transform="translate(2 4) rotate(34 24 24)">
+    <path class="loop" d="M30.51 9.38A16 16 0 1 1 17.49 9.38" stroke-width="3" stroke-linecap="round"/>
+    <path class="needleN" d="M24 3.5L28 24H20Z"/>
+    <path class="needleS" d="M24 36.5L28 24H20Z"/>
+    <circle class="hub" cx="24" cy="24" r="1.9"/>
   </g>
 
-  <text class="word" x="64" y="35" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="28" font-weight="600" letter-spacing="-0.03em">LoopCompass</text>
+  <text class="word" x="62" y="37" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="27" letter-spacing="-0.02em"><tspan font-weight="500">Loop</tspan><tspan font-weight="700">Compass</tspan></text>
 </svg>
