@@ -1,30 +1,16 @@
-<p align="center">
-  <img src="docs/assets/logo.svg" alt="LoopCompass" width="360"/>
-</p>
+<img src="docs/assets/logo.svg" alt="LoopCompass" width="280"/>
 
-<p align="center">
-  <strong>Agents remember the right path and repair the broken one.</strong>
-</p>
+**Agents remember the right path and repair the broken one.**
 
-<p align="center">
-  A portable skill for agent workflows. No daemon, no CLI, no database,<br/>
-  no model API, no hosted service. Small Markdown files. Full fleet memory.
-</p>
+A portable skill for agent workflows. No daemon, no CLI, no database, no model API, no hosted
+service. Small Markdown files. Full fleet memory.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-1f2328?style=flat-square&amp;labelColor=21262d&amp;color=58a6ff" alt="0.1.0"/>
-  <img src="https://img.shields.io/badge/license-MIT-1f2328?style=flat-square&amp;labelColor=21262d&amp;color=3fb950" alt="MIT"/>
-  <img src="https://img.shields.io/badge/runtime-none-1f2328?style=flat-square&amp;labelColor=21262d&amp;color=8b949e" alt="No runtime"/>
-  <img src="https://img.shields.io/badge/host-provider--neutral-1f2328?style=flat-square&amp;labelColor=21262d&amp;color=a371f7" alt="Provider neutral"/>
-</p>
+![0.1.0](https://img.shields.io/badge/version-0.1.0-1f2328?style=flat-square&labelColor=21262d&color=58a6ff)
+![MIT](https://img.shields.io/badge/license-MIT-1f2328?style=flat-square&labelColor=21262d&color=3fb950)
+![No runtime](https://img.shields.io/badge/runtime-none-1f2328?style=flat-square&labelColor=21262d&color=8b949e)
+![Provider neutral](https://img.shields.io/badge/host-provider--neutral-1f2328?style=flat-square&labelColor=21262d&color=a371f7)
 
-<p align="center">
-  <a href="#how-it-works">How it works</a> ·
-  <a href="#what-it-stores">What it stores</a> ·
-  <a href="#install">Install</a> ·
-  <a href="#update">Update</a> ·
-  <a href="#design">Design</a>
-</p>
+[How it works](#how-it-works) · [What it stores](#what-it-stores) · [Install](#install) · [Update](#update) · [Design](#design)
 
 ---
 
