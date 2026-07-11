@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="520" viewBox="0 0 1120 520" role="img" aria-labelledby="title desc">
+  <title id="title">LoopCompass automatic agent flow</title>
+  <desc id="desc">Policy-triggered consultation: fail, consult once, retrieve, act, verify, resume.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0A1020"/>
+      <stop offset="100%" stop-color="#0E1830"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#5EEAD4" stop-opacity="0.2"/>
+      <stop offset="50%" stop-color="#5EEAD4"/>
+      <stop offset="100%" stop-color="#F3D88A" stop-opacity="0.8"/>
+    </linearGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#5EEAD4"/>
+    </marker>
+    <style>
+      .label { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+      .kicker { font-size: 10px; font-weight: 600; letter-spacing: 0.16em; fill: #6B7C96; }
+      .title { font-size: 28px; font-weight: 700; fill: #F5F7FB; letter-spacing: -0.02em; }
+      .sub { font-size: 13px; fill: #8B9BB4; }
+      .step { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; fill: #5EEAD4; }
+      .h { font-size: 15px; font-weight: 600; fill: #E8EEF7; }
+      .p { font-size: 12px; fill: #8B9BB4; }
+      .note { font-size: 12px; fill: #A8B5C9; }
+    </style>
+  </defs>
+
+  <rect width="1120" height="520" rx="28" fill="url(#bg)"/>
+  <circle cx="1000" cy="80" r="140" fill="#F3D88A" opacity="0.03"/>
+  <circle cx="80" cy="440" r="120" fill="#5EEAD4" opacity="0.04"/>
+
+  <text class="label kicker" x="56" y="48">POLICY TRIGGERED</text>
+  <text class="label title" x="56" y="82">Automatic agent flow</text>
+  <text class="label sub" x="56" y="108">Consult once per failure signature. Fail open if the learning layer is unavailable.</text>
+
+  <!-- Spine -->
+  <line x1="120" y1="250" x2="1000" y2="250" stroke="url(#line)" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- Step nodes -->
+  <g>
+    <!-- 1 -->
+    <circle cx="120" cy="250" r="28" fill="#121A2B" stroke="#5EEAD4" stroke-width="2"/>
+    <text class="label" x="120" y="256" text-anchor="middle" style="font-size:14px;font-weight:700;fill:#5EEAD4;">01</text>
+    <rect x="48" y="300" width="144" height="88" rx="14" fill="#121A2B" stroke="#243149"/>
+    <text class="label h" x="120" y="336" text-anchor="middle">Failure</text>
+    <text class="label p" x="120" y="360" text-anchor="middle">Deterministic or</text>
+    <text class="label p" x="120" y="376" text-anchor="middle">repeated transient</text>
+
+    <!-- 2 -->
+    <circle cx="340" cy="250" r="28" fill="#121A2B" stroke="#5EEAD4" stroke-width="2"/>
+    <text class="label" x="340" y="256" text-anchor="middle" style="font-size:14px;font-weight:700;fill:#5EEAD4;">02</text>
+    <rect x="268" y="300" width="144" height="88" rx="14" fill="#121A2B" stroke="#243149"/>
+    <text class="label h" x="340" y="336" text-anchor="middle">Consult once</text>
+    <text class="label p" x="340" y="360" text-anchor="middle">Before blind retry</text>
+    <text class="label p" x="340" y="376" text-anchor="middle">or bypass</text>
+
+    <!-- 3 -->
+    <circle cx="560" cy="250" r="28" fill="#121A2B" stroke="#5EEAD4" stroke-width="2"/>
+    <text class="label" x="560" y="256" text-anchor="middle" style="font-size:14px;font-weight:700;fill:#5EEAD4;">03</text>
+    <rect x="488" y="300" width="144" height="88" rx="14" fill="#121A2B" stroke="#243149"/>
+    <text class="label h" x="560" y="336" text-anchor="middle">Retrieve</text>
+    <text class="label p" x="560" y="360" text-anchor="middle">Skill or direct</text>
+    <text class="label p" x="560" y="376" text-anchor="middle">.loopcompass search</text>
+
+    <!-- 4 -->
+    <circle cx="780" cy="250" r="28" fill="#121A2B" stroke="#F3D88A" stroke-width="2"/>
+    <text class="label" x="780" y="256" text-anchor="middle" style="font-size:14px;font-weight:700;fill:#F3D88A;">04</text>
+    <rect x="708" y="300" width="144" height="88" rx="14" fill="#121A2B" stroke="#3A3426"/>
+    <text class="label h" x="780" y="336" text-anchor="middle">Act</text>
+    <text class="label p" x="780" y="360" text-anchor="middle">Apply recovery or</text>
+    <text class="label p" x="780" y="376" text-anchor="middle">repair and escalate</text>
+
+    <!-- 5 -->
+    <circle cx="1000" cy="250" r="28" fill="#121A2B" stroke="#F3D88A" stroke-width="2"/>
+    <text class="label" x="1000" y="256" text-anchor="middle" style="font-size:14px;font-weight:700;fill:#F3D88A;">05</text>
+    <rect x="928" y="300" width="144" height="88" rx="14" fill="#121A2B" stroke="#3A3426"/>
+    <text class="label h" x="1000" y="336" text-anchor="middle">Verify</text>
+    <text class="label p" x="1000" y="360" text-anchor="middle">Confirm intended path</text>
+    <text class="label p" x="1000" y="376" text-anchor="middle">and resume the task</text>
+  </g>
+
+  <!-- Bottom note strip -->
+  <rect x="56" y="430" width="1008" height="54" rx="14" fill="#101827" stroke="#1E2A3F"/>
+  <text class="label note" x="560" y="462" text-anchor="middle">
+    Automatic consultation is not automatic persistence. New recoveries still require operator approval by default.
+  </text>
+</svg>
