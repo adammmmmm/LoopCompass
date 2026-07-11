@@ -16,6 +16,10 @@ uses [Semantic Versioning](https://semver.org/).
 - Host matrix checklist (`docs/host-matrix.md`) and verification guide (`docs/verification.md`).
 - Tag CI job to package release archives when `manifest.commit` matches the tag SHA.
 
+### Changed
+
+- Installation scopes renamed to **global** (host skill directory) and **project** (repo-local).
+
 ### Fixed
 
 - Recovery/incident templates require mechanical slug ids.

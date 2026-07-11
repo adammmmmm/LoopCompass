@@ -58,9 +58,9 @@ rollback one-liners.
 
 Scopes:
 
-- **Personal skill:** user-level host skill directory; does not rewrite project policy.
-- **Project-local skill:** skill committed in the repository; may update the managed policy block
-  in that repository only.
+- **Global skill:** this machine's host user skill directory; does not rewrite project policy.
+- **Project skill:** skill committed in the repository; may update the managed policy block in that
+  repository only.
 
 Never modify `.loopcompass/recoveries/` or `.loopcompass/incidents/` during a software update.
 

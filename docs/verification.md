@@ -20,7 +20,7 @@ Runs:
 | Signature normalize + slug + collision suffix | `scripts/lib/signature.mjs`, `tests/signature.test.mjs` |
 | Classification goldens (lane coverage + identity stability) | `fixtures/classification/cases.json`, `tests/classification-fixtures.test.mjs` |
 | Recovery/incident field rules + templates | `scripts/lib/frontmatter.mjs`, `tests/artifact-schema.test.mjs` |
-| Project-local stage, policy markers, update check, state preserve | `tests/install-update-dry-run.test.mjs` |
+| Project-scope stage, policy markers, update check, state preserve | `tests/install-update-dry-run.test.mjs` |
 | Manifest digests and policy marker integrity | `scripts/release.mjs`, `tests/release-tooling.test.mjs` |
 
 ## What remains host-level

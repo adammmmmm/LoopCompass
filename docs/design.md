@@ -191,7 +191,7 @@ Options:
 
 Chosen: Option 3.
 
-Why: It preserves offline classification, repository review, and scope isolation (personal vs
+Why: It preserves offline classification, repository review, and scope isolation (global vs
 project) while still giving operators a complete apply, rollback, and integrity story. Automatic
 discovery remains a future host-plugin opportunity.
 
@@ -221,7 +221,7 @@ Mechanical rules are covered by `node scripts/verify.mjs`:
 - signature normalization and slug derivation (`scripts/lib/signature.mjs`, `tests/signature.test.mjs`);
 - classification fixtures (`fixtures/classification/cases.json`);
 - artifact field checks and template contract alignment;
-- project-local install / update dry-runs;
+- project-scope install / update dry-runs;
 - release inventory validate (`scripts/release.mjs validate`).
 
 Behavioral policy acceptance tests (1-13 above) remain host-agent scenarios. Host coverage notes

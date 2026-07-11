@@ -15,7 +15,7 @@ below.
 - Keep ordinary LoopCompass use offline and dependency-free.
 - Make the installed version and source inspectable.
 - Preserve repository review and rollback.
-- Update personal and project-local installations safely.
+- Update global and project installations safely.
 - Never overwrite host instructions outside the managed LoopCompass block.
 - Never modify recovery or incident artifacts during a software update.
 - Stop before applying incompatible schema or policy changes.
@@ -130,24 +130,26 @@ State migration is a separate, explicit operation. A release whose `state_schema
 installed manifest must stop before update and present its migration instructions and rollback plan
 to the operator.
 
-A project-local update requires a quiescent LoopCompass state directory with no agent writing
-recoveries or incidents. Snapshot state hashes immediately before mutation and after validation.
-Any change is reported as concurrent activity and blocks the success claim; the updater never tries
-to reverse or merge that state change.
+A project update requires a quiescent LoopCompass state directory with no agent writing recoveries
+or incidents. Snapshot state hashes immediately before mutation and after validation. Any change is
+reported as concurrent activity and blocks the success claim; the updater never tries to reverse or
+merge that state change.
 
 ## Installation scopes
 
-### Personal skill
+Global means this machine's agent host skill directory, not company-wide or internet-wide.
+
+### Global skill
 
 A skill installed in the user-level Codex, Claude, Cursor, or other host skill directory is updated
-once for that user. Projects using it receive the new skill behavior, but each repository's managed
-policy block remains versioned independently.
+once for that host user. Projects using it receive the new skill behavior, but each repository's
+managed policy block remains versioned independently.
 
 When the installed manifest requires a newer policy, LoopCompass should report the project policy
 as stale before relying on changed trigger or escalation behavior. The user then runs the project
 update flow to refresh the managed block.
 
-### Project-local skill
+### Project skill
 
 A skill committed into a repository is updated in that repository and reviewed as an ordinary code
 change. The skill and policy versions travel with the project, which provides the most reproducible
@@ -157,11 +159,11 @@ team behavior.
 
 The updating agent must perform these steps in order:
 
-1. Require the operator or calling instruction to select `personal` or `project` installation
+1. Require the operator or calling instruction to select `global` or `project` installation
    scope. Never infer scope from the first discovered skill.
 2. Locate the installed skill for that exact scope. For `project` scope only, also locate the
    managed project-policy block.
-3. A project-scoped update must not replace a personal skill. A personal update must not edit any
+3. A project-scoped update must not replace a global skill. A global update must not edit any
    project without separate authorization.
 4. Read the installed manifest. For `project` scope only, also read the policy marker version.
 5. Resolve the requested release, defaulting to the latest stable GitHub release rather than
@@ -181,7 +183,7 @@ The updating agent must perform these steps in order:
 14. Copy the current installed skill to the journaled backup path and verify its file inventory.
 15. Replace the installed skill directory only after backup and staging validation succeed. Do not
     describe this replacement as atomic across hosts.
-16. For `project` scope only, replace the marked LoopCompass policy block. A personal update does
+16. For `project` scope only, replace the marked LoopCompass policy block. A global update does
     not modify project policy.
 17. Run skill validation and host discovery checks.
 18. For a project update, compare the final state snapshot and report any concurrent change without
@@ -212,15 +214,15 @@ after the updated or restored installation validates successfully.
 
 ### Update one project
 
-> Update the project-local LoopCompass installation in this project from the latest stable release at
+> Update the project LoopCompass installation in this project from the latest stable release at
 > https://github.com/adammmmmm/LoopCompass. Follow `docs/update-strategy-v1.md`: replace the
 > installed skill as one validated unit, update only the managed LoopCompass policy block, preserve
 > `.loopcompass/recoveries` and `.loopcompass/incidents` byte-for-byte, stop on compatibility or
 > local-modification conflicts, and report the old and new versions plus validation evidence.
 
-### Update a personal skill
+### Update a global skill
 
-> Update my personal LoopCompass skill from the latest stable release at
+> Update my global LoopCompass skill from the latest stable release at
 > https://github.com/adammmmmm/LoopCompass. Follow `docs/update-strategy-v1.md`, verify the release
 > manifest, preserve project state, validate host discovery, and inspect policy versions only in the
 > current project and additional repository roots I explicitly provide. Do not search for or modify
@@ -228,9 +230,9 @@ after the updated or restored installation validates successfully.
 
 ### Install a specific version
 
-> Install LoopCompass version `<version>` as a `<personal|project-local>` installation from the
-> matching commit-pinned GitHub release. Follow `docs/update-strategy-v1.md`; for project-local scope,
-> install the canonical managed policy block for this host. Validate skill discovery and the direct
+> Install LoopCompass version `<version>` as a `<global|project>` installation from the matching
+> commit-pinned GitHub release. Follow `docs/update-strategy-v1.md`; for project scope, install the
+> canonical managed policy block for this host. Validate skill discovery and the direct
 > `.loopcompass` fallback, then report the installed version, scope, and release commit.
 
 ### Check for an update without mutating
@@ -256,8 +258,8 @@ Rollback is an explicit update to a previously released version:
 
 1. Select the previous immutable release recorded in the update report.
 2. Apply the same compatibility checks and staging validation.
-3. Replace the skill from that release. For project-local scope only, also replace the managed
-   policy block.
+3. Replace the skill from that release. For project scope only, also replace the managed policy
+   block.
 4. Do not roll back project state automatically.
 5. Stop if the current state schema is incompatible with the older release.
 
@@ -309,10 +311,10 @@ when no plugin is installed.
 6. A state-schema change stops and requests an explicit migration.
 7. A staged skill that fails validation never replaces the installed skill.
 8. A failed replacement restores the previous skill and policy.
-9. A personal skill update reports repositories with stale policies without editing them.
+9. A global skill update reports repositories with stale policies without editing them.
 10. Rollback reinstalls a prior immutable release without rolling back project state.
-11. A project update cannot replace a personal installation.
-12. A personal update does not enumerate or edit projects outside explicitly provided roots.
+11. A project update cannot replace a global installation.
+12. A global update does not enumerate or edit projects outside explicitly provided roots.
 13. An expanded permission or execution surface stops for approval.
 14. A rollback failure preserves its journal, backup, staging paths, and manual recovery steps.
 

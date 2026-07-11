@@ -7,8 +7,8 @@ instruction inheritance. This matrix is the verification checklist for multi-hos
 
 | Scope | Skill location | Policy location | State |
 | --- | --- | --- | --- |
-| Project-local | `skills/loop-compass/` (or host project skill dir) | Marked block in project `AGENTS.md` / `CLAUDE.md` / equivalent | `.loopcompass/` in repo |
-| Personal | Host user skill directory | Only projects that opt in with markers | Per-project `.loopcompass/` |
+| **Project** | `skills/loop-compass/` (or host project skill dir) | Marked block in project `AGENTS.md` / `CLAUDE.md` / equivalent | `.loopcompass/` in repo |
+| **Global** | Host user skill directory (this machine's agent host) | Only projects that opt in with markers | Per-project `.loopcompass/` |
 
 ## Host checklist
 

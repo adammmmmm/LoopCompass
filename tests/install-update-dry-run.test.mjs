@@ -32,7 +32,7 @@ describe("install and update dry-run", () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("stages a project-local skill and validates digests against release manifest", () => {
+  it("stages a project-scope skill and validates digests against release manifest", () => {
     const project = path.join(tmp, "consumer-project");
     const skillDest = path.join(project, "skills", "loop-compass");
     mkdirSync(path.dirname(skillDest), { recursive: true });

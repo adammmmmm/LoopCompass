@@ -107,8 +107,8 @@ Agents search first, then read only the top one to three matches.
 Prefer an **immutable GitHub release** over floating `main`. Each release ships `VERSION`, the
 skill tree (`manifest.yaml` included), docs, and a separate `SHA256SUMS` asset.
 
-1. Copy [`skills/loop-compass`](skills/loop-compass) into your host skill directory (`personal`) or
-   this repository (`project-local`).
+1. Copy [`skills/loop-compass`](skills/loop-compass) into your host skill directory (`global`) or
+   this repository (`project`).
 2. Merge the **entire marked** block from
    [`project-policy.md`](skills/loop-compass/assets/project-policy.md) into `AGENTS.md`,
    `CLAUDE.md`, or the host equivalent. Keep
@@ -118,11 +118,11 @@ skill tree (`manifest.yaml` included), docs, and a separate `SHA256SUMS` asset.
 
 Ordinary consultation is offline. It does not check for software updates.
 
-Agent one-liner (project-local). Semantics live in
+Agent one-liner (project scope). Semantics live in
 [docs/update-strategy-v1.md](docs/update-strategy-v1.md):
 
 ```text
-Install LoopCompass v0.1.0 project-local from
+Install LoopCompass v0.1.0 project scope from
 https://github.com/adammmmmm/LoopCompass (commit-pinned release).
 Follow docs/update-strategy-v1.md. Report version, scope, and release commit.
 ```
@@ -141,14 +141,14 @@ Report old → new version and validation evidence.
 ```
 
 <details>
-<summary><b>Personal skill and check-only</b></summary>
+<summary><b>Global skill and check-only</b></summary>
 
-**Personal skill**
+**Global skill** (this machine's host skill directory)
 
 ```text
-Update my personal LoopCompass skill from latest stable at
+Update my global LoopCompass skill from latest stable at
 https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md.
-Only touch this machine's personal skill plus repos I name. Report old → new.
+Only touch this machine's global skill plus repos I name. Report old → new.
 ```
 
 **Check only (non-mutating)**
