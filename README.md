@@ -16,22 +16,29 @@ service. Small Markdown files. Full fleet memory.
 
 ## Why it exists
 
-Agents hit the same environment, tool, permission, API, CI, and workflow failures over and over.
+Agents re-hit the same environment, tool, permission, API, CI, and workflow failures. The fix often
+already happened once, in some other session, and vanished with the transcript.
 
-Useful recoveries die in transcripts. Clever workarounds harden into folklore. The next agent pays
-the same tax.
+**A familiar week**
 
-| | Without LoopCompass | With LoopCompass |
-| --- | --- | --- |
-| Failure appears | Blind retry | Consult once before retrying |
-| Recovery works | Lost with the transcript | Verified, then preserved |
-| Workaround sticks | Becomes folklore | Classified: keep or repair |
-| Same wall next week | Circles | Needle past it |
+1. **Monday** — An agent hits a Git permission error, burns time, finds the right path, finishes the
+   task. Session ends. Nothing durable is left in the repo.
+2. **Thursday** — A different agent (or you, in a new chat) hits the same error and starts from zero.
+3. **Worse case** — Someone lands a clever bypass. It works. Next week every agent copies the bypass
+   instead of fixing the broken wrapper.
 
-Every recurring failure becomes one of two outcomes:
+**What LoopCompass changes**
 
-1. **Verified operational knowledge** when the path is correct tool use or a real constraint.
-2. **Root-cause repair** when a mechanism should not stay broken.
+| Situation | What happens |
+| --- | --- |
+| Distinctive failure shows up | Agent consults once before blind retry: skill first, or a direct search of `.loopcompass/` |
+| The path is correct tool use | After verification (and your approval by default), a short recovery file stays in the repo |
+| The normal path is broken | An incident tracks escalation and repair; the live file goes away when the normal path works again |
+| It was a lucky bypass | Nothing is preserved. Folklore does not become documentation |
+
+You are not installing a service. You are giving every agent in the project a small, reviewable
+memory of how this repo actually runs, and a rule that broken mechanisms get fixed rather than
+papered over.
 
 ---
 
