@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 760 300" fill="none" role="img" aria-labelledby="t d">
+  <title id="t">Classification gate</title>
+  <desc id="d">Failure to retrieve to classify, then four outcomes: recovery, incident, external, or nothing.</desc>
+  <style>
+    .fg { fill: #1f2328; }
+    .muted { fill: #656d76; }
+    .line { stroke: #d0d7de; }
+    .box { fill: #f6f8fa; stroke: #d0d7de; }
+    .accent { stroke: #0969da; fill: #ddf4ff; }
+    .ok { stroke: #1a7f37; fill: #dafbe1; }
+    .warn { stroke: #9a6700; fill: #fff8c5; }
+    .ext { stroke: #8250df; fill: #fbefff; }
+    .none { stroke: #8c959f; fill: #f6f8fa; }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    @media (prefers-color-scheme: dark) {
+      .fg { fill: #e6edf3; }
+      .muted { fill: #8b949e; }
+      .line { stroke: #30363d; }
+      .box { fill: #161b22; stroke: #30363d; }
+      .accent { stroke: #2f81f7; fill: #121d2f; }
+      .ok { stroke: #3fb950; fill: #12261e; }
+      .warn { stroke: #d29922; fill: #2a2111; }
+      .ext { stroke: #a371f7; fill: #1c1528; }
+      .none { stroke: #6e7681; fill: #161b22; }
+    }
+  </style>
+
+  <!-- trunk -->
+  <rect class="box" x="300" y="8" width="160" height="36" rx="8"/>
+  <text class="fg" x="380" y="31" text-anchor="middle" font-size="13" font-weight="600">failure</text>
+
+  <path class="line" d="M380 44v18" stroke-width="1.25" marker-end="url(#m)"/>
+  <rect class="box" x="275" y="62" width="210" height="36" rx="8"/>
+  <text class="fg" x="380" y="85" text-anchor="middle" font-size="13" font-weight="600">retrieve knowledge</text>
+
+  <path class="line" d="M380 98v18" stroke-width="1.25"/>
+  <rect class="accent" x="300" y="116" width="160" height="36" rx="8" stroke-width="1.25"/>
+  <text class="fg" x="380" y="139" text-anchor="middle" font-size="13" font-weight="600">classify</text>
+
+  <!-- branch lines -->
+  <path class="line" d="M380 152v28H96v16" stroke-width="1.25"/>
+  <path class="line" d="M380 180H284v16" stroke-width="1.25"/>
+  <path class="line" d="M380 180H476v16" stroke-width="1.25"/>
+  <path class="line" d="M380 180H664v16" stroke-width="1.25"/>
+
+  <!-- outcomes -->
+  <g transform="translate(16 200)">
+    <rect class="ok" width="160" height="84" rx="10" stroke-width="1.25"/>
+    <text class="fg" x="80" y="28" text-anchor="middle" font-size="12" font-weight="600">Recovery</text>
+    <text class="muted" x="80" y="48" text-anchor="middle" font-size="11">correct behavior</text>
+    <text class="muted" x="80" y="66" text-anchor="middle" font-size="11">verify and keep</text>
+  </g>
+  <g transform="translate(204 200)">
+    <rect class="warn" width="160" height="84" rx="10" stroke-width="1.25"/>
+    <text class="fg" x="80" y="28" text-anchor="middle" font-size="12" font-weight="600">Incident</text>
+    <text class="muted" x="80" y="48" text-anchor="middle" font-size="11">repairable defect</text>
+    <text class="muted" x="80" y="66" text-anchor="middle" font-size="11">fix, verify, close</text>
+  </g>
+  <g transform="translate(396 200)">
+    <rect class="ext" width="160" height="84" rx="10" stroke-width="1.25"/>
+    <text class="fg" x="80" y="28" text-anchor="middle" font-size="12" font-weight="600">External</text>
+    <text class="muted" x="80" y="48" text-anchor="middle" font-size="11">upstream defect</text>
+    <text class="muted" x="80" y="66" text-anchor="middle" font-size="11">expiring containment</text>
+  </g>
+  <g transform="translate(588 200)">
+    <rect class="none" width="156" height="84" rx="10" stroke-width="1.25"/>
+    <text class="fg" x="78" y="28" text-anchor="middle" font-size="12" font-weight="600">Nothing</text>
+    <text class="muted" x="78" y="48" text-anchor="middle" font-size="11">bypass / coincidence</text>
+    <text class="muted" x="78" y="66" text-anchor="middle" font-size="11">preserve nothing</text>
+  </g>
+
+  <defs>
+    <marker id="m" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0.5L6 4L0 7.5" class="line" fill="none" stroke-width="1"/>
+    </marker>
+  </defs>
+</svg>
