@@ -118,55 +118,48 @@ skill tree (`manifest.yaml` included), docs, and a separate `SHA256SUMS` asset.
 
 Ordinary consultation is offline. It does not check for software updates.
 
+Agent one-liner (project-local). Semantics live in
+[docs/update-strategy-v1.md](docs/update-strategy-v1.md):
+
 ```text
-Install LoopCompass version 0.1.0 as a project-local installation from the matching commit-pinned
-GitHub release at https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md;
-install the canonical managed policy block for this host. Validate skill discovery and the direct
-.loopcompass fallback, then report the installed version, scope, and release commit. Do not add
-hooks or a runtime CLI.
+Install LoopCompass v0.1.0 project-local from
+https://github.com/adammmmmm/LoopCompass (commit-pinned release).
+Follow docs/update-strategy-v1.md. Report version, scope, and release commit.
 ```
 
 ---
 
 ## Update
 
-**Explicit and agent-assisted.** Replace the skill as one validated unit, update only the managed
-policy block for project scope, preserve `.loopcompass/recoveries` and `.loopcompass/incidents`
-byte-for-byte.
-
-Contract: [docs/update-strategy-v1.md](docs/update-strategy-v1.md).
-
-<details>
-<summary><b>Agent prompts</b></summary>
-
-**One project**
+**Explicit and agent-assisted.** Full contract:
+[docs/update-strategy-v1.md](docs/update-strategy-v1.md).
 
 ```text
-Update the project-local LoopCompass installation in this project from the latest stable release at
-https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md: replace the installed
-skill as one validated unit, update only the managed LoopCompass policy block, preserve
-.loopcompass/recoveries and .loopcompass/incidents byte-for-byte, stop on compatibility or
-local-modification conflicts, and report the old and new versions plus validation evidence.
+Update this project's LoopCompass install from the latest stable release at
+https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md.
+Report old → new version and validation evidence.
 ```
+
+<details>
+<summary><b>Personal skill and check-only</b></summary>
 
 **Personal skill**
 
 ```text
-Update my personal LoopCompass skill from the latest stable release at
-https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md, verify the release
-manifest, preserve project state, validate host discovery, and inspect policy versions only in the
-current project and additional repository roots I explicitly provide. Do not search for or modify
-other projects without separate authorization.
+Update my personal LoopCompass skill from latest stable at
+https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md.
+Only touch this machine's personal skill plus repos I name. Report old → new.
 ```
 
 **Check only (non-mutating)**
 
 ```text
-Without modifying any files, report whether the installed LoopCompass skill is behind the latest
-stable GitHub release at https://github.com/adammmmmm/LoopCompass. Compare installed
-manifest.yaml version/commit/policy_version to the release manifest. If behind, print old and new
-versions and the update one-liner. Do not install or rewrite policy.
+Check whether installed LoopCompass is behind latest stable at
+https://github.com/adammmmmm/LoopCompass. Do not modify files. Report gap + update line.
 ```
+
+Expanded one-liners (belt-and-suspenders) are in
+[docs/update-strategy-v1.md](docs/update-strategy-v1.md#agent-one-liners).
 
 </details>
 
