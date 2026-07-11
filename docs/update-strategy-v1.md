@@ -73,15 +73,31 @@ authenticity after a source-account compromise. Signed releases are a future har
 
 Before documenting the updater as available, the LoopCompass source repository must ship:
 
-1. A semantic `VERSION` file.
-2. A complete skill `manifest.yaml` with per-file SHA-256 digests.
+1. A semantic `VERSION` file. **Shipped** at repo root.
+2. A complete skill `manifest.yaml` with per-file SHA-256 digests. **Shipped** at
+   `skills/loop-compass/manifest.yaml` (regenerate with `node scripts/release.mjs generate`).
 3. A GitHub release pinned to the manifest commit with a separate `SHA256SUMS` file covering each
-   release archive.
-4. The marked canonical policy block described below.
-5. A release validation check that reconstructs and verifies the manifest inventory.
+   release archive. **Required per published release** (build with `node scripts/release.mjs
+   package`, then attach `dist/SHA256SUMS` and the archive to the GitHub release).
+4. The marked canonical policy block described below. **Shipped** in
+   `skills/loop-compass/assets/project-policy.md`.
+5. A release validation check that reconstructs and verifies the manifest inventory. **Shipped** as
+   `node scripts/release.mjs validate`.
 
-Until these exist, users may reinstall from a reviewed commit, but they cannot claim conformance
-with this v1 update contract.
+Until a GitHub release for the target version exists, users may reinstall from a reviewed commit,
+but they cannot claim full conformance with this v1 update contract for that version.
+
+### Maintainer release procedure
+
+1. Set `VERSION` to the release semver and update `CHANGELOG.md`.
+2. Ensure the managed policy markers in `project-policy.md` match the intended `policy_version`.
+3. Run `node scripts/release.mjs generate` then `node scripts/release.mjs validate`.
+4. Commit the regenerated `manifest.yaml` (its `commit` field will match `HEAD` at generate time;
+   regenerate after the final release commit if needed so commit and tag agree).
+5. Tag `v<VERSION>` on the validated commit.
+6. Run `node scripts/release.mjs package` and publish the GitHub release with
+   `dist/loopcompass-v<VERSION>.tar.gz` and `dist/SHA256SUMS` as release assets.
+7. Prefer the release tag, never floating `main`, as the default consumer update source.
 
 ## Managed project policy
 
@@ -217,6 +233,23 @@ after the updated or restored installation validates successfully.
 > install the canonical managed policy block for this host. Validate skill discovery and the direct
 > `.loopcompass` fallback, then report the installed version, scope, and release commit.
 
+### Check for an update without mutating
+
+This is the lightweight discovery path. It is explicit, operator-driven, and never runs during
+ordinary LoopCompass failure consultation.
+
+> Without modifying any files, report whether the installed LoopCompass skill is behind the latest
+> stable GitHub release at https://github.com/adammmmmm/LoopCompass. Compare the installed
+> `manifest.yaml` version, commit, and `policy_version` to the release manifest. If behind, print
+> old and new versions plus the matching update one-liner for the installation scope I am using.
+> Do not install the skill or rewrite project policy.
+
+Maintainer-side equivalent when both manifests are on disk:
+
+```text
+node scripts/release.mjs check --installed <skill-dir> --release-manifest <manifest.yaml>
+```
+
 ## Rollback
 
 Rollback is an explicit update to a previously released version:
@@ -251,9 +284,16 @@ V1 deliberately excludes:
 - update checks during ordinary LoopCompass invocation;
 - silent background updates;
 - automatic project-wide policy rewrites;
-- mandatory package managers, daemons, hooks, or CLIs;
+- mandatory package managers, daemons, hooks, or consumer runtime CLIs;
 - implicit state migrations;
 - automatic channel switching between stable and prerelease versions.
+
+V1 does include:
+
+- explicit agent one-liners for install, update, rollback, and non-mutating check;
+- maintainer-only `scripts/release.mjs` for manifest generation, validation, packaging, and local
+  check compares;
+- `CHANGELOG.md` for human-readable release notes paired with the machine manifest.
 
 Host plugins may later add version discovery, update notifications, release channels, compatibility
 checks, and marketplace-managed delivery. The portable explicit update flow must remain available

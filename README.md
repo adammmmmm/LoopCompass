@@ -7,7 +7,7 @@
 A lightweight, provider-neutral skill for agent workflows.<br>
 No daemon, no CLI, no database, no model API, no hosted service. Just small, reviewable files.
 
-[How it works](#the-classification-gate) · [What it stores](#what-lives-in-your-repository) · [Install](#install) · [Design](#design-principles)
+[How it works](#the-classification-gate) · [What it stores](#what-lives-in-your-repository) · [Install](#install) · [Update](#update) · [Design](#design-principles)
 
 </div>
 
@@ -89,24 +89,77 @@ fallback. See [project integration](skills/loop-compass/references/integration.m
 
 ## Install
 
+Prefer an **immutable GitHub release** over floating `main`. Each release ships `VERSION`, the
+skill tree (including `manifest.yaml`), docs, and a separate `SHA256SUMS` asset.
+
 1. Install or copy [`skills/loop-compass`](skills/loop-compass) into the skill directory supported
-   by your agent host.
-2. Merge the canonical [`project-policy.md`](skills/loop-compass/assets/project-policy.md) block
-   into the repository's inherited project instructions.
+   by your agent host (`personal`) or into this repository (`project-local`).
+2. Merge the **entire marked** canonical policy from
+   [`project-policy.md`](skills/loop-compass/assets/project-policy.md) into the repository's
+   inherited project instructions (`AGENTS.md`, `CLAUDE.md`, or host equivalent). Keep the
+   `<!-- loopcompass:start policy=N -->` and `<!-- loopcompass:end -->` markers intact.
+3. Confirm the installed skill includes `manifest.yaml` and that `.loopcompass/recoveries` plus
+   `.loopcompass/incidents` exist or can be created later by normal use.
 
-The core uses the open `SKILL.md` format and ordinary file operations.
+The core uses the open `SKILL.md` format and ordinary file operations. Ordinary failure
+consultation stays offline and does not check for software updates.
 
-You can ask a capable agent to handle both steps:
+You can ask a capable agent to handle install:
 
 ```text
-Install LoopCompass from https://github.com/adammmmmm/LoopCompass for this project, preserve all
-bundled skill files, merge its canonical project policy into this host's inherited repository
-instructions, and verify skill discovery plus the direct .loopcompass fallback. Do not add hooks or
-a CLI.
+Install LoopCompass version 0.1.0 as a project-local installation from the matching commit-pinned
+GitHub release at https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md;
+install the canonical managed policy block for this host. Validate skill discovery and the direct
+.loopcompass fallback, then report the installed version, scope, and release commit. Do not add
+hooks or a runtime CLI.
 ```
 
 Host-specific plugin packaging may improve installation later, but the portable skill remains the
 source of behavior.
+
+## Update
+
+Updates are **explicit and agent-assisted**. They replace the installed skill as one validated unit,
+update only the managed policy block for project scope, and preserve
+`.loopcompass/recoveries` and `.loopcompass/incidents` byte-for-byte. Full contract:
+[docs/update-strategy-v1.md](docs/update-strategy-v1.md).
+
+### Update one project
+
+```text
+Update the project-local LoopCompass installation in this project from the latest stable release at
+https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md: replace the installed
+skill as one validated unit, update only the managed LoopCompass policy block, preserve
+.loopcompass/recoveries and .loopcompass/incidents byte-for-byte, stop on compatibility or
+local-modification conflicts, and report the old and new versions plus validation evidence.
+```
+
+### Update a personal skill
+
+```text
+Update my personal LoopCompass skill from the latest stable release at
+https://github.com/adammmmmm/LoopCompass. Follow docs/update-strategy-v1.md, verify the release
+manifest, preserve project state, validate host discovery, and inspect policy versions only in the
+current project and additional repository roots I explicitly provide. Do not search for or modify
+other projects without separate authorization.
+```
+
+### Check for an update (non-mutating)
+
+```text
+Without modifying any files, report whether the installed LoopCompass skill is behind the latest
+stable GitHub release at https://github.com/adammmmmm/LoopCompass. Compare installed
+manifest.yaml version/commit/policy_version to the release manifest. If behind, print old and new
+versions and the update one-liner. Do not install or rewrite policy.
+```
+
+Maintainer tooling in this repository (not required for consumers):
+
+```text
+node scripts/release.mjs generate   # write skills/loop-compass/manifest.yaml
+node scripts/release.mjs validate   # verify digests and policy markers
+node scripts/release.mjs package    # dist archive + SHA256SUMS
+```
 
 ## Manual conformance test
 
@@ -130,6 +183,7 @@ Use LoopCompass to check whether this CLI behavior is already known before retry
 - Retrieve narrowly and keep agent briefs lean.
 - Fail open if the learning layer is unavailable.
 - Add automation only when measured failure modes justify it.
+- Update software explicitly; never during ordinary failure consultation.
 
 <details>
 <summary><b>Planned optional hooks</b></summary>
@@ -143,15 +197,16 @@ fail-open, and removable without disabling the skill or `.loopcompass` fallback.
 </details>
 
 See [docs/design.md](docs/design.md) for the architecture and decision record.
-See [docs/update-strategy-v1.md](docs/update-strategy-v1.md) for the explicit v1 installation
-update and rollback contract.
+See [docs/update-strategy-v1.md](docs/update-strategy-v1.md) for the explicit v1 installation,
+update, check, and rollback contract.
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Status
 
 > [!IMPORTANT]
 > LoopCompass is an early design and skill implementation. The first milestone is to validate the
-> two-lane workflow and policy-triggered consultation across multiple agent hosts before adding
-> scripts, plugins, or enforcement automation.
+> two-lane workflow and policy-triggered consultation across multiple agent hosts. V1 software
+> updates are explicit and release-based; silent update checks during ordinary use remain deferred.
 
 ## License
 
