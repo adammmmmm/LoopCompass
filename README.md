@@ -1,141 +1,129 @@
 <p align="center">
-  <img src="docs/assets/hero.jpg" alt="LoopCompass: a gold compass rose with cyan orbital trails against deep indigo space" width="100%"/>
+  <img src="docs/assets/logo.svg" alt="LoopCompass" width="360"/>
 </p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-0B1220?style=flat-square&amp;labelColor=121A2B&amp;color=C9A24A" alt="Version 0.1.0"/>
-  <img src="https://img.shields.io/badge/license-MIT-0B1220?style=flat-square&amp;labelColor=121A2B&amp;color=5EEAD4" alt="MIT License"/>
-  <img src="https://img.shields.io/badge/runtime-none-0B1220?style=flat-square&amp;labelColor=121A2B&amp;color=64748B" alt="No runtime"/>
-  <img src="https://img.shields.io/badge/host-provider--neutral-0B1220?style=flat-square&amp;labelColor=121A2B&amp;color=38BDF8" alt="Provider neutral"/>
-</p>
-
-<h1 align="center">LoopCompass</h1>
 
 <p align="center">
   <strong>Agents remember the right path and repair the broken one.</strong>
 </p>
 
 <p align="center">
-  A portable skill for agent workflows.<br/>
-  No daemon, no CLI, no database, no model API, no hosted service.<br/>
-  Just small, reviewable files that keep the fleet from walking in circles.
+  A portable skill for agent workflows. No daemon, no CLI, no database,<br/>
+  no model API, no hosted service. Small Markdown files. Full fleet memory.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.1.0-1f2328?style=flat-square&amp;labelColor=21262d&amp;color=58a6ff" alt="0.1.0"/>
+  <img src="https://img.shields.io/badge/license-MIT-1f2328?style=flat-square&amp;labelColor=21262d&amp;color=3fb950" alt="MIT"/>
+  <img src="https://img.shields.io/badge/runtime-none-1f2328?style=flat-square&amp;labelColor=21262d&amp;color=8b949e" alt="No runtime"/>
+  <img src="https://img.shields.io/badge/host-provider--neutral-1f2328?style=flat-square&amp;labelColor=21262d&amp;color=a371f7" alt="Provider neutral"/>
 </p>
 
 <p align="center">
   <a href="#how-it-works">How it works</a> ·
-  <a href="#what-lives-in-your-repository">What it stores</a> ·
+  <a href="#what-it-stores">What it stores</a> ·
   <a href="#install">Install</a> ·
   <a href="#update">Update</a> ·
-  <a href="#design-principles">Design</a>
+  <a href="#design">Design</a>
 </p>
 
 ---
 
-## The problem
+## Why it exists
 
-Agents repeatedly hit the same environment, tool, permission, API, CI, and workflow failures.
+Agents hit the same environment, tool, permission, API, CI, and workflow failures over and over.
 
-Useful recoveries vanish into transcripts. Clever workarounds harden into folklore. The next agent
-hits the same wall and pays the same tax.
+Useful recoveries die in transcripts. Clever workarounds harden into folklore. The next agent pays
+the same tax.
 
-| | Without a compass | With LoopCompass |
+| | Without LoopCompass | With LoopCompass |
 | --- | --- | --- |
-| A failure appears | Blind retry, again | Consult once before retrying |
-| A recovery works | Vanishes with the transcript | Verified, then preserved |
-| A workaround sticks | Hardens into folklore | Classified: keep it, or fix the root cause |
-| Same wall, next week | Walk in circles | Follow the needle past it |
+| Failure appears | Blind retry | Consult once before retrying |
+| Recovery works | Lost with the transcript | Verified, then preserved |
+| Workaround sticks | Becomes folklore | Classified: keep or repair |
+| Same wall next week | Circles | Needle past it |
 
-LoopCompass turns recurring failures into one of two outcomes:
+Every recurring failure becomes one of two outcomes:
 
-1. **Verified operational knowledge** when the recovery is the correct way to use a tool or respect
-   a legitimate constraint.
-2. **Root-cause repair** when a permission, configuration, wrapper, workflow, or other mechanism
-   should not remain broken.
+1. **Verified operational knowledge** when the path is correct tool use or a real constraint.
+2. **Root-cause repair** when a mechanism should not stay broken.
 
 ---
 
 ## How it works
 
-Every consultation follows the same gate: retrieve, classify, then decide what (if anything)
-survives in the repository.
+Consult once. Retrieve first. Classify before preserving anything.
 
 <p align="center">
-  <img src="docs/assets/flowchart-classification.svg" alt="Classification gate: failure, retrieve knowledge, classify, then recovery, incident, external, or nothing" width="720"/>
+  <img src="docs/assets/flowchart-classification.svg" alt="Classification gate: failure, retrieve, classify, then recovery, incident, external, or nothing" width="720"/>
 </p>
 
-| The failure was really… | LoopCompass… | What survives |
+| Reality | Action | What survives |
 | --- | --- | --- |
-| **Correct operating behavior** | verifies the recovery and keeps it concise | a recovery |
-| **Repairable defect** | escalates, repairs, verifies the normal path, closes | a closed incident |
-| **External defect** | tracks expiring containment until upstream repair | an expiring incident |
-| **Bypass or coincidence** | preserves nothing | nothing |
+| Correct operating behavior | Verify and keep a concise recovery | Recovery |
+| Repairable defect | Escalate, repair, verify the normal path, close | Closed incident |
+| External defect | Track expiring containment until upstream repair | Expiring incident |
+| Bypass or coincidence | Preserve nothing | Nothing |
 
 ### Two lanes
 
 <p align="center">
-  <img src="docs/assets/flowchart-two-lanes.svg" alt="Recovery lane lifecycle and incident lane lifecycle" width="720"/>
+  <img src="docs/assets/flowchart-two-lanes.svg" alt="Recovery and incident lifecycles" width="720"/>
 </p>
 
-- **Recovery** stores correct operating behavior under `.loopcompass/recoveries/`.
-- **Incident** coordinates repair under `.loopcompass/incidents/`, then deletes the live file after
-  verification.
+| Lane | When | Where |
+| --- | --- | --- |
+| **Recovery** | The successful path is correct behavior | `.loopcompass/recoveries/` |
+| **Incident** | The normal path is broken and should be fixed | `.loopcompass/incidents/` (deleted on close) |
 
-A workaround cannot become a recovery merely because it unblocked the task.
+A workaround is not a recovery just because it unblocked the task.
 
-### Automatic agent flow
+### Agent flow
 
-LoopCompass activates through repository policy, including for delegated agents.
+Policy-triggered for parents and delegated agents. Fail open if the learning layer is unavailable.
 
 <p align="center">
   <img src="docs/assets/flowchart-agent-flow.svg" alt="Agent flow: failure, consult once, retrieve, act, verify" width="720"/>
 </p>
 
-Project instructions provide best-effort automatic behavior across agent hosts. Skill preloading
-improves availability where supported. Direct `.loopcompass` search provides a fail-open fallback.
-See [project integration](skills/loop-compass/references/integration.md).
+Skill preloading helps where the host supports it. Direct `.loopcompass` search is the fallback.
+See [integration](skills/loop-compass/references/integration.md).
 
 > [!NOTE]
-> **"Automatic" means agents consult, classify, repair, and escalate on their own.** Saving a new
-> recovery still asks for your approval by default, so nothing unverified sneaks into shared
-> knowledge. Once you trust the verification, repository policy can turn on automatic saves too.
+> **Automatic consultation is not automatic persistence.** Agents consult, classify, repair, and
+> escalate on their own. New recoveries still require operator approval by default. Repository
+> policy can authorize verified agents to save once you trust the verification gate.
 
 ---
 
-## What lives in your repository
+## What it stores
 
-Projects using LoopCompass keep small, reviewable Markdown artifacts:
+Repository-local Markdown. Human-reviewable. Never loaded wholesale into context.
 
 ```text
 .loopcompass/
-├── recoveries/
-│   └── <verified-operational-knowledge>.md
-└── incidents/
-    └── <open-repair-obligation>.md
+├── recoveries/   # verified operational knowledge
+└── incidents/    # open repair obligations
 ```
 
-Agents search first, then read only the top one to three matches. The corpus is never loaded into
-context wholesale.
+Agents search first, then read only the top one to three matches.
 
 ---
 
 ## Install
 
 Prefer an **immutable GitHub release** over floating `main`. Each release ships `VERSION`, the
-skill tree (including `manifest.yaml`), docs, and a separate `SHA256SUMS` asset.
+skill tree (`manifest.yaml` included), docs, and a separate `SHA256SUMS` asset.
 
-1. Install or copy [`skills/loop-compass`](skills/loop-compass) into the skill directory supported
-   by your agent host (`personal`) or into this repository (`project-local`).
-2. Merge the **entire marked** canonical policy from
-   [`project-policy.md`](skills/loop-compass/assets/project-policy.md) into the repository's
-   inherited project instructions (`AGENTS.md`, `CLAUDE.md`, or host equivalent). Keep the
-   `<!-- loopcompass:start policy=N -->` and `<!-- loopcompass:end -->` markers intact.
-3. Confirm the installed skill includes `manifest.yaml` and that `.loopcompass/recoveries` plus
-   `.loopcompass/incidents` exist or can be created later by normal use.
+1. Copy [`skills/loop-compass`](skills/loop-compass) into your host skill directory (`personal`) or
+   this repository (`project-local`).
+2. Merge the **entire marked** block from
+   [`project-policy.md`](skills/loop-compass/assets/project-policy.md) into `AGENTS.md`,
+   `CLAUDE.md`, or the host equivalent. Keep
+   `<!-- loopcompass:start policy=N -->` … `<!-- loopcompass:end -->` intact.
+3. Confirm `manifest.yaml` is present. Create `.loopcompass/recoveries` and
+   `.loopcompass/incidents` now, or let normal use create them.
 
-The core uses the open `SKILL.md` format and ordinary file operations. Ordinary failure
-consultation stays offline and does not check for software updates.
-
-You can ask a capable agent to handle install:
+Ordinary consultation is offline. It does not check for software updates.
 
 ```text
 Install LoopCompass version 0.1.0 as a project-local installation from the matching commit-pinned
@@ -145,19 +133,20 @@ install the canonical managed policy block for this host. Validate skill discove
 hooks or a runtime CLI.
 ```
 
-Host-specific plugin packaging may improve installation later, but the portable skill remains the
-source of behavior.
-
 ---
 
 ## Update
 
-Updates are **explicit and agent-assisted**. They replace the installed skill as one validated unit,
-update only the managed policy block for project scope, and preserve
-`.loopcompass/recoveries` and `.loopcompass/incidents` byte-for-byte. Full contract:
-[docs/update-strategy-v1.md](docs/update-strategy-v1.md).
+**Explicit and agent-assisted.** Replace the skill as one validated unit, update only the managed
+policy block for project scope, preserve `.loopcompass/recoveries` and `.loopcompass/incidents`
+byte-for-byte.
 
-### Update one project
+Contract: [docs/update-strategy-v1.md](docs/update-strategy-v1.md).
+
+<details>
+<summary><b>Agent prompts</b></summary>
+
+**One project**
 
 ```text
 Update the project-local LoopCompass installation in this project from the latest stable release at
@@ -167,7 +156,7 @@ skill as one validated unit, update only the managed LoopCompass policy block, p
 local-modification conflicts, and report the old and new versions plus validation evidence.
 ```
 
-### Update a personal skill
+**Personal skill**
 
 ```text
 Update my personal LoopCompass skill from the latest stable release at
@@ -177,7 +166,7 @@ current project and additional repository roots I explicitly provide. Do not sea
 other projects without separate authorization.
 ```
 
-### Check for an update (non-mutating)
+**Check only (non-mutating)**
 
 ```text
 Without modifying any files, report whether the installed LoopCompass skill is behind the latest
@@ -186,20 +175,21 @@ manifest.yaml version/commit/policy_version to the release manifest. If behind, 
 versions and the update one-liner. Do not install or rewrite policy.
 ```
 
-Maintainer tooling in this repository (not required for consumers):
+</details>
+
+Maintainer tooling (not required for consumers):
 
 ```text
 node scripts/release.mjs generate   # write skills/loop-compass/manifest.yaml
-node scripts/release.mjs validate   # verify digests and policy markers
+node scripts/release.mjs validate   # digests and policy markers
 node scripts/release.mjs package    # dist archive + SHA256SUMS
 ```
 
 ---
 
-## Manual conformance test
+## Try it
 
-Normal use is policy-triggered. Explicit invocation is useful for installation checks and ad hoc
-diagnosis:
+Normal use is policy-triggered. Explicit invocation for checks and diagnosis:
 
 ```text
 Use LoopCompass to classify this Git permission failure and coordinate the correct repair.
@@ -211,49 +201,44 @@ Use LoopCompass to check whether this CLI behavior is already known before retry
 
 ---
 
-## Design principles
+## Design
 
-- Repair mechanisms, not symptoms.
-- Preserve correct operating knowledge, not clever bypasses.
-- Require evidence before calling a recovery verified.
-- Keep all live state repository-local, small, and human-reviewable.
-- Retrieve narrowly and keep agent briefs lean.
-- Fail open if the learning layer is unavailable.
-- Add automation only when measured failure modes justify it.
-- Update software explicitly; never during ordinary failure consultation.
+| Principle | Meaning |
+| --- | --- |
+| Repair mechanisms | Not symptoms |
+| Preserve correct knowledge | Not clever bypasses |
+| Evidence before verified | Confidence is not proof |
+| Repository-local state | Small, reviewable files |
+| Narrow retrieval | Lean briefs; top 1–3 matches |
+| Fail open | Missing skill never blocks the task |
+| Automation is earned | Only after measured failure modes |
+| Updates are explicit | Never during ordinary consultation |
 
 <details>
 <summary><b>Planned optional hooks</b></summary>
-<br/>
 
-Hooks are a future optional lever for hosts that need stronger enforcement or measurement. They are
-not required for core behavior and will remain deferred unless cross-host tests show materially
-unacceptable missed consultations or repeated blind retries. Any hook must be bounded, privacy-safe,
-fail-open, and removable without disabling the skill or `.loopcompass` fallback.
+Hooks are a future lever for hosts that need stronger enforcement or measurement. Not required for
+core behavior. Deferred unless cross-host tests show material missed consultations or blind retries.
+Any hook must be bounded, privacy-safe, fail-open, and removable without disabling the skill or
+`.loopcompass` fallback.
 
 </details>
 
-| Doc | What it covers |
+| Doc | Contents |
 | --- | --- |
-| [docs/design.md](docs/design.md) | Architecture and decision record |
-| [docs/update-strategy-v1.md](docs/update-strategy-v1.md) | Install, update, check, and rollback contract |
+| [docs/design.md](docs/design.md) | Architecture and decisions |
+| [docs/update-strategy-v1.md](docs/update-strategy-v1.md) | Install, update, check, rollback |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
+| [skills/loop-compass/SKILL.md](skills/loop-compass/SKILL.md) | Portable skill |
 
 ---
 
 ## Status
 
-> [!IMPORTANT]
-> LoopCompass is an early design and skill implementation. The first milestone is to validate the
-> two-lane workflow and policy-triggered consultation across multiple agent hosts. V1 software
-> updates are explicit and release-based; silent update checks during ordinary use remain deferred.
+Early design and skill implementation. Near-term goal: validate the two-lane workflow and
+policy-triggered consultation across agent hosts. V1 updates are release-based and explicit.
+Silent update checks during ordinary use remain deferred.
 
 ## License
 
 [MIT](LICENSE)
-
----
-
-<p align="center">
-  <sub>Lost in the loop? Follow the needle.</sub>
-</p>
