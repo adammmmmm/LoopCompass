@@ -48,3 +48,16 @@ Create no durable artifact when:
 An incident may become a recovery only when later evidence proves that the supposed workaround is
 the correct standard operating path. Reclassify explicitly and remove the incident after the new
 recovery is verified.
+
+## Incident status cheat-sheet
+
+| Status | Meaning |
+| --- | --- |
+| `detected` | Defect confirmed; repair not finished |
+| `escalated` | Waiting on a parent or capability |
+| `repairing` | Fix in progress at source of authority |
+| `blocked` | Cannot proceed without operator or external input (still open) |
+| `verified` | Normal path proven; **delete** the live incident file |
+
+Containment is metadata, not a status. `containment_expires` past today on an open incident is
+invalid: renew, clear containment, or close after verification.

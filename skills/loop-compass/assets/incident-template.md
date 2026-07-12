@@ -10,9 +10,11 @@ containment_expires: null
 consulted: []
 ---
 
-<!-- status: detected | escalated | repairing | verified -->
-<!-- blocked is metadata on an open incident, not a terminal status value in the filename lifecycle -->
+<!-- status: detected | escalated | repairing | blocked | verified -->
+<!-- blocked is metadata on an open incident, not a terminal archive -->
 <!-- id and filename must be the mechanical slug of signature (see SKILL.md) -->
+<!-- containment_expires past today on an open incident is invalid; renew, clear, or close -->
+<!-- after verified repair: delete this live file; do not keep closed incidents as folklore -->
 
 # <Repair the broken mechanism>
 

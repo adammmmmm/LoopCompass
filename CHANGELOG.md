@@ -9,16 +9,27 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Capsule state validator (`scripts/lib/capsule.mjs`, `scripts/validate-state.mjs`) with
+  containment-expiry enforcement for open incidents.
+- Identity golden vectors (`fixtures/identity/goldens.json`) as normalize/slug single source of truth.
+- Classification assist gates for unambiguous fixture contradictions.
+- Dual-host `stage-install` and `pin-check` commands on `scripts/release.mjs`.
+- Consumer integration kit (`scripts/verify-consumer.mjs`, `docs/consumer-verification.md`).
+- Redacted teaching examples under `examples/capsules/` plus `redact-check` denylist.
+- Host-results template and scaffold note under `docs/host-results/`.
+- Consultation reuse protocol in skill + project policy (`consulted` / task closeout).
 - Executable verification: `node scripts/verify.mjs` (Node test suite + release validate).
 - Deterministic signature normalize/slug helpers in `scripts/lib/signature.mjs`.
 - Classification fixtures in `fixtures/classification/cases.json`.
 - Install/update dry-run tests and artifact field validation.
 - Host matrix checklist (`docs/host-matrix.md`) and verification guide (`docs/verification.md`).
-- Tag CI job to package release archives when `manifest.commit` matches the tag SHA.
+- Tag CI job to package release archives; tag pipeline runs `pin-check --strict`.
 
 ### Changed
 
 - Installation scopes renamed to **global** (host skill directory) and **project** (repo-local).
+- Integration docs cover multi-host project layout (Codex + Claude paths).
+- Incident template and classification notes cover lifecycle / expired containment.
 
 ### Fixed
 
