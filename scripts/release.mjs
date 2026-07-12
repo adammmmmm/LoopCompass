@@ -553,9 +553,13 @@ function cmdStageInstall(args) {
 }
 
 /**
- * Ensure manifest.commit matches git HEAD (required on release tags).
+ * Maintainer diagnostic: compare source-tree manifest.commit to git HEAD.
+ *
+ * NOT a consumer install gate. Consumers trust the published release archive
+ * (package rewrites manifest.commit to the tag SHA inside the tarball).
+ *
  *   node scripts/release.mjs pin-check
- *   node scripts/release.mjs pin-check --strict
+ *   node scripts/release.mjs pin-check --strict   # maintainer-only; fails on lag
  */
 function cmdPinCheck(args) {
   const strict = args.includes("--strict");
@@ -566,6 +570,9 @@ function cmdPinCheck(args) {
   const head = gitCommit();
   console.log(`manifest.commit ${manifest.commit}`);
   console.log(`git HEAD         ${head}`);
+  console.log(
+    "note: maintainer diagnostic only; consumers use the published archive pin",
+  );
   if (head === "unknown") {
     if (strict) die("cannot resolve git HEAD");
     console.log("status: skip (no git)");
@@ -575,10 +582,18 @@ function cmdPinCheck(args) {
     console.log("status: pin matches HEAD");
     return;
   }
-  console.log("status: pin differs from HEAD (expected between tags on main)");
+  // Self-referential commit hashes cannot equal the commit that contains them
+  // after generate+commit. package() rewrites the archived manifest.commit to
+  // HEAD so the published tarball is authoritative for consumers.
+  console.log(
+    "status: source pin lags HEAD (expected on tag checkouts; package rewrites archive pin)",
+  );
   if (strict) {
     die(
-      "manifest.commit must equal git HEAD for a release tag; run: node scripts/release.mjs generate",
+      "strict pin-check failed on source checkout. This is NOT a consumer defect. " +
+        "Published archives from `package` set commit to the tag SHA. " +
+        "Consumers must verify SHA256SUMS + per-file digests from the release assets, " +
+        "not pin-check --strict on a git tag worktree.",
     );
   }
 }
@@ -592,7 +607,7 @@ Commands:
   package        Build dist/loopcompass-vVERSION.tar.gz and dist/SHA256SUMS
   check          Non-mutating compare of installed skill vs a release manifest
   stage-install  Copy skill unit into project host paths (no state/policy writes)
-  pin-check      Compare manifest.commit to git HEAD (--strict fails on mismatch)
+  pin-check      Maintainer: source manifest.commit vs HEAD (not a consumer gate)
 `);
 }
 

@@ -37,12 +37,11 @@ in [design.md](design.md).
 ## Release hygiene
 
 - **On every PR / push to main:** `node scripts/verify.mjs` (CI workflow).
-- **Between tags:** `manifest.commit` may lag HEAD; that is expected. Use
-  `node scripts/release.mjs pin-check` (non-strict) to see drift.
-- **Before cutting a release tag:** `node scripts/release.mjs generate` then commit the refreshed
-  `manifest.yaml` so commit field matches the release commit. CI on tags runs
-  `pin-check --strict`.
-- **On tag `v*`:** CI runs verify, pin-check --strict, then `package` and uploads dist artifacts.
+- **Between tags:** source-tree `manifest.commit` may lag HEAD; that is expected.
+- **On tag `v*`:** CI runs verify, informational `pin-check`, then `package` (rewrites the
+  **archive** `manifest.commit` to the tag SHA) and uploads dist artifacts.
+- **Consumers:** trust the published tarball + `SHA256SUMS` + per-file digests. Do not treat
+  source-tree `pin-check --strict` on a tag checkout as a consumer install gate.
 
 ## Dogfood
 
