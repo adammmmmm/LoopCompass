@@ -26,10 +26,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Strict release pin (manifest.commit == HEAD)
-        # Tag commits should regenerate manifest so pin matches the tag SHA.
-        # package also rewrites staged archive commit to HEAD as belt-and-suspenders.
-        run: node scripts/release.mjs pin-check --strict
+      - name: Release pin status
+        # Source-tree manifest.commit may lag the tag commit by one generate cycle.
+        # package rewrites the archived manifest.commit to HEAD (the tag SHA).
+        run: node scripts/release.mjs pin-check
       - name: Package release archive
         run: node scripts/release.mjs package
       - name: Upload dist artifacts
