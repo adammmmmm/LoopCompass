@@ -74,6 +74,23 @@ Skill file digests are of **LF-canonical text** (CR stripped). Release archives 
 matches the manifest (important for Windows consumers that do not LF-normalize before hashing).
 If a published archive fails a raw digest check, treat it as a packaging defect and stop.
 
+### What is authoritative for consumers
+
+| Check | Authoritative source | Consumer action on fail |
+| --- | --- | --- |
+| Archive checksum | GitHub release `SHA256SUMS` | Hard-stop |
+| Per-file skill digests | `manifest.yaml` **inside the published archive** | Hard-stop |
+| Installed `manifest.commit` | Same archive manifest (after extract/install) | Report; must match archive, not git tag worktree |
+| Source git `pin-check` / `pin-check --strict` | **Maintainer diagnostic only** | Ignore for install; do not hard-stop consumer updates |
+
+`package` rewrites `manifest.commit` in the **staged archive** to the git tag SHA. The commit
+field stored in the source tree at tag time often still names a prior generate commit (a commit
+cannot contain its own future hash). That source lag is expected and is **not** an integrity
+failure of the release assets.
+
+Consumer install gates are: `SHA256SUMS` + raw per-file digests from the **release tarball**.
+Do not require `node scripts/release.mjs pin-check --strict` on a clone of the tag.
+
 ## V1 release prerequisites
 
 Before documenting the updater as available, the LoopCompass source repository must ship:
