@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "description": "Single source of truth for normalize + slug. SKILL.md must match these behaviors.",
+  "cases": [
+    {
+      "id": "secrets-paths-ids",
+      "raw": "auth failed for agent@example.com Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.aaa.bbb path C:\\Users\\op\\key.pem id 550e8400-e29b-41d4-a716-446655440000 at 2026-07-11T12:00:00Z pid=48291",
+      "normalized_contains": ["auth failed", "<secret>", "<path>", "<id>", "<ts>", "<email>"],
+      "normalized_excludes": ["550e8400", "eyJhbGci", "agent@example.com", "Users\\\\op", "2026-07-11"]
+    },
+    {
+      "id": "stable-volatile-noise",
+      "raw_a": "gap at /tmp/run-1 id aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "raw_b": "gap at /tmp/run-2 id 11111111-2222-4333-8444-555555555555",
+      "expect_equal_normalized": true
+    },
+    {
+      "id": "slug-basic",
+      "normalized": "Git Push Denied",
+      "slug": "git-push-denied"
+    },
+    {
+      "id": "slug-empty",
+      "normalized": "???",
+      "slug": "failure"
+    },
+    {
+      "id": "slug-trim-collapse",
+      "normalized": "--Hello---World--",
+      "slug": "hello-world"
+    },
+    {
+      "id": "ghp-token",
+      "raw": "git push rejected: permission denied via token ghp_EXAMPLETOKENVALUE000000",
+      "normalized_excludes": ["ghp_EXAMPLE"],
+      "normalized_contains": ["<secret>"]
+    }
+  ]
+}

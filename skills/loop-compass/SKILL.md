@@ -99,11 +99,14 @@ immediately and coordination must survive the current exchange.
 3. Record the failed normal path, minimal evidence, and required capability.
 4. Escalate to the nearest parent, agent, or operator with sufficient authority.
 5. Treat containment as temporary incident metadata, never as resolution.
-6. Reject expired containment whenever LoopCompass is invoked.
+6. Reject expired containment whenever LoopCompass is invoked. If `containment_expires` is past and
+   the incident is still open, renew with a new expiry, clear containment, or close after repair.
+   Do not leave expired containment in place. Consumer CI may fail open incidents past expiry.
 7. Repair the mechanism at its true source of authority.
 8. Remove containment and verify the exact original path from clean preconditions.
 9. Delete the live incident file after verification. Git history, the repaired mechanism, tests,
-   and governing policy provide durable evidence.
+   and governing policy provide durable evidence. Do not archive closed incidents as permanent
+   folklore in the live store.
 
 Use this compact escalation payload and suppress duplicates for the same incident:
 
@@ -146,6 +149,19 @@ Known recovery: <symptom>. Use <verified path>. Scope: <scope and verification d
 
 For an incident, pass the failed normal path, current owner, missing capability, and verification
 gate. Do not pass unrelated artifacts or historical prose.
+
+## Record consultation when it changes the path
+
+LoopCompass is only useful if reuse is visible. When a verified recovery actually changes what you
+do:
+
+1. Prefer the lean brief above for any delegated agent.
+2. If you open or update an incident in the same signature family, set frontmatter
+   `consulted: [<recovery-or-incident-id>, ...]` (mechanical ids only).
+3. Otherwise record the recovery id in the task or PR closeout (one line is enough).
+
+Do not create a telemetry store or consult log directory by default. Reviewable closeout is enough
+for v1 measurement. Do not claim a recovery was applied without current trust evaluation.
 
 ## Hard boundaries
 

@@ -108,13 +108,19 @@ Prefer an **immutable GitHub release** over floating `main`. Each release ships 
 skill tree (`manifest.yaml` included), docs, and a separate `SHA256SUMS` asset.
 
 1. Copy [`skills/loop-compass`](skills/loop-compass) into your host skill directory (`global`) or
-   this repository (`project`).
+   this repository (`project`). Multi-host projects often need **both**
+   `.agents/skills/loop-compass` and `.claude/skills/loop-compass` (keep them byte-identical).
+   Helper from a LoopCompass checkout:
+   `node scripts/release.mjs stage-install --project <repo> --hosts agents,claude`.
 2. Merge the **entire marked** block from
    [`project-policy.md`](skills/loop-compass/assets/project-policy.md) into `AGENTS.md`,
    `CLAUDE.md`, or the host equivalent. Keep
    `<!-- loopcompass:start policy=N -->` … `<!-- loopcompass:end -->` intact.
 3. Confirm `manifest.yaml` is present. Create `.loopcompass/recoveries` and
    `.loopcompass/incidents` now, or let normal use create them.
+4. Optional consumer CI:
+   `node scripts/verify-consumer.mjs --project <repo>` (see
+   [docs/consumer-verification.md](docs/consumer-verification.md)).
 
 Ordinary consultation is offline. It does not check for software updates.
 
@@ -166,11 +172,17 @@ Expanded one-liners (belt-and-suspenders) are in
 Maintainer tooling (not required for consumers):
 
 ```text
-node scripts/verify.mjs             # tests + release validate
-node scripts/release.mjs generate   # write skills/loop-compass/manifest.yaml
-node scripts/release.mjs validate   # digests and policy markers
-node scripts/release.mjs package    # dist archive + SHA256SUMS
+node scripts/verify.mjs                  # tests + release validate + example denylist
+node scripts/release.mjs generate        # write skills/loop-compass/manifest.yaml
+node scripts/release.mjs validate        # digests and policy markers
+node scripts/release.mjs package         # dist archive + SHA256SUMS
+node scripts/release.mjs stage-install   # copy skill into consumer host paths
+node scripts/release.mjs pin-check       # manifest.commit vs HEAD
+node scripts/validate-state.mjs          # validate a project's .loopcompass
+node scripts/verify-consumer.mjs         # consumer install + policy + state checks
 ```
+
+Teaching examples (not live memory): [`examples/capsules/`](examples/capsules/).
 
 ---
 

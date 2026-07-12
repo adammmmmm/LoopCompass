@@ -31,10 +31,14 @@ Run after install and after each skill update. Mark Pass / Fail / N/A.
 
 ## Recording results
 
-When completing a matrix pass, record:
+When completing a matrix pass, copy [host-results/TEMPLATE.md](host-results/TEMPLATE.md) to
+`docs/host-results/YYYY-MM-DD-<host-slug>.md` and fill:
 
 - date, host version, LoopCompass `manifest.yaml` version + commit;
 - Pass/Fail per scenario;
 - any miss (skipped consultation) with short evidence.
+
+Scaffold note: [host-results/2026-07-12-scaffold.md](host-results/2026-07-12-scaffold.md) documents
+that behavioral host passes are still pending while mechanical CI is green.
 
 Do not claim cross-host enforcement. Project instructions are best-effort automatic behavior.

@@ -17,6 +17,26 @@ The v1 updater may replace only the content from the opening marker through the 
 must preserve every byte of project instruction content outside that block. Missing, duplicated,
 nested, malformed, or overlapping markers are a hard stop for updates.
 
+## Multi-host project layout
+
+Many repos run more than one agent host. Install **one** skill unit and keep copies byte-identical:
+
+| Host | Skill path (project scope) | Policy file |
+| --- | --- | --- |
+| OpenAI Codex / compatible | `.agents/skills/loop-compass/` | `AGENTS.md` |
+| Claude Code / compatible | `.claude/skills/loop-compass/` | `CLAUDE.md` |
+| Generic / single-host | `skills/loop-compass/` | host instruction file |
+
+Rules:
+
+1. Copy the entire `skills/loop-compass` directory from a release (or stage with
+   `node scripts/release.mjs stage-install --project <repo> --hosts agents,claude`).
+2. Merge the marked policy block **once** into each instruction file that governs tool-using
+   agents. Never nest or duplicate markers.
+3. Never modify `.loopcompass/recoveries` or `.loopcompass/incidents` during install or update.
+4. Prefer keeping dual-host skill trees in sync (same digests). `node scripts/verify-consumer.mjs
+   --project <repo>` checks that when both installs exist.
+
 ## Codex
 
 Merge the marked canonical policy into the closest repository `AGENTS.md` that governs tool-using

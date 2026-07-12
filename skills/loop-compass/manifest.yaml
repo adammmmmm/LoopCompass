@@ -4,16 +4,16 @@ name: loop-compass
 version: 0.1.0
 source: https://github.com/adammmmmm/LoopCompass
 release: https://github.com/adammmmmm/LoopCompass/releases/tag/v0.1.0
-commit: 5e36b2c8142c9b18845ba4f18c4d08509f2d5bd0
+commit: c4b3e40723c5f39c0746baf1b6877e04e0712e7e
 skill_schema: 1
 policy_version: 1
 state_schema: 1
 minimum_policy_version: 1
 files:
-  SKILL.md: e17cd3d69d0c6190210d584279f1866d64f1dd083a9b342fc716f04aef4fc765
+  SKILL.md: ce7963b4257e7b18285154c506e0826c18aaabba6257495273c45415c684c459
   agents/openai.yaml: 433e1b2c8c68bb53ebbdc84eb293dcaf0103ade22f34392a59e79a262114b168
-  assets/incident-template.md: f10ece2624b495f5b403e803b9f90ac465dc308cda12cb081c1ea69caebdafb1
-  assets/project-policy.md: 549b411641dadaa8c5afd48977806c0e93b4e1de1b9df69e8484a2018e37f1fe
+  assets/incident-template.md: 10f1091944f6abe875fdc09fc986293efb6984c7d3a190d71f7af1580b1dccee
+  assets/project-policy.md: 2a356f534419fab68272a97c8d0702511691f8dfd279464875a54ef6d9e8346f
   assets/recovery-template.md: fe2ba804d03ebfba2c2496fb262df3ea863cfa3703080bac11ae1cbbff19efa7
-  references/classification.md: 745d16c6aa9fde1d021fd2749f38b5e2882263951bb32802d822a5116aaa85bb
-  references/integration.md: 10c97cc8f3be36f8b524936391e7bbd5f0a0b0e7c41214c4da51a7019eb1c5d3
+  references/classification.md: dda473f93f7cd90bfe6084cc9a36a7d1b9189852b2d6c2db513e4b0c9e08e0a0
+  references/integration.md: ce63bfc82e3961f1e0486f01943bb3737859d16f4390d9e8e9190a3d9fd46984

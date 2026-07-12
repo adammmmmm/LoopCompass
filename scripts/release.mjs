@@ -472,14 +472,83 @@ function cmdCheck(args) {
   process.exit(4);
 }
 
+/**
+ * Stage a project-scope skill install into one or more host skill directories.
+ * Does not write policy or touch .loopcompass state.
+ *
+ *   node scripts/release.mjs stage-install --project <dir> --hosts agents,claude
+ * Host tokens: agents -> .agents/skills/loop-compass
+ *              claude -> .claude/skills/loop-compass
+ *              skills -> skills/loop-compass
+ */
+function cmdStageInstall(args) {
+  const projectIdx = args.indexOf("--project");
+  const hostsIdx = args.indexOf("--hosts");
+  if (projectIdx === -1) {
+    die("stage-install requires --project <repo-root>");
+  }
+  const project = path.resolve(args[projectIdx + 1] || "");
+  if (!existsSync(project)) {
+    die(`project not found: ${project}`);
+  }
+  const hostsRaw = hostsIdx === -1 ? "agents,claude" : args[hostsIdx + 1] || "";
+  const hosts = hostsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  const map = {
+    agents: path.join(".agents", "skills", "loop-compass"),
+    claude: path.join(".claude", "skills", "loop-compass"),
+    skills: path.join("skills", "loop-compass"),
+  };
+  for (const h of hosts) {
+    if (!map[h]) die(`unknown host token: ${h} (use agents, claude, skills)`);
+    const dest = path.join(project, map[h]);
+    rmSync(dest, { recursive: true, force: true });
+    copyTree(SKILL_DIR, dest);
+    console.log(`staged ${path.relative(project, dest)}`);
+  }
+  console.log("stage-install ok (state and policy untouched)");
+}
+
+/**
+ * Ensure manifest.commit matches git HEAD (required on release tags).
+ *   node scripts/release.mjs pin-check
+ *   node scripts/release.mjs pin-check --strict
+ */
+function cmdPinCheck(args) {
+  const strict = args.includes("--strict");
+  if (!existsSync(MANIFEST_PATH)) {
+    die(`missing ${path.relative(ROOT, MANIFEST_PATH)}`);
+  }
+  const manifest = parseManifest(readFileSync(MANIFEST_PATH, "utf8"));
+  const head = gitCommit();
+  console.log(`manifest.commit ${manifest.commit}`);
+  console.log(`git HEAD         ${head}`);
+  if (head === "unknown") {
+    if (strict) die("cannot resolve git HEAD");
+    console.log("status: skip (no git)");
+    return;
+  }
+  if (manifest.commit === head) {
+    console.log("status: pin matches HEAD");
+    return;
+  }
+  console.log("status: pin differs from HEAD (expected between tags on main)");
+  if (strict) {
+    die(
+      "manifest.commit must equal git HEAD for a release tag; run: node scripts/release.mjs generate",
+    );
+  }
+}
+
 function printHelp() {
   console.log(`Usage: node scripts/release.mjs <command>
 
 Commands:
-  generate   Write skills/loop-compass/manifest.yaml
-  validate   Verify VERSION, policy markers, and file digests
-  package    Build dist/loopcompass-vVERSION.tar.gz and dist/SHA256SUMS
-  check      Non-mutating compare of installed skill vs a release manifest
+  generate       Write skills/loop-compass/manifest.yaml
+  validate       Verify VERSION, policy markers, and file digests
+  package        Build dist/loopcompass-vVERSION.tar.gz and dist/SHA256SUMS
+  check          Non-mutating compare of installed skill vs a release manifest
+  stage-install  Copy skill unit into project host paths (no state/policy writes)
+  pin-check      Compare manifest.commit to git HEAD (--strict fails on mismatch)
 `);
 }
 
@@ -501,6 +570,12 @@ function main() {
       break;
     case "check":
       cmdCheck(rest);
+      break;
+    case "stage-install":
+      cmdStageInstall(rest);
+      break;
+    case "pin-check":
+      cmdPinCheck(rest);
       break;
     default:
       die(`unknown command: ${command}`);
