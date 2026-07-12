@@ -22,12 +22,12 @@ Run after install and after each skill update. Mark Pass / Fail / N/A.
 
 ## Required scenarios (per host)
 
-1. **Skill present, policy present** — distinctive deterministic failure consults before equivalent retry.
-2. **Skill missing, policy present** — agent searches `.loopcompass` directly, reads ≤3 matches, continues.
-3. **Neither store exists** — task continues; no forced artifact creation.
-4. **Verified recovery in scope** — applied only after trust evaluation of current evidence.
-5. **Repairable defect** — escalates as incident; no permanent workaround recovery.
-6. **Update dry-run** — `node scripts/release.mjs check --installed <dir> --release-manifest <manifest>` matches expectations.
+1. **Skill present, policy present** - distinctive deterministic failure consults before equivalent retry.
+2. **Skill missing, policy present** - agent searches `.loopcompass` directly, reads ≤3 matches, continues.
+3. **Neither store exists** - task continues; no forced artifact creation.
+4. **Verified recovery in scope** - applied only after trust evaluation of current evidence.
+5. **Repairable defect** - escalates as incident; no permanent workaround recovery.
+6. **Update dry-run** - `node scripts/release.mjs check --installed <dir> --release-manifest <manifest>` matches expectations.
 
 ## Recording results
 

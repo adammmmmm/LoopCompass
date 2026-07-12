@@ -21,10 +21,10 @@ already happened once, in some other session, and vanished with the transcript.
 
 **A familiar week**
 
-1. **Monday** — An agent hits a Git permission error, burns time, finds the right path, finishes the
+1. **Monday** - An agent hits a Git permission error, burns time, finds the right path, finishes the
    task. Session ends. Nothing durable is left in the repo.
-2. **Thursday** — A different agent (or you, in a new chat) hits the same error and starts from zero.
-3. **Worse case** — Someone lands a clever bypass. It works. Next week every agent copies the bypass
+2. **Thursday** - A different agent (or you, in a new chat) hits the same error and starts from zero.
+3. **Worse case** - Someone lands a clever bypass. It works. Next week every agent copies the bypass
    instead of fixing the broken wrapper.
 
 **What LoopCompass changes**
@@ -196,7 +196,7 @@ Use LoopCompass to check whether this CLI behavior is already known before retry
 | Preserve correct knowledge | Not clever bypasses |
 | Evidence before verified | Confidence is not proof |
 | Repository-local state | Small, reviewable files |
-| Narrow retrieval | Lean briefs; top 1–3 matches |
+| Narrow retrieval | Lean briefs; top 1-3 matches |
 | Fail open | Missing skill never blocks the task |
 | Automation is earned | Only after measured failure modes |
 | Updates are explicit | Never during ordinary consultation |

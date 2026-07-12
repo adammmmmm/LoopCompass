@@ -10,8 +10,8 @@ node scripts/verify.mjs
 
 Runs:
 
-1. `node --test tests` — unit, fixture, schema, install/update dry-run, release tooling tests.
-2. `node scripts/release.mjs validate` — VERSION, policy markers, per-file digests.
+1. `node --test tests` - unit, fixture, schema, install/update dry-run, release tooling tests.
+2. `node scripts/release.mjs validate` - VERSION, policy markers, per-file digests.
 
 ## What is automated
 
