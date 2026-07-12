@@ -56,13 +56,7 @@ function sha256File(filePath) {
   // Hash LF-normalized bytes so Windows working trees and Linux CI agree.
   // Git stores these skill files as LF (see git ls-files --eol); digests must match
   // the canonical text form, not platform checkout line endings.
-  const raw = readFileSync(filePath);
-  const asText = raw.toString("utf8");
-  const normalized =
-    asText.includes("\0")
-      ? raw
-      : Buffer.from(asText.replace(/\r\n/g, "\n").replace(/\r/g, "\n"), "utf8");
-  return createHash("sha256").update(normalized).digest("hex");
+  return sha256Buffer(canonicalTextBytes(readFileSync(filePath)));
 }
 
 function readVersion() {
@@ -329,15 +323,40 @@ function cmdValidate() {
   console.log(`policy  ${policyVersion}`);
 }
 
-function copyTree(src, dest) {
+/**
+ * Canonical text bytes for release archives and digests: LF newlines, no CR.
+ * Binary (NUL) files are copied unchanged.
+ * @param {Buffer} raw
+ * @returns {Buffer}
+ */
+function canonicalTextBytes(raw) {
+  if (raw.includes(0)) return raw;
+  const asText = raw.toString("utf8");
+  return Buffer.from(asText.replace(/\r\n/g, "\n").replace(/\r/g, "\n"), "utf8");
+}
+
+function sha256Buffer(buf) {
+  return createHash("sha256").update(buf).digest("hex");
+}
+
+/**
+ * Copy a tree. When canonicalizeText is true, write LF-normalized text so
+ * archive members match manifest digests byte-for-byte (not only after LF hash).
+ * Windows worktrees may have CRLF even when git blobs are LF.
+ */
+function copyTree(src, dest, { canonicalizeText = false } = {}) {
   mkdirSync(dest, { recursive: true });
   for (const entry of readdirSync(src, { withFileTypes: true })) {
     const from = path.join(src, entry.name);
     const to = path.join(dest, entry.name);
     if (entry.isDirectory()) {
-      copyTree(from, to);
+      copyTree(from, to, { canonicalizeText });
     } else if (entry.isFile()) {
-      copyFileSync(from, to);
+      if (canonicalizeText) {
+        writeFileSync(to, canonicalTextBytes(readFileSync(from)));
+      } else {
+        copyFileSync(from, to);
+      }
     }
   }
 }
@@ -358,8 +377,15 @@ function cmdPackage() {
   mkdirSync(path.join(releaseRoot, "skills"), { recursive: true });
   mkdirSync(path.join(releaseRoot, "docs"), { recursive: true });
 
-  copyFileSync(VERSION_PATH, path.join(releaseRoot, "VERSION"));
-  copyTree(SKILL_DIR, path.join(releaseRoot, "skills", "loop-compass"));
+  writeFileSync(
+    path.join(releaseRoot, "VERSION"),
+    canonicalTextBytes(readFileSync(VERSION_PATH)),
+  );
+  // Canonicalize skill text so archive members match manifest digests as raw
+  // bytes (consumer tools often hash files without LF normalization).
+  copyTree(SKILL_DIR, path.join(releaseRoot, "skills", "loop-compass"), {
+    canonicalizeText: true,
+  });
   // Pin packaged manifest commit to the tree being archived (HEAD), without
   // requiring a second git commit just to rewrite skills/.../manifest.yaml.
   const stagedManifest = path.join(releaseRoot, "skills", "loop-compass", "manifest.yaml");
@@ -368,20 +394,36 @@ function cmdPackage() {
       /^commit:\s*.+$/m,
       `commit: ${head}`,
     );
-    writeFileSync(stagedManifest, text, "utf8");
+    writeFileSync(stagedManifest, canonicalTextBytes(Buffer.from(text, "utf8")));
   }
   for (const doc of readdirSync(path.join(ROOT, "docs"))) {
     if (doc.endsWith(".md")) {
-      copyFileSync(
-        path.join(ROOT, "docs", doc),
+      writeFileSync(
         path.join(releaseRoot, "docs", doc),
+        canonicalTextBytes(readFileSync(path.join(ROOT, "docs", doc))),
       );
     }
   }
   for (const name of ["LICENSE", "CHANGELOG.md", "README.md"]) {
     const p = path.join(ROOT, name);
     if (existsSync(p)) {
-      copyFileSync(p, path.join(releaseRoot, name));
+      writeFileSync(
+        path.join(releaseRoot, name),
+        canonicalTextBytes(readFileSync(p)),
+      );
+    }
+  }
+
+  // Fail closed: staged skill files must match manifest digests as raw bytes.
+  const stagedSkill = path.join(releaseRoot, "skills", "loop-compass");
+  const stagedMan = parseManifest(readFileSync(stagedManifest, "utf8"));
+  for (const [rel, expected] of Object.entries(stagedMan.files)) {
+    const actual = sha256Buffer(readFileSync(path.join(stagedSkill, rel)));
+    if (actual !== expected) {
+      die(
+        `package staging digest mismatch for ${rel}\n  manifest: ${expected}\n  staged:   ${actual}\n` +
+          "skill files must be LF-canonical in the archive (see copyTree canonicalizeText)",
+      );
     }
   }
 
@@ -397,7 +439,9 @@ function cmdPackage() {
     );
   }
 
-  const digest = sha256File(archivePath);
+  // SHA256SUMS for the archive uses raw bytes of the tarball (not text-normalized).
+  const archiveRaw = readFileSync(archivePath);
+  const digest = sha256Buffer(archiveRaw);
   const sumsPath = path.join(distDir, "SHA256SUMS");
   writeFileSync(sumsPath, `${digest}  ${archiveName}\n`, "utf8");
   console.log(`wrote ${path.relative(ROOT, archivePath)}`);

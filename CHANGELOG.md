@@ -7,6 +7,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-12
+
+### Fixed
+
+- Release packaging now LF-canonicalizes skill text into the archive and fails if staged
+  raw digests do not match the manifest. Fixes Windows worktree CRLF for
+  `agents/openai.yaml` making v0.2.0 fail consumer per-file integrity checks that hash
+  raw bytes (not LF-normalized hashes).
+
 ## [0.2.0] - 2026-07-12
 
 ### Added
@@ -56,6 +65,7 @@ uses [Semantic Versioning](https://semver.org/).
 
 - Duplicate line in design acceptance section.
 
-[Unreleased]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/adammmmmm/LoopCompass/releases/tag/v0.1.0
