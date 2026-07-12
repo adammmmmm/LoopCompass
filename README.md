@@ -5,7 +5,7 @@
 A portable skill for agent workflows. No daemon, no CLI, no database, no model API, no hosted
 service. Small Markdown files. Full fleet memory.
 
-![0.2.0](https://img.shields.io/badge/version-0.2.0-1f2328?style=flat-square&labelColor=21262d&color=58a6ff)
+![0.2.1](https://img.shields.io/badge/version-0.2.1-1f2328?style=flat-square&labelColor=21262d&color=58a6ff)
 ![MIT](https://img.shields.io/badge/license-MIT-1f2328?style=flat-square&labelColor=21262d&color=3fb950)
 ![No runtime](https://img.shields.io/badge/runtime-none-1f2328?style=flat-square&labelColor=21262d&color=8b949e)
 ![Provider neutral](https://img.shields.io/badge/host-provider--neutral-1f2328?style=flat-square&labelColor=21262d&color=a371f7)
@@ -128,7 +128,7 @@ Agent one-liner (project scope). Semantics live in
 [docs/update-strategy-v1.md](docs/update-strategy-v1.md):
 
 ```text
-Install LoopCompass v0.2.0 project scope from
+Install LoopCompass v0.2.1 project scope from
 https://github.com/adammmmmm/LoopCompass (commit-pinned release).
 Follow docs/update-strategy-v1.md. Report version, scope, and release commit.
 ```

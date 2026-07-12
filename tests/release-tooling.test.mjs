@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { describe, it } from "node:test";
+import { describe, it, after } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -12,6 +17,23 @@ function runRelease(...args) {
     cwd: root,
     encoding: "utf8",
   });
+}
+
+function parseManifestFiles(text) {
+  const files = {};
+  let inFiles = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^files:\s*$/.test(line)) {
+      inFiles = true;
+      continue;
+    }
+    if (inFiles) {
+      const m = line.match(/^\s+([^:]+):\s*([0-9a-f]{64})\s*$/i);
+      if (m) files[m[1].trim()] = m[2].toLowerCase();
+      else if (/^\S/.test(line)) inFiles = false;
+    }
+  }
+  return files;
 }
 
 describe("release tooling", () => {
@@ -47,5 +69,38 @@ describe("release tooling", () => {
     const ends = policy.match(/<!--\s*loopcompass:end/g) || [];
     assert.equal(starts.length, 1);
     assert.equal(ends.length, 1);
+  });
+
+  it("package stages skill files whose raw digests match the manifest", () => {
+    // Simulate a CRLF worktree file for openai.yaml without dirtying git permanently:
+    // package must still emit LF-canonical members.
+    const skillYaml = path.join(root, "skills", "loop-compass", "agents", "openai.yaml");
+    const original = readFileSync(skillYaml);
+    const crlf = Buffer.from(
+      original.toString("utf8").replace(/\r\n/g, "\n").replace(/\n/g, "\r\n"),
+      "utf8",
+    );
+    writeFileSync(skillYaml, crlf);
+    after(() => {
+      writeFileSync(skillYaml, original);
+    });
+
+    const result = runRelease("package");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const staged = path.join(root, "dist", "staging", "LoopCompass", "skills", "loop-compass");
+    const man = parseManifestFiles(
+      readFileSync(path.join(staged, "manifest.yaml"), "utf8"),
+    );
+    for (const [rel, expected] of Object.entries(man)) {
+      const raw = readFileSync(path.join(staged, rel));
+      assert.equal(
+        raw.includes(0x0d),
+        false,
+        `${rel} must not contain CR in package staging`,
+      );
+      const actual = createHash("sha256").update(raw).digest("hex");
+      assert.equal(actual, expected, `raw digest mismatch for ${rel}`);
+    }
   });
 });

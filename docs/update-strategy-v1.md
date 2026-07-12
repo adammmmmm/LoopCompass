@@ -69,6 +69,11 @@ installed file against the manifest inventory.
 Commit pinning and digests provide content integrity and reproducibility, not maintainer
 authenticity after a source-account compromise. Signed releases are a future hardening layer.
 
+Skill file digests are of **LF-canonical text** (CR stripped). Release archives written by
+`scripts/release.mjs package` store skill members as LF so **raw** SHA-256 of extracted files
+matches the manifest (important for Windows consumers that do not LF-normalize before hashing).
+If a published archive fails a raw digest check, treat it as a packaging defect and stop.
+
 ## V1 release prerequisites
 
 Before documenting the updater as available, the LoopCompass source repository must ship:
