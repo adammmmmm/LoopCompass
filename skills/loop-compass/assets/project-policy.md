@@ -18,6 +18,11 @@ knowledge. If the mechanism is repairable, do not preserve a workaround; repair 
 authority or escalate by required capability. If consultation or storage is unavailable, continue
 fail-open and report that the consultation was skipped.
 
+When a verified recovery changes the intended path, note `consulted: [<recovery-id>]` on any new
+incident for the same signature family, or record the recovery id in the task or PR closeout so
+reuse is reviewable. Prefer the lean brief form:
+`Known recovery: <symptom>. Use <path>. Scope: <scope>.`
+
 Include this one-line reminder in briefs for delegated agents that may use tools when repository
 instruction inheritance is uncertain:
 
