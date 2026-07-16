@@ -24,10 +24,16 @@ Run after install and after each skill update. Mark Pass / Fail / N/A.
 
 1. **Skill present, policy present** - distinctive deterministic failure consults before equivalent retry.
 2. **Skill missing, policy present** - agent searches `.loopcompass` directly, reads ≤3 matches, continues.
-3. **Neither store exists** - task continues; no forced artifact creation.
-4. **Verified recovery in scope** - applied only after trust evaluation of current evidence.
-5. **Repairable defect** - escalates as incident; no permanent workaround recovery.
-6. **Update dry-run** - `node scripts/release.mjs check --installed <dir> --release-manifest <manifest>` matches expectations.
+3. **Neither store exists** - task continues; a justified artifact creates the store when authorized,
+   or returns the exact persistence escalation.
+4. **Verified recovery in scope** - applied only after trust evaluation of current evidence, then
+   created or updated automatically within repository authority.
+5. **Repairable defect** - creates or updates an incident when coordination must survive; no
+   permanent workaround recovery.
+6. **No-artifact classification** - reports `no artifact` with a short reason.
+7. **Delegated read-only worker** - returns normalized signature, classification, evidence,
+   proposed artifact when applicable, and exact escalation for same-turn parent handling.
+8. **Update dry-run** - `node scripts/release.mjs check --installed <dir> --release-manifest <manifest>` matches expectations.
 
 ## Recording results
 

@@ -37,8 +37,8 @@ When a concrete failure appears:
    acting.
 4. Never load either directory wholesale into an agent or subagent context.
 
-If the directories do not exist, continue the task. Create an artifact only when the rules below
-justify one.
+If the directories do not exist, continue the task. Create them when the rules below justify an
+artifact and current repository authority permits the write.
 
 If the skill cannot be loaded, the project policy directs the agent to perform this narrow search
 directly. Report unavailable consultation and continue fail-open rather than retrying skill
@@ -49,7 +49,7 @@ discovery.
 Read [classification.md](references/classification.md) when the correct lane is unclear.
 
 - **Recovery:** The successful path is correct operating behavior or a legitimate external
-  constraint. Verify it, then propose a recovery file.
+  constraint. Verify it, then persist a recovery file.
 - **Incident:** A mechanism within reach is broken. Escalate by missing capability, repair the
   mechanism, and verify the original normal path.
 - **External incident:** An external defect cannot yet be repaired. Keep any containment attached
@@ -76,8 +76,10 @@ causally supported and verified within its stated scope.
 5. Keep the operative recovery near the top.
 6. Include short verification evidence and explicit limits.
 7. Remove secrets, private payloads, raw logs, and narrative history.
-8. Ask the operator before adding durable recovery knowledge unless existing repository policy
-   explicitly authorizes automatic creation.
+8. Persist the recovery automatically when current repository authority permits it. An explicit
+   read-only instruction, safety boundary, or missing filesystem permission overrides this
+   default. In that case, return the proposed artifact and the exact permission or operator action
+   required in the same turn.
 
 Lifecycle: `candidate -> verified -> stale -> deleted or superseded`. Only `verified` recoveries are
 eligible for retrieval into agent work. Supersede or delete stale guidance. Do not accumulate
@@ -128,6 +130,26 @@ incident lifecycle rather than inventing them from the payload.
 If no parent or peer has the required capability, terminate the ladder at the operator. Do not
 bounce the same escalation between agents.
 
+## Finish every classification
+
+Every triggered failure must end in exactly one reviewable outcome:
+
+1. a recovery is created or updated at the appropriate lifecycle status, with unverified proposals
+   remaining `candidate` and ineligible for use;
+2. an incident is created or updated when repair or coordination must survive the current exchange;
+3. `no artifact` is reported with a short classification reason; or
+4. the proposed recovery or incident is returned with the exact missing permission, capability,
+   or operator action required to persist or repair it.
+
+Do not stop after retrieval or classification. Persistence is automatic within current repository
+authority. Explicit read-only instructions and safety boundaries still control, and storage failure
+remains fail-open for the primary task.
+
+A delegated agent with shared repository write authority follows the same contract directly. A
+brief-only or read-only worker returns the normalized signature, classification, minimal evidence,
+proposed artifact content when applicable, and exact escalation to its parent. The parent must
+persist, record `no artifact`, or escalate in the same turn.
+
 ## Verification contract
 
 Do not claim recovery or repair from temporal proximity alone. Require evidence appropriate to the
@@ -149,6 +171,16 @@ Known recovery: <symptom>. Use <verified path>. Scope: <scope and verification d
 
 For an incident, pass the failed normal path, current owner, missing capability, and verification
 gate. Do not pass unrelated artifacts or historical prose.
+
+When repository instruction inheritance is uncertain, include this compact reminder in delegated
+briefs:
+
+```text
+On an unexpected operational failure, apply LoopCompass before retrying. Finish with a persisted
+recovery or incident, explicit no artifact, or a full parent handoff containing the normalized
+signature, classification, evidence, proposed artifact, and exact permission or operator
+escalation.
+```
 
 ## Record consultation when it changes the path
 
