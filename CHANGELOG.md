@@ -7,6 +7,17 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-16
+
+### Changed
+
+- Verified agents now persist justified recoveries and incidents automatically within current
+  repository authority.
+- Every triggered classification must finish as a persisted artifact, explicit `no artifact`, or
+  a proposed artifact with the exact permission, capability, or operator escalation required.
+- Delegated read-only workers return a complete classification payload for same-turn parent
+  handling.
+
 ## [0.2.1] - 2026-07-12
 
 ### Fixed
@@ -65,7 +76,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 - Duplicate line in design acceptance section.
 
-[Unreleased]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/adammmmmm/LoopCompass/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/adammmmmm/LoopCompass/releases/tag/v0.1.0

@@ -127,7 +127,7 @@ The canonical policy is installed inside the host's inherited repository instruc
 `AGENTS.md` or `CLAUDE.md`, between markers owned by LoopCompass:
 
 ```markdown
-<!-- loopcompass:start policy=1 -->
+<!-- loopcompass:start policy=N -->
 ...canonical LoopCompass policy...
 <!-- loopcompass:end -->
 ```

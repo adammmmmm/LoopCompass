@@ -35,13 +35,15 @@ containment; it never closes the incident.
 
 ## 4. Is this merely a bypass or coincidence?
 
-Create no durable artifact when:
+Report `no artifact` with a short classification reason when:
 
 - another actor performed the blocked action;
 - a retry happened to succeed without a causal explanation;
 - the workaround violates the intended permission or execution model;
 - the detail is unlikely to recur outside the current task;
 - evidence cannot distinguish the proposed recovery from correlation.
+- a repairable mechanism was repaired and its normal path verified within the current exchange, so
+  no coordination record needs to survive.
 
 ## Promotion rule
 

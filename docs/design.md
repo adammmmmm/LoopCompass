@@ -72,8 +72,14 @@ Project instructions provide best-effort automatic behavior rather than a cross-
 Skill preloading improves availability but does not enforce use. A worker without the skill searches
 `.loopcompass` directly and continues fail-open if retrieval is unavailable.
 
-Automatic consultation does not imply automatic persistence. Durable recoveries require operator
-approval by default unless repository policy explicitly authorizes verified agents to create them.
+Every triggered classification has a visible terminal outcome. A verified agent persists a
+justified recovery or incident automatically within current repository authority, reports `no
+artifact`, or returns the proposed artifact with the exact missing permission, capability, or
+operator action. Explicit read-only instructions and safety boundaries override automatic writes.
+
+Delegated agents with shared repository write authority follow the same rule. Brief-only or
+read-only workers return the normalized signature, classification, evidence, proposed artifact,
+and exact escalation to the parent, which must close the classification in the same turn.
 
 ## Artifact identity and concurrency
 
@@ -195,6 +201,29 @@ Why: It preserves offline classification, repository review, and scope isolation
 project) while still giving operators a complete apply, rollback, and integrity story. Automatic
 discovery remains a future host-plugin opportunity.
 
+### Decision: persist or escalate by default
+
+Question: Should a classified failure wait for separate operator approval before it becomes durable
+knowledge?
+
+Rec: Persist justified recoveries and incidents automatically within current repository authority,
+with explicit terminal outcomes for `no artifact` and permission or operator escalation.
+
+Options:
+
+1. Approval gate for every artifact: preserves operator control but routinely loses verified
+   knowledge between the failure and a later approval exchange.
+2. Repository-authority persistence: saves verified knowledge immediately while preserving
+   explicit read-only, safety, and permission boundaries.
+3. Hooks or background capture: improves enforcement but adds host-specific machinery and can
+   preserve unclassified failures prematurely.
+
+Chosen: Option 2.
+
+Why: It matches the collective-memory goal without expanding authority. The agent must classify
+and verify before writing, and must return the proposed artifact plus exact escalation whenever it
+cannot write safely.
+
 ## Acceptance tests
 
 1. A known deterministic failure causes consultation before the first equivalent retry.
@@ -204,13 +233,18 @@ discovery remains a future host-plugin opportunity.
 5. Changed evidence or environment permits a new consultation.
 6. A worker without the skill reads no more than three `.loopcompass` matches and continues
    fail-open.
-7. Missing `.loopcompass` directories do not block work or create artifacts.
+7. Missing `.loopcompass` directories do not block work. They are created when an artifact is
+   justified and authorized, or the agent returns the exact persistence escalation.
 8. Out-of-scope or expired recovery knowledge is rejected.
 9. A repairable defect escalates instead of becoming a recovery.
 10. Escalation reaches a capable agent or terminates at the operator.
 11. Consultation failure does not recursively invoke LoopCompass.
 12. Manual invocation exercises the same classification path as policy-triggered use.
 13. Two agents handling the same signature converge on one deterministic artifact path.
+14. Every triggered classification ends as persisted recovery, persisted incident, explicit `no
+    artifact`, or proposed artifact with exact escalation.
+15. A delegated read-only worker returns the full classification payload to a parent that closes
+    the outcome in the same turn.
 
 Update-contract acceptance tests live in [update-strategy-v1.md](update-strategy-v1.md).
 
@@ -224,5 +258,5 @@ Mechanical rules are covered by `node scripts/verify.mjs`:
 - project-scope install / update dry-runs;
 - release inventory validate (`scripts/release.mjs validate`).
 
-Behavioral policy acceptance tests (1-13 above) remain host-agent scenarios. Host coverage notes
+Behavioral policy acceptance tests (1-15 above) remain host-agent scenarios. Host coverage notes
 live in [host-matrix.md](host-matrix.md).

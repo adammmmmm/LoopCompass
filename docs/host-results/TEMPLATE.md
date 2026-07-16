@@ -23,7 +23,9 @@ Use scenarios from [host-matrix.md](../host-matrix.md).
 | 3 | Neither store exists | | |
 | 4 | Verified recovery in scope | | |
 | 5 | Repairable defect escalates | | |
-| 6 | Update dry-run | | |
+| 6 | No-artifact classification | | |
+| 7 | Delegated read-only handoff | | |
+| 8 | Update dry-run | | |
 
 ## Misses
 

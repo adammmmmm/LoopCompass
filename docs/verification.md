@@ -27,10 +27,12 @@ Runs:
 | Consumer integration kit | `scripts/verify-consumer.mjs`, `docs/consumer-verification.md` |
 | Example redaction denylist | `scripts/redact-check.mjs`, `examples/capsules/` |
 | Manifest digests and policy marker integrity | `scripts/release.mjs`, `tests/release-tooling.test.mjs` |
+| Persist, no-artifact, or exact-escalation policy contract | `tests/release-tooling.test.mjs` |
 
 ## What remains host-level
 
-Trigger timing, subagent inheritance, and consultation miss-rate need real agent hosts. Use
+Trigger timing, authorized recovery and incident persistence, explicit no-artifact reporting,
+read-only subagent handoff, and consultation miss-rate need real agent hosts. Use
 [host-matrix.md](host-matrix.md), [host-results/](host-results/), and the numbered acceptance tests
 in [design.md](design.md).
 
@@ -45,5 +47,6 @@ in [design.md](design.md).
 
 ## Dogfood
 
-Live recoveries and incidents belong in consumer repos. This repository ships **redacted examples**
-under `examples/capsules/` (teaching only) and keeps `.loopcompass` empty by default.
+Live recoveries and incidents remain repository-local and are not included in release archives.
+This source repository may dogfood maintenance-specific records under `.loopcompass/`; portable
+teaching examples remain redacted under `examples/capsules/`.
