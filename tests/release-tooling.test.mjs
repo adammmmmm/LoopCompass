@@ -1,20 +1,29 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  copyFileSync,
+  cpSync,
   existsSync,
+  mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { describe, it, after } from "node:test";
+import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function runRelease(...args) {
-  return spawnSync(process.execPath, [path.join(root, "scripts", "release.mjs"), ...args], {
-    cwd: root,
+  return runReleaseAt(root, ...args);
+}
+
+function runReleaseAt(releaseRoot, ...args) {
+  return spawnSync(process.execPath, [path.join(releaseRoot, "scripts", "release.mjs"), ...args], {
+    cwd: releaseRoot,
     encoding: "utf8",
   });
 }
@@ -71,36 +80,77 @@ describe("release tooling", () => {
     assert.equal(ends.length, 1);
   });
 
-  it("package stages skill files whose raw digests match the manifest", () => {
-    // Simulate a CRLF worktree file for openai.yaml without dirtying git permanently:
-    // package must still emit LF-canonical members.
-    const skillYaml = path.join(root, "skills", "loop-compass", "agents", "openai.yaml");
-    const original = readFileSync(skillYaml);
-    const crlf = Buffer.from(
-      original.toString("utf8").replace(/\r\n/g, "\n").replace(/\n/g, "\r\n"),
+  it("requires every classification to persist, report no artifact, or escalate", () => {
+    const policy = readFileSync(
+      path.join(root, "skills", "loop-compass", "assets", "project-policy.md"),
       "utf8",
     );
-    writeFileSync(skillYaml, crlf);
-    after(() => {
-      writeFileSync(skillYaml, original);
-    });
-
-    const result = runRelease("package");
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const staged = path.join(root, "dist", "staging", "LoopCompass", "skills", "loop-compass");
-    const man = parseManifestFiles(
-      readFileSync(path.join(staged, "manifest.yaml"), "utf8"),
+    const skill = readFileSync(
+      path.join(root, "skills", "loop-compass", "SKILL.md"),
+      "utf8",
     );
-    for (const [rel, expected] of Object.entries(man)) {
-      const raw = readFileSync(path.join(staged, rel));
-      assert.equal(
-        raw.includes(0x0d),
-        false,
-        `${rel} must not contain CR in package staging`,
+
+    for (const text of [policy, skill]) {
+      assert.match(text, /persistence is automatic within current repository\s+authority/i);
+      assert.match(text, /no artifact/i);
+      assert.match(text, /exact (missing )?permission/i);
+    }
+    assert.match(policy, /Brief-only\s+or read-only workers/i);
+    assert.doesNotMatch(`${policy}\n${skill}`, /operator approval by default/i);
+  });
+
+  it("package stages skill files whose raw digests match the manifest", () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-package-"));
+    try {
+      for (const name of ["scripts", "skills", "docs"]) {
+        cpSync(path.join(root, name), path.join(fixtureRoot, name), { recursive: true });
+      }
+      for (const name of ["VERSION", "LICENSE", "CHANGELOG.md", "README.md"]) {
+        copyFileSync(path.join(root, name), path.join(fixtureRoot, name));
+      }
+
+      // Simulate a CRLF worktree file in the isolated fixture. Packaging must
+      // still emit LF-canonical members without racing other test files.
+      const skillYaml = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "agents",
+        "openai.yaml",
       );
-      const actual = createHash("sha256").update(raw).digest("hex");
-      assert.equal(actual, expected, `raw digest mismatch for ${rel}`);
+      const original = readFileSync(skillYaml);
+      const crlf = Buffer.from(
+        original.toString("utf8").replace(/\r\n/g, "\n").replace(/\n/g, "\r\n"),
+        "utf8",
+      );
+      writeFileSync(skillYaml, crlf);
+
+      const result = runReleaseAt(fixtureRoot, "package");
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+
+      const staged = path.join(
+        fixtureRoot,
+        "dist",
+        "staging",
+        "LoopCompass",
+        "skills",
+        "loop-compass",
+      );
+      const man = parseManifestFiles(
+        readFileSync(path.join(staged, "manifest.yaml"), "utf8"),
+      );
+      for (const [rel, expected] of Object.entries(man)) {
+        const raw = readFileSync(path.join(staged, rel));
+        assert.equal(
+          raw.includes(0x0d),
+          false,
+          `${rel} must not contain CR in package staging`,
+        );
+        const actual = createHash("sha256").update(raw).digest("hex");
+        assert.equal(actual, expected, `raw digest mismatch for ${rel}`);
+      }
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
     }
   });
 });

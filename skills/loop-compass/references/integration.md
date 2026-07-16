@@ -8,7 +8,7 @@ marked block without rewriting its semantics so each host shares one trigger con
 Install the policy between LoopCompass-owned markers:
 
 ```markdown
-<!-- loopcompass:start policy=1 -->
+<!-- loopcompass:start policy=2 -->
 ...canonical LoopCompass policy...
 <!-- loopcompass:end -->
 ```

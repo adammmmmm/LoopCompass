@@ -5,7 +5,7 @@
 A portable skill for agent workflows. No daemon, no CLI, no database, no model API, no hosted
 service. Small Markdown files. Full fleet memory.
 
-![0.2.1](https://img.shields.io/badge/version-0.2.1-1f2328?style=flat-square&labelColor=21262d&color=58a6ff)
+![0.3.0](https://img.shields.io/badge/version-0.3.0-1f2328?style=flat-square&labelColor=21262d&color=58a6ff)
 ![MIT](https://img.shields.io/badge/license-MIT-1f2328?style=flat-square&labelColor=21262d&color=3fb950)
 ![No runtime](https://img.shields.io/badge/runtime-none-1f2328?style=flat-square&labelColor=21262d&color=8b949e)
 ![Provider neutral](https://img.shields.io/badge/host-provider--neutral-1f2328?style=flat-square&labelColor=21262d&color=a371f7)
@@ -32,7 +32,7 @@ already happened once, in some other session, and vanished with the transcript.
 | Situation | What happens |
 | --- | --- |
 | Distinctive failure shows up | Agent consults once before blind retry: skill first, or a direct search of `.loopcompass/` |
-| The path is correct tool use | After verification (and your approval by default), a short recovery file stays in the repo |
+| The path is correct tool use | After verification, a short recovery file is saved automatically within repository authority |
 | The normal path is broken | An incident tracks escalation and repair; the live file goes away when the normal path works again |
 | It was a lucky bypass | Nothing is preserved. Folklore does not become documentation |
 
@@ -82,9 +82,10 @@ Skill preloading helps where the host supports it. Direct `.loopcompass` search 
 See [integration](skills/loop-compass/references/integration.md).
 
 > [!NOTE]
-> **Automatic consultation is not automatic persistence.** Agents consult, classify, repair, and
-> escalate on their own. New recoveries still require operator approval by default. Repository
-> policy can authorize verified agents to save once you trust the verification gate.
+> **Every classification finishes visibly.** Agents automatically save justified recoveries or
+> incidents within repository authority. Otherwise they report `no artifact`, or return the
+> proposed artifact with the exact permission, capability, or operator action required. Explicit
+> read-only instructions and safety boundaries still control writes.
 
 ---
 
@@ -128,7 +129,7 @@ Agent one-liner (project scope). Semantics live in
 [docs/update-strategy-v1.md](docs/update-strategy-v1.md):
 
 ```text
-Install LoopCompass v0.2.1 project scope from
+Install LoopCompass v0.3.0 project scope from
 https://github.com/adammmmmm/LoopCompass (commit-pinned release).
 Follow docs/update-strategy-v1.md. Report version, scope, and release commit.
 ```
@@ -210,7 +211,7 @@ Use LoopCompass to check whether this CLI behavior is already known before retry
 | Repository-local state | Small, reviewable files |
 | Narrow retrieval | Lean briefs; top 1-3 matches |
 | Fail open | Missing skill never blocks the task |
-| Automation is earned | Only after measured failure modes |
+| Visible terminal outcomes | Persist, report `no artifact`, or return exact escalation |
 | Updates are explicit | Never during ordinary consultation |
 
 <details>
