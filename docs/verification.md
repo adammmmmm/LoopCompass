@@ -21,7 +21,7 @@ Runs:
 | Signature normalize + slug + collision suffix | `scripts/lib/signature.mjs`, `tests/signature.test.mjs` |
 | Identity goldens (single source of truth) | `fixtures/identity/goldens.json`, `tests/identity-goldens.test.mjs` |
 | Classification goldens + hard-lane gates | `fixtures/classification/cases.json`, `classify-assist.mjs` |
-| Evaluation benchmark fixtures + Markdown report | `fixtures/evaluation/cases.json`, `scripts/evaluate.mjs`, `docs/evaluation-benchmark.md` |
+| Evaluation benchmark fixtures + Markdown report | `fixtures/evaluation/cases.json`, `scripts/evaluate.mjs`, `docs/evaluation-benchmark.md`; includes host-enforcement vs skill-decision separation and parent/subagent/missing-skill/missing-instruction dimensions |
 | Capsule schema + state dir + containment expiry | `scripts/lib/capsule.mjs`, `validate-state.mjs` |
 | Recovery/incident field rules + templates | `scripts/lib/frontmatter.mjs`, `tests/artifact-schema.test.mjs` |
 | Project-scope stage, dual-host install, update check | `release.mjs stage-install`, dry-run tests |
