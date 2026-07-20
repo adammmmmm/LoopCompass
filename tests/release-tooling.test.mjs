@@ -99,6 +99,17 @@ describe("release tooling", () => {
     assert.doesNotMatch(`${policy}\n${skill}`, /operator approval by default/i);
   });
 
+  it("top-level verify includes evaluation benchmark tests", () => {
+    const verify = readFileSync(path.join(root, "scripts", "verify.mjs"), "utf8");
+    assert.match(verify, /tests\/evaluation-fixtures\.test\.mjs/);
+    assert.match(verify, /tests\/evaluation-report\.test\.mjs/);
+  });
+
+  it("top-level verify avoids shell-spawned node commands", () => {
+    const verify = readFileSync(path.join(root, "scripts", "verify.mjs"), "utf8");
+    assert.doesNotMatch(verify, /shell:\s*process\.platform\s*===\s*"win32"/);
+  });
+
   it("package stages skill files whose raw digests match the manifest", () => {
     const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-package-"));
     try {

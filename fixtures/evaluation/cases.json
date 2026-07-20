@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "benchmark": "loopcompass-core-eval-v1",
+  "baseline": {
+    "repository": "adammmmmm/LoopCompass",
+    "commit": "d7879fec762322ae658603104c7c334ade6ba43f"
+  },
+  "live_integration_required": false,
+  "description": "Deterministic, host-agnostic benchmark cases for measuring LoopCompass consultation, classification, stale-rejection, retry, and terminal-outcome behavior from synthetic or recorded receipts.",
+  "metrics": [
+    "consultation_recall",
+    "classification_accuracy",
+    "false_trigger_rate",
+    "stale_rejection_rate",
+    "blind_retry_rate",
+    "terminal_outcome_compliance"
+  ],
+  "cases": [
+    {
+      "id": "lc-eval-001-known-recovery",
+      "scenario": "Verified recovery is in scope and should be consulted before retry.",
+      "receipt": {
+        "host": "synthetic",
+        "consulted": true,
+        "failure": "uv sync failed writing cache under /home/runner/.cache/uv with disk full on ephemeral runner",
+        "classification": "recovery",
+        "applied_existing_artifact": true,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "classification": "recovery",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-002-repairable-defect",
+      "scenario": "Repairable local mechanism defect escalates to an incident, not a recovery.",
+      "receipt": {
+        "host": "synthetic",
+        "consulted": true,
+        "failure": "build wrapper failed because it hardcodes C:\\Users\\dev\\project\\scripts\\build.ps1 on CI",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-003-expected-negative",
+      "scenario": "Expected negative test behavior should not trigger persistent memory.",
+      "receipt": {
+        "host": "synthetic",
+        "consulted": false,
+        "failure": "unit test asserts invalid input is rejected and received ValidationError as expected",
+        "classification": "none",
+        "applied_existing_artifact": false,
+        "blind_retry": false,
+        "terminal_outcome": "no_artifact"
+      },
+      "expected": {
+        "consulted": false,
+        "classification": "none",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "blind_retry": false,
+        "terminal_outcome": "no_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-004-stale-recovery",
+      "scenario": "An outdated recovery must be rejected when current evidence contradicts it.",
+      "receipt": {
+        "host": "synthetic",
+        "consulted": true,
+        "failure": "git push rejected after token rotation; old recovery says reuse cached token",
+        "classification": "incident",
+        "candidate_artifact_status": "stale",
+        "stale_rejected": true,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": true,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-005-blind-retry-regression",
+      "scenario": "A distinctive deterministic failure should count against blind retry behavior.",
+      "receipt": {
+        "host": "synthetic",
+        "consulted": false,
+        "failure": "same GitHub Actions permission failure was retried three times with identical command and token",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "blind_retry": true,
+        "terminal_outcome": "missing"
+      },
+      "expected": {
+        "consulted": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-006-external-limit",
+      "scenario": "Documented vendor limit remains external and does not become a recovery.",
+      "receipt": {
+        "host": "synthetic",
+        "consulted": true,
+        "failure": "provider websocket rejects more than the documented concurrent market limit, no project-side fix",
+        "classification": "external",
+        "applied_existing_artifact": false,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "classification": "external",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact"
+      }
+    }
+  ]
+}

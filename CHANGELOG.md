@@ -7,6 +7,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Deterministic evaluation benchmark fixtures and Markdown report generator for measurement-only
+  host-agnostic scoring.
+
 ## [0.3.0] - 2026-07-16
 
 ### Changed

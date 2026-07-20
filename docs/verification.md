@@ -10,7 +10,7 @@ node scripts/verify.mjs
 
 Runs:
 
-1. `node --test tests` - unit, fixture, schema, capsule, install/update dry-run, consumer kit tests.
+1. `node --test tests` - unit, fixture, schema, capsule, evaluation, install/update dry-run, consumer kit tests.
 2. `node scripts/release.mjs validate` - VERSION, policy markers, per-file digests.
 3. `node scripts/redact-check.mjs examples` - denylist for project-specific tokens in examples.
 
@@ -21,6 +21,7 @@ Runs:
 | Signature normalize + slug + collision suffix | `scripts/lib/signature.mjs`, `tests/signature.test.mjs` |
 | Identity goldens (single source of truth) | `fixtures/identity/goldens.json`, `tests/identity-goldens.test.mjs` |
 | Classification goldens + hard-lane gates | `fixtures/classification/cases.json`, `classify-assist.mjs` |
+| Evaluation benchmark fixtures + Markdown report | `fixtures/evaluation/cases.json`, `scripts/evaluate.mjs`, `docs/evaluation-benchmark.md` |
 | Capsule schema + state dir + containment expiry | `scripts/lib/capsule.mjs`, `validate-state.mjs` |
 | Recovery/incident field rules + templates | `scripts/lib/frontmatter.mjs`, `tests/artifact-schema.test.mjs` |
 | Project-scope stage, dual-host install, update check | `release.mjs stage-install`, dry-run tests |
@@ -35,6 +36,11 @@ Trigger timing, authorized recovery and incident persistence, explicit no-artifa
 read-only subagent handoff, and consultation miss-rate need real agent hosts. Use
 [host-matrix.md](host-matrix.md), [host-results/](host-results/), and the numbered acceptance tests
 in [design.md](design.md).
+
+The deterministic benchmark in [evaluation-benchmark.md](evaluation-benchmark.md) can score
+synthetic or recorded receipts before a live host pass exists. It should not be used as evidence of
+provider-specific host performance unless the receipts name an explicit host version and run
+protocol.
 
 ## Release hygiene
 
