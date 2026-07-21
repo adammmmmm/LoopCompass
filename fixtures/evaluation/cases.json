@@ -1,0 +1,382 @@
+{
+  "schema": 1,
+  "benchmark": "loopcompass-core-eval-v1",
+  "baseline": {
+    "repository": "adammmmmm/LoopCompass",
+    "commit": "d7879fec762322ae658603104c7c334ade6ba43f"
+  },
+  "live_integration_required": false,
+  "description": "Deterministic, host-agnostic benchmark cases for measuring LoopCompass consultation, host enforcement, classification, stale-rejection, retry, repeated-failure, time-to-normal-path, and terminal-outcome behavior from synthetic or recorded receipts.",
+  "metrics": [
+    "consultation_recall",
+    "host_enforcement_quality",
+    "classification_accuracy_when_consulted",
+    "false_trigger_rate",
+    "stale_rejection_rate",
+    "repeated_failure_reduction",
+    "blind_retry_rate",
+    "time_to_verified_normal_path",
+    "terminal_outcome_compliance"
+  ],
+  "cases": [
+    {
+      "id": "lc-eval-001-known-recovery",
+      "scenario": "Verified recovery is in scope and should be consulted before retry.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "uv sync failed writing cache under /home/runner/.cache/uv with disk full on ephemeral runner",
+        "classification": "recovery",
+        "applied_existing_artifact": true,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": 2,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "recovery",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-002-repairable-defect",
+      "scenario": "Repairable local mechanism defect escalates to an incident, not a recovery.",
+      "scope": {
+        "host": "claude-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "claude-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "build wrapper failed because it hardcodes C:\\Users\\dev\\project\\scripts\\build.ps1 on CI",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-003-expected-negative",
+      "scenario": "Expected negative test behavior should not trigger persistent memory.",
+      "scope": {
+        "host": "claude-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "claude-synthetic",
+        "consulted": false,
+        "host_enforced": false,
+        "failure": "unit test asserts invalid input is rejected and received ValidationError as expected",
+        "classification": "none",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 0,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": 0,
+        "blind_retry": false,
+        "terminal_outcome": "no_artifact"
+      },
+      "expected": {
+        "consulted": false,
+        "host_enforced": false,
+        "classification": "none",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": false,
+        "blind_retry": false,
+        "terminal_outcome": "no_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-004-stale-recovery",
+      "scenario": "An outdated recovery must be rejected when current evidence contradicts it.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "git push rejected after token rotation; old recovery says reuse cached token",
+        "classification": "incident",
+        "candidate_artifact_status": "stale",
+        "stale_rejected": true,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": true,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-005-blind-retry-regression",
+      "scenario": "A distinctive deterministic failure should count against blind retry behavior.",
+      "scope": {
+        "host": "grok-cli-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "grok-cli-synthetic",
+        "consulted": false,
+        "host_enforced": false,
+        "failure": "same GitHub Actions permission failure was retried three times with identical command and token",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 3,
+        "repeated_failure_attempts_after": 3,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": true,
+        "terminal_outcome": "missing"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-006-external-limit",
+      "scenario": "Documented vendor limit remains external and does not become a recovery.",
+      "scope": {
+        "host": "grok-cli-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "grok-cli-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "provider websocket rejects more than the documented concurrent market limit, no project-side fix",
+        "classification": "external",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": 4,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "external",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 4,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-007-parent-policy",
+      "scenario": "Parent agent with project policy present consults before repeating a known CI failure.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "release package validation fails because manifest digest was generated before LF canonicalization",
+        "classification": "recovery",
+        "applied_existing_artifact": true,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": 2,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "recovery",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-008-subagent-readonly-handoff",
+      "scenario": "Read-only subagent cannot persist directly and returns a proposed artifact for parent handling.",
+      "scope": {
+        "host": "claude-synthetic",
+        "agent_role": "subagent-readonly",
+        "skill_state": "present",
+        "project_instructions": "inherited",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "claude-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "delegated read-only worker finds repeated Windows path normalization failure but lacks write authority",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": 3,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-009-missing-skill-fallback",
+      "scenario": "Skill missing but project policy present falls back to direct .loopcompass search.",
+      "scope": {
+        "host": "grok-cli-synthetic",
+        "agent_role": "parent",
+        "skill_state": "missing",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "grok-cli-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "host did not discover SKILL.md but project policy directs direct search before retry",
+        "classification": "recovery",
+        "applied_existing_artifact": true,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "recovery",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-010-missing-project-instructions",
+      "scenario": "Project instructions missing means the host misses a required consultation despite skill availability.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "missing",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": false,
+        "host_enforced": false,
+        "failure": "same environment-specific browser transport failure was retried without consulting project memory",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 2,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": true,
+        "terminal_outcome": "no_artifact"
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact"
+      }
+    }
+  ]
+}
