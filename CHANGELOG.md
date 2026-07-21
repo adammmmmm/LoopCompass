@@ -7,6 +7,14 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Deterministic evaluation benchmark fixtures and Markdown report generator for measurement-only
+  host-agnostic scoring.
+- Evaluation scope dimensions for Codex, Claude, Grok CLI, parent agents, read-only subagents,
+  missing-skill fallback, and missing-project-instruction misses, with host-enforcement quality
+  separated from skill-decision quality.
+
 ## [0.3.0] - 2026-07-16
 
 ### Changed
