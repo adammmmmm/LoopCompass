@@ -10,7 +10,7 @@ service. Small Markdown files. Full fleet memory.
 ![No runtime](https://img.shields.io/badge/runtime-none-1f2328?style=flat-square&labelColor=21262d&color=8b949e)
 ![Provider neutral](https://img.shields.io/badge/host-provider--neutral-1f2328?style=flat-square&labelColor=21262d&color=a371f7)
 
-[How it works](#how-it-works) · [What it stores](#what-it-stores) · [Install](#install) · [Update](#update) · [Design](#design)
+[How it works](#how-it-works) · [What it stores](#what-it-stores) · [Install](#install) · [Update](#update) · [Evaluation](#evaluation) · [Design](#design)
 
 ---
 
@@ -201,6 +201,21 @@ Use LoopCompass to check whether this CLI behavior is already known before retry
 
 ---
 
+## Evaluation
+
+The maintainer evaluation harness scores deterministic synthetic or recorded receipts without
+provider credentials or live agent sessions:
+
+```text
+node scripts/evaluate.mjs --fixture fixtures/evaluation/cases.json
+```
+
+Reports separate host-enforcement quality from skill-decision quality and identify the receipt
+types present. Bundled fixtures are measurement cases, not live-host performance evidence. See
+[the evaluation benchmark](docs/evaluation-benchmark.md) for metrics and the fixture contract.
+
+---
+
 ## Design
 
 | Principle | Meaning |
@@ -229,6 +244,7 @@ Any hook must be bounded, privacy-safe, fail-open, and removable without disabli
 | [docs/design.md](docs/design.md) | Architecture and decisions |
 | [docs/update-strategy-v1.md](docs/update-strategy-v1.md) | Install, update, check, rollback |
 | [docs/verification.md](docs/verification.md) | Tests, fixtures, release hygiene |
+| [docs/evaluation-benchmark.md](docs/evaluation-benchmark.md) | Measurement metrics and fixture contract |
 | [docs/host-matrix.md](docs/host-matrix.md) | Multi-host verification checklist |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
 | [skills/loop-compass/SKILL.md](skills/loop-compass/SKILL.md) | Portable skill |
