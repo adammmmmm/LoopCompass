@@ -21,9 +21,11 @@ d7879fec762322ae658603104c7c334ade6ba43f
 
 ## Metrics
 
-The generated report includes a direct notice that the bundled rows are synthetic fixtures, not
-live host evidence. Live host results should only be added when host versions, run protocol, and
-budget are explicit.
+The generated report watermark lists the receipt types actually present: synthetic, recorded, or
+both. Schema 1 has no explicit live-run protocol contract, so every generated report also states
+that its receipts are not live-host evidence absent such a protocol. A `recorded` label alone does
+not establish a live run. Live host results should only be added when host versions, run protocol,
+and budget are explicit.
 
 | Metric | Meaning |
 | --- | --- |
@@ -48,6 +50,11 @@ budget are explicit.
 | `scope` | Host, parent/subagent role, skill state, project-instruction state, and receipt type. |
 | `receipt` | Synthetic or recorded host result. |
 | `expected` | Deterministic expected result for scoring. |
+
+Attempt counts, step counts, and step budgets must be nonnegative integers (with `null` allowed
+only for `receipt.steps_to_verified_normal_path`). Invalid values stop evaluation before scoring.
+Each `receipt.host` must exactly match its declared `scope.host`; schema 1 has no mismatch override
+or justification field, so mismatches fail closed before the report is generated.
 
 The fixture includes synthetic Codex, Claude, and Grok CLI host rows, plus parent, read-only
 subagent, missing-skill fallback, and missing-project-instruction scenarios. These are measurement

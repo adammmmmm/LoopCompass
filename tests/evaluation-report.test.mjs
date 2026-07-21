@@ -37,12 +37,15 @@ function runEvaluateWithDoc(doc) {
 }
 
 describe("evaluation benchmark report", () => {
-  it("generates deterministic Markdown metrics from recorded receipts", () => {
+  it("generates deterministic Markdown metrics from bundled receipts", () => {
     const result = runEvaluate("fixtures/evaluation/cases.json");
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /# LoopCompass benchmark report/);
-    assert.match(result.stdout, /Synthetic fixtures only; not live host evidence/);
+    assert.match(
+      result.stdout,
+      /Receipt types: synthetic\. Not live-host evidence absent an explicit live-run protocol\./,
+    );
     assert.match(result.stdout, /Baseline commit \| d7879fec762322ae658603104c7c334ade6ba43f/);
     assert.match(result.stdout, /Cases \| 10/);
     assert.match(result.stdout, /Consultation recall \| 7\/9 \| 77\.8%/);
@@ -61,6 +64,34 @@ describe("evaluation benchmark report", () => {
     assert.match(result.stdout, /lc-eval-010-missing-project-instructions/);
   });
 
+  it("labels recorded receipts without presenting them as live-host evidence", () => {
+    const doc = readFixture();
+    for (const c of doc.cases) {
+      c.scope.receipt_type = "recorded";
+    }
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(
+      result.stdout,
+      /Receipt types: recorded\. Not live-host evidence absent an explicit live-run protocol\./,
+    );
+  });
+
+  it("labels mixed synthetic and recorded receipts without presenting them as live-host evidence", () => {
+    const doc = readFixture();
+    doc.cases[0].scope.receipt_type = "recorded";
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(
+      result.stdout,
+      /Receipt types: synthetic and recorded\. Not live-host evidence absent an explicit live-run protocol\./,
+    );
+  });
+
   it("rejects incomplete fixtures before scoring missing values", () => {
     const doc = readFixture();
     delete doc.cases[0].receipt.classification;
@@ -72,6 +103,73 @@ describe("evaluation benchmark report", () => {
       result.stderr,
       /cases\[0\]\.receipt\.classification is required/,
     );
+  });
+
+  it("rejects a receipt whose host does not match its declared scope", () => {
+    const doc = readFixture();
+    doc.cases[0].receipt.host = "different-host";
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(
+      result.stderr,
+      /cases\[0\]\.receipt\.host must match cases\[0\]\.scope\.host/,
+    );
+  });
+
+  it("rejects negative attempt and step counts before scoring", () => {
+    const invalidCounts = [
+      ["receipt.repeated_failure_attempts_before", (doc) => {
+        doc.cases[0].receipt.repeated_failure_attempts_before = -1;
+      }],
+      ["receipt.repeated_failure_attempts_after", (doc) => {
+        doc.cases[0].receipt.repeated_failure_attempts_after = -1;
+      }],
+      ["receipt.steps_to_verified_normal_path", (doc) => {
+        doc.cases[0].receipt.steps_to_verified_normal_path = -1;
+      }],
+      ["expected.time_to_verified_normal_path_max_steps", (doc) => {
+        doc.cases[0].expected.time_to_verified_normal_path_max_steps = -1;
+      }],
+    ];
+
+    for (const [field, mutate] of invalidCounts) {
+      const doc = readFixture();
+      mutate(doc);
+
+      const result = runEvaluateWithDoc(doc);
+
+      assert.equal(result.status, 1, `${field} was accepted:\n${result.stdout}`);
+      assert.match(result.stderr, /must be a nonnegative integer(?: or null)?/);
+    }
+  });
+
+  it("rejects fractional attempt and step counts before scoring", () => {
+    const invalidCounts = [
+      ["receipt.repeated_failure_attempts_before", (doc) => {
+        doc.cases[0].receipt.repeated_failure_attempts_before = 1.5;
+      }],
+      ["receipt.repeated_failure_attempts_after", (doc) => {
+        doc.cases[0].receipt.repeated_failure_attempts_after = 0.5;
+      }],
+      ["receipt.steps_to_verified_normal_path", (doc) => {
+        doc.cases[0].receipt.steps_to_verified_normal_path = 1.5;
+      }],
+      ["expected.time_to_verified_normal_path_max_steps", (doc) => {
+        doc.cases[0].expected.time_to_verified_normal_path_max_steps = 1.5;
+      }],
+    ];
+
+    for (const [field, mutate] of invalidCounts) {
+      const doc = readFixture();
+      mutate(doc);
+
+      const result = runEvaluateWithDoc(doc);
+
+      assert.equal(result.status, 1, `${field} was accepted:\n${result.stdout}`);
+      assert.match(result.stderr, /must be a nonnegative integer(?: or null)?/);
+    }
   });
 
   it("scores a consulted but wrong decision as a skill and classification failure", () => {

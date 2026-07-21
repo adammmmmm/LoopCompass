@@ -21,7 +21,7 @@ function usage() {
   return [
     "Usage: node scripts/evaluate.mjs --fixture <path>",
     "",
-    "Generates a deterministic Markdown benchmark report from recorded LoopCompass receipts.",
+    "Generates a deterministic Markdown benchmark report from synthetic or recorded LoopCompass receipts.",
   ].join("\n");
 }
 
@@ -164,6 +164,14 @@ function hostRows(cases) {
     });
 }
 
+function receiptTypeWatermark(cases) {
+  const present = ["synthetic", "recorded"].filter((type) =>
+    cases.some((c) => c.scope?.receipt_type === type),
+  );
+  const types = present.length === 0 ? "none" : present.join(" and ");
+  return `> Receipt types: ${types}. Not live-host evidence absent an explicit live-run protocol.`;
+}
+
 function hasField(obj, field) {
   return Object.prototype.hasOwnProperty.call(obj, field);
 }
@@ -201,17 +209,17 @@ function requireBoolean(obj, field, label) {
   }
 }
 
-function requireNumber(obj, field, label) {
+function requireNonnegativeInteger(obj, field, label) {
   const value = requireField(obj, field, label);
-  if (!Number.isFinite(value)) {
-    throw new Error(`${label}.${field} must be a finite number`);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${label}.${field} must be a nonnegative integer`);
   }
 }
 
-function requireNumberOrNull(obj, field, label) {
+function requireNonnegativeIntegerOrNull(obj, field, label) {
   const value = requireField(obj, field, label);
-  if (value !== null && !Number.isFinite(value)) {
-    throw new Error(`${label}.${field} must be a finite number or null`);
+  if (value !== null && (!Number.isInteger(value) || value < 0)) {
+    throw new Error(`${label}.${field} must be a nonnegative integer or null`);
   }
 }
 
@@ -251,14 +259,17 @@ function validateFixture(doc) {
     const receipt = requireField(c, "receipt", label);
     requireObject(receipt, `${label}.receipt`);
     requireString(receipt, "host", `${label}.receipt`);
+    if (receipt.host !== scope.host) {
+      throw new Error(`${label}.receipt.host must match ${label}.scope.host`);
+    }
     requireBoolean(receipt, "consulted", `${label}.receipt`);
     requireBoolean(receipt, "host_enforced", `${label}.receipt`);
     requireString(receipt, "failure", `${label}.receipt`);
     requireEnum(receipt, "classification", `${label}.receipt`, classifications);
     requireBoolean(receipt, "stale_rejected", `${label}.receipt`);
-    requireNumber(receipt, "repeated_failure_attempts_before", `${label}.receipt`);
-    requireNumber(receipt, "repeated_failure_attempts_after", `${label}.receipt`);
-    requireNumberOrNull(receipt, "steps_to_verified_normal_path", `${label}.receipt`);
+    requireNonnegativeInteger(receipt, "repeated_failure_attempts_before", `${label}.receipt`);
+    requireNonnegativeInteger(receipt, "repeated_failure_attempts_after", `${label}.receipt`);
+    requireNonnegativeIntegerOrNull(receipt, "steps_to_verified_normal_path", `${label}.receipt`);
     requireBoolean(receipt, "blind_retry", `${label}.receipt`);
     requireEnum(receipt, "terminal_outcome", `${label}.receipt`, receiptTerminalOutcomes);
 
@@ -271,7 +282,7 @@ function validateFixture(doc) {
     requireBoolean(expected, "stale_rejected", `${label}.expected`);
     requireBoolean(expected, "repeated_failure_reduced", `${label}.expected`);
     if (hasField(expected, "time_to_verified_normal_path_max_steps")) {
-      requireNumber(expected, "time_to_verified_normal_path_max_steps", `${label}.expected`);
+      requireNonnegativeInteger(expected, "time_to_verified_normal_path_max_steps", `${label}.expected`);
     }
     requireBoolean(expected, "blind_retry", `${label}.expected`);
     requireEnum(expected, "terminal_outcome", `${label}.expected`, expectedTerminalOutcomes);
@@ -294,7 +305,7 @@ function renderReport(doc) {
   return [
     "# LoopCompass benchmark report",
     "",
-    "> Synthetic fixtures only; not live host evidence.",
+    receiptTypeWatermark(cases),
     "",
     "| Field | Value |",
     "| --- | --- |",
