@@ -28,6 +28,7 @@ const testFiles = [
   "tests/classification-assist.test.mjs",
   "tests/evaluation-fixtures.test.mjs",
   "tests/evaluation-report.test.mjs",
+  "tests/repository-health.test.mjs",
   "tests/site.test.mjs",
   "tests/artifact-schema.test.mjs",
   "tests/capsule-validate.test.mjs",

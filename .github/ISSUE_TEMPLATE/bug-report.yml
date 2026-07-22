@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible defect in LoopCompass
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Do not include secrets or private data.
+        Report security vulnerabilities through the private security link instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Skill behavior or classification
+        - Installation or update
+        - Validation or release tooling
+        - Documentation or website
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: LoopCompass version
+      description: Use the release version or commit SHA.
+      placeholder: v0.3.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the defect and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest deterministic reproduction you can.
+      placeholder: |
+        1. Install or run...
+        2. Trigger...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the agent host, operating system, Node.js version, and relevant tools.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: I removed secrets, private paths, and personal data.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
