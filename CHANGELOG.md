@@ -7,6 +7,16 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Community health policies, structured issue forms, and a pull request template.
+- Automated GitHub Actions dependency updates.
+
+### Changed
+
+- GitHub Actions use current immutable releases, least-privilege permissions, and bounded jobs.
+- GitHub Pages deploys only when the site, its brand asset, or its workflow changes.
+
 ## [0.3.0] - 2026-07-21
 
 ### Added

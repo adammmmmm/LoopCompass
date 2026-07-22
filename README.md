@@ -266,6 +266,12 @@ dry-runs, release digests). Near-term product goal: dogfood recoveries in real m
 complete the host matrix. V1 updates are release-based and explicit. Silent update checks during
 ordinary use remain deferred.
 
+## Community
+
+Contributions are welcome. Read the [contribution guide](.github/CONTRIBUTING.md), follow the
+[Code of Conduct](.github/CODE_OF_CONDUCT.md), and report vulnerabilities through the
+[security policy](.github/SECURITY.md).
+
 ## License
 
 [MIT](LICENSE)
