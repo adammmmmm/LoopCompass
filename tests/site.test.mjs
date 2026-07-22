@@ -14,7 +14,7 @@ test("landing page and Pages workflow remain deployable", async () => {
   assert.match(html, /href="styles\.css"/);
   assert.match(html, /src="brand-mark\.svg"/);
   assert.doesNotMatch(`${html}\n${css}`, /http:\/\//);
-  assert.match(workflow, /actions\/upload-pages-artifact@v4/);
-  assert.match(workflow, /actions\/deploy-pages@v4/);
+  assert.match(workflow, /actions\/upload-pages-artifact@[0-9a-f]{40}/);
+  assert.match(workflow, /actions\/deploy-pages@[0-9a-f]{40}/);
   assert.match(workflow, /path: site/);
 });

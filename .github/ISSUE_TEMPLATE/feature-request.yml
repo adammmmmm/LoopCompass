@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a focused improvement to LoopCompass
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        LoopCompass stays intentionally small and provider-neutral. Start with the problem,
+        then explain the smallest useful outcome.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What recurring user or agent problem needs to be solved?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable behavior, not just an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: fit
+    attributes:
+      label: Fit with LoopCompass
+      description: Explain how this preserves portability, auditability, and the lightweight design.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include existing workflows or smaller approaches that were considered.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: This request does not require a daemon, database, or hosted service.
+          required: true

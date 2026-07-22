@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/adammmmmm/LoopCompass/security/advisories/new
+    about: Send sensitive vulnerability details privately to the maintainers.
