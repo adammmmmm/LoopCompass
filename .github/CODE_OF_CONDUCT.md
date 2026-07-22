@@ -32,15 +32,19 @@ spaces where someone is participating as a representative of LoopCompass.
 
 ## Reporting and enforcement
 
-For conduct hosted on GitHub, use
-[GitHub's private content reporting process](https://support.github.com/contact/report-content).
-If maintainer follow-up is needed, open a minimal repository issue requesting contact, but do not
-include private or sensitive details in the issue.
+For concerns about public activity in this repository, open a
+[conduct concern](https://github.com/adammmmmm/LoopCompass/issues/new?template=conduct-concern.yml).
+That issue will be public. Include only links to public GitHub content and a public-safe summary.
+Do not include private, sensitive, or identifying details.
 
-Maintainers will review reports in good faith, prioritize safety and confidentiality, and may
-remove content, limit participation, suspend access, or permanently ban participation depending
-on the severity and pattern of the behavior. Enforcement decisions may skip intermediate steps
-when required to protect the community.
+For a confidential report or behavior that may violate GitHub's Terms of Service or Community
+Guidelines, use [GitHub's private content reporting process](https://support.github.com/contact/report-content).
+Those reports are handled by GitHub, not LoopCompass maintainers.
+
+Maintainers will review repository conduct issues in good faith and may remove content, limit
+participation, suspend access, or permanently ban participation depending on the severity and
+pattern of the behavior. Enforcement decisions may skip intermediate steps when required to
+protect the community.
 
 ## Attribution
 

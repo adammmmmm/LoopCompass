@@ -1,0 +1,32 @@
+name: Conduct concern
+description: Request maintainer review of public activity in this repository
+title: "[Conduct]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue will be public. Include only links to public GitHub content and a public-safe
+        summary. Do not include private, sensitive, or identifying details. For a confidential
+        report, use GitHub's private content reporting process linked from the issue chooser.
+  - type: input
+    id: location
+    attributes:
+      label: Link to the public interaction
+      description: Link to the relevant issue, pull request, review, comment, or commit.
+      placeholder: https://github.com/adammmmmm/LoopCompass/...
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Public-safe summary
+      description: Briefly explain what a maintainer should review without adding private details.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission check
+      options:
+        - label: I understand this issue is public and have not included private or sensitive information.
+          required: true

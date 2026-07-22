@@ -40,5 +40,3 @@ body:
       options:
         - label: I searched existing issues and pull requests.
           required: true
-        - label: This request does not require a daemon, database, or hosted service.
-          required: true

@@ -12,6 +12,7 @@ test("community health files remain complete and discoverable", async () => {
     pullRequestTemplate,
     bugForm,
     featureForm,
+    conductForm,
     issueConfig,
     readme,
   ] = await Promise.all([
@@ -21,6 +22,7 @@ test("community health files remain complete and discoverable", async () => {
     read(".github/PULL_REQUEST_TEMPLATE.md"),
     read(".github/ISSUE_TEMPLATE/bug-report.yml"),
     read(".github/ISSUE_TEMPLATE/feature-request.yml"),
+    read(".github/ISSUE_TEMPLATE/conduct-concern.yml"),
     read(".github/ISSUE_TEMPLATE/config.yml"),
     read("README.md"),
   ]);
@@ -29,12 +31,16 @@ test("community health files remain complete and discoverable", async () => {
     assert.ok(policy.trim().length > 200);
     assert.doesNotMatch(policy, /\[(?:NOTE|INSERT|TODO)[^\]]*\]/i);
   }
-  for (const form of [bugForm, featureForm]) {
+  for (const form of [bugForm, featureForm, conductForm]) {
     assert.match(form, /^name: .+/m);
     assert.match(form, /^description: .+/m);
     assert.match(form, /^body:/m);
   }
   assert.match(issueConfig, /^blank_issues_enabled: false$/m);
+  assert.match(issueConfig, /support\.github\.com\/contact\/report-content/);
+  assert.match(codeOfConduct, /issues\/new\?template=conduct-concern\.yml/);
+  assert.match(conductForm, /I understand this issue is public/);
+  assert.doesNotMatch(featureForm, /does not require a daemon, database, or hosted service/);
   assert.match(security, /security\/advisories\/new/);
   assert.match(readme, /\.github\/CONTRIBUTING\.md/);
 });

@@ -3,3 +3,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/adammmmmm/LoopCompass/security/advisories/new
     about: Send sensitive vulnerability details privately to the maintainers.
+  - name: Report abuse or sensitive conduct privately
+    url: https://support.github.com/contact/report-content
+    about: Use GitHub's private reporting process when details should not appear in a public issue.
