@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { parseIsoDate, validateCapsuleText } from "./capsule.mjs";
 import { parseFrontmatter } from "./frontmatter.mjs";
-import { normalizeSignature } from "./signature.mjs";
+import { normalizeSignature, slugFromSignature } from "./signature.mjs";
 
 const classifications = new Set(["recovery", "incident", "external", "none"]);
 const terminalOutcomes = new Set([
@@ -81,9 +81,19 @@ const requiredArtifactSections = Object.freeze({
   recovery: ["Symptom", "Recovery", "Verification", "Limits"],
 });
 const recoveryScopeFields = new Set(["os", "shell", "tool", "versions"]);
-const allowedFunctionalPlaceholders = new Set(["user-home", "project-root"]);
+const allowedFunctionalPlaceholders = new Set([
+  "user-home",
+  "project-root",
+  "secret",
+  "id",
+  "hex",
+  "ts",
+  "path",
+  "email",
+]);
 const maximumEvidenceItems = 8;
 const maximumEvidenceItemLength = 512;
+const maximumCompactProseLength = 512;
 
 function hasField(value, field) {
   return Object.prototype.hasOwnProperty.call(value, field);
@@ -180,6 +190,29 @@ function requireNullableSanitizedString(value, field, label) {
   return result;
 }
 
+function validateCompactProse(value, label) {
+  validateSanitizedProse(value, label);
+  if (value.length > maximumCompactProseLength || /[\r\n]/.test(value)) {
+    fail(
+      label,
+      ` must be one line of at most ${maximumCompactProseLength} characters`,
+    );
+  }
+  return value;
+}
+
+function requireCompactProse(value, field, label) {
+  const result = requireString(value, field, label);
+  return validateCompactProse(result, `${label}.${field}`);
+}
+
+function requireNullableCompactProse(value, field, label) {
+  const result = requireNullableString(value, field, label);
+  return result === null
+    ? null
+    : validateCompactProse(result, `${label}.${field}`);
+}
+
 function requireNullableSafeIdentifier(value, field, label) {
   const result = requireNullableSanitizedString(value, field, label);
   if (result !== null && !safeIdentifier.test(result)) {
@@ -259,16 +292,16 @@ function validateEscalation(escalation, label) {
   }
   requireExactFields(escalation, label, escalationFields);
   requireSanitizedStringArray(escalation, "requires", label);
-  requireSanitizedString(escalation, "target", label);
-  requireSanitizedString(escalation, "action", label);
+  requireCompactProse(escalation, "target", label);
+  requireCompactProse(escalation, "action", label);
 }
 
 function validateContainment(containment, label) {
   requireObject(containment, label);
   requireExactFields(containment, label, containmentFields);
   const used = requireBoolean(containment, "used", label);
-  const summary = requireNullableSanitizedString(containment, "summary", label);
-  const verificationGate = requireNullableSanitizedString(
+  const summary = requireNullableCompactProse(containment, "summary", label);
+  const verificationGate = requireNullableCompactProse(
     containment,
     "verification_gate",
     label,
@@ -279,6 +312,7 @@ function validateContainment(containment, label) {
   if (!used && (summary !== null || verificationGate !== null)) {
     fail(label, " requires null summary and verification_gate when used is false");
   }
+  return used;
 }
 
 function frontmatterSource(content) {
@@ -390,7 +424,9 @@ function validateRecoveryArtifactSchema(fields, source) {
   const lastVerifiedValid =
     fields.last_verified === "null"
     || parseIsoDate(fields.last_verified) !== null;
-  const expires = Number(fields.expires_after_days);
+  const expiresValid =
+    /^[1-9][0-9]*$/.test(fields.expires_after_days)
+    && Number.isSafeInteger(Number(fields.expires_after_days));
   const supersedesValid =
     fields.supersedes === "null"
     || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(fields.supersedes);
@@ -398,8 +434,7 @@ function validateRecoveryArtifactSchema(fields, source) {
     && scopeValid
     && parseIsoDate(fields.first_seen) !== null
     && lastVerifiedValid
-    && Number.isInteger(expires)
-    && expires > 0
+    && expiresValid
     && supersedesValid;
 }
 
@@ -439,7 +474,7 @@ function validateProposedArtifact(artifact, label) {
 
 function validateTerminalActionFields(receipt, label, outcome, childReceipt = null) {
   const artifactRef = requireNullableSafeIdentifier(receipt, "artifact_ref", label);
-  const noArtifactReason = requireNullableSanitizedString(
+  const noArtifactReason = requireNullableCompactProse(
     receipt,
     "no_artifact_reason",
     label,
@@ -486,6 +521,20 @@ function validateTerminalActionFields(receipt, label, outcome, childReceipt = nu
   }
 }
 
+function artifactRefMatchesCanonicalId(artifactRef, canonicalId) {
+  if (artifactRef === canonicalId) {
+    return true;
+  }
+  if (!artifactRef.startsWith(`${canonicalId}-`)) {
+    return false;
+  }
+  const collisionSuffix = artifactRef.slice(canonicalId.length + 1);
+  const collisionNumber = Number(collisionSuffix);
+  return /^[1-9][0-9]*$/.test(collisionSuffix)
+    && Number.isSafeInteger(collisionNumber)
+    && collisionNumber >= 2;
+}
+
 function canonicalJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;
@@ -516,7 +565,7 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
   validateEvidence(receipt, label);
   requireEnum(receipt, "task_outcome", label, taskOutcomes);
   requireEnum(receipt, "mechanism_health", label, mechanismHealthStates);
-  validateContainment(
+  const containmentUsed = validateContainment(
     requireField(receipt, "containment", label),
     `${label}.containment`,
   );
@@ -527,6 +576,25 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
   }
   if (outcome === "no_artifact" && classification !== "none") {
     fail(label, ".terminal_outcome no_artifact requires classification none");
+  }
+  if (
+    containmentUsed
+    && classification !== "incident"
+    && classification !== "external"
+  ) {
+    fail(label, ".containment.used may be true only for incident or external classification");
+  }
+  if (
+    outcome === "persisted_artifact"
+    && !artifactRefMatchesCanonicalId(
+      receipt.artifact_ref,
+      slugFromSignature(receipt.signature),
+    )
+  ) {
+    fail(
+      label,
+      ".artifact_ref must equal the mechanical slug of signature or its documented -N collision id",
+    );
   }
   if (
     (classification === "incident" || classification === "external")
@@ -584,23 +652,23 @@ export function validateParentReceipt(parent, childReceipt, label = "parent_rece
   }
   if (outcome === "persisted_artifact" && childReceipt.proposed_artifact !== null) {
     const proposedId = parseFrontmatter(childReceipt.proposed_artifact.content).fields.id;
-    const collisionSuffix = parent.artifact_ref?.startsWith(`${proposedId}-`)
-      ? parent.artifact_ref.slice(proposedId.length + 1)
-      : "";
-    const collisionNumber = Number(collisionSuffix);
-    const validArtifactRef =
-      parent.artifact_ref === proposedId
-      || (
-        /^[1-9][0-9]*$/.test(collisionSuffix)
-        && Number.isSafeInteger(collisionNumber)
-        && collisionNumber >= 2
-      );
-    if (!validArtifactRef) {
+    if (!artifactRefMatchesCanonicalId(parent.artifact_ref, proposedId)) {
       fail(
         label,
         ".artifact_ref must equal the proposed artifact id or its documented -N collision id",
       );
     }
+  } else if (
+    outcome === "persisted_artifact"
+    && !artifactRefMatchesCanonicalId(
+      parent.artifact_ref,
+      slugFromSignature(childReceipt.signature),
+    )
+  ) {
+    fail(
+      label,
+      ".artifact_ref must equal the mechanical child signature slug or its documented -N collision id",
+    );
   }
   if (
     outcome === "persisted_artifact"

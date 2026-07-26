@@ -45,7 +45,9 @@ escalation:
 All keys are required; fields marked `null` stay present. `evidence` contains 1–8 single-line,
 sanitized facts, each at most 512 characters. `requires` is a non-empty list when used.
 `containment.summary` and `containment.verification_gate` are non-empty only when
-`containment.used` is true.
+`containment.used` is true. Containment is valid only for `incident` and `external`
+classifications. Containment summary and gate, escalation target and action, and
+`no_artifact_reason` are each one line of at most 512 characters.
 
 The schema is closed: do not add raw-log, transcript, private-payload, or host-specific fields.
 Sanitize and summarize necessary evidence into the modeled fields. `signature` is a normalized
@@ -58,14 +60,17 @@ ids are unique within the handoff chain.
 including type-correct, non-empty required frontmatter and a non-empty body under every required
 template section. Incident dates must be real calendar dates. Recovery scope contains only the
 required non-empty OS, shell, tool, and versions values; its dates and positive expiry follow the
-recovery schema. Shipped template placeholders are not filled values. Only the functional
-`<user-home>` and `<project-root>` substitutions may remain in a complete sanitized artifact. The
-content is not a one-line instruction, summary, patch fragment, or artifact id.
+recovery schema, and `expires_after_days` is a positive base-10 integer without alternate numeric
+notation. Shipped template placeholders are not filled values. The functional substitutions
+`<user-home>` and `<project-root>` and normalized signature tokens `<secret>`, `<id>`, `<hex>`,
+`<ts>`, `<path>`, and `<email>` may remain in a complete sanitized artifact. The content is not a
+one-line instruction, summary, patch fragment, or artifact id.
 
 Outcome-specific rules:
 
 - `persisted_artifact` requires `artifact_ref`; `proposed_artifact` and `no_artifact_reason` are
-  null.
+  null. A direct classification receipt uses the mechanical slug of its normalized signature, or
+  that slug plus a documented `-N` collision suffix where `N` is an integer of at least 2.
 - `no_artifact` requires `no_artifact_reason`; artifact fields and `escalation` are null because
   classification has ended without a durable artifact.
 - `proposed_artifact` requires the complete `proposed_artifact` and exact `escalation`; the other

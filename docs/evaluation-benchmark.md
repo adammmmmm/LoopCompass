@@ -57,11 +57,12 @@ and budget are explicit.
 Attempt counts, step counts, and step budgets must be nonnegative integers (with `null` allowed
 only for `receipt.steps_to_verified_normal_path`). Invalid values stop evaluation before scoring.
 Each `receipt.host` must exactly match its declared `scope.host`; schema 1 has no mismatch override
-or justification field, so mismatches fail closed before the report is generated. The fixture,
-baseline, case, scope, receipt, and expected-result objects are closed schemas; unknown fields fail
-validation rather than silently changing a metric denominator. Scenario text and recorded failure
-text follow the receipt sanitation boundary and are rejected when they contain a high-confidence
-personal home path, email, or secret shape.
+or justification field, so mismatches fail closed before the report is generated. Case ids and
+scope/receipt hosts are sanitized lowercase host-neutral identifiers. The fixture, baseline, case,
+scope, receipt, and expected-result objects are closed schemas; unknown fields fail validation
+rather than silently changing a metric denominator. Scenario text and recorded failure text follow
+the receipt sanitation boundary and are rejected when they contain a high-confidence personal home
+path, email, or secret shape.
 
 `fixture.metrics` must exactly match the evaluator's single ordered metric registry. Missing,
 duplicate, unknown, or reordered entries fail validation. The same registry drives report
@@ -83,6 +84,9 @@ artifact/no-artifact payload, proposed artifact, and exact escalation; it is req
 If a receipt is present, `terminal_receipt_required` must be true. Structural validity alone does
 not earn semantic credit, and a missing receipt remains in the denominator instead of erasing the
 unfinished classification obligation.
+
+Expected `classification: none` and `terminal_outcome: no_artifact` must occur together. A fixture
+cannot combine `none` with a persisted outcome to escape receipt validation or scoring.
 
 `expected.parent_receipt_required` independently defines the worker-to-parent denominator, and
 `expected.parent_receipt_semantics` scores the complete authoritative action: terminal action,

@@ -23,6 +23,7 @@ const agentRoles = new Set(["parent", "subagent-readonly"]);
 const skillStates = new Set(["present", "missing"]);
 const projectInstructionStates = new Set(["present", "inherited", "missing"]);
 const receiptTypes = new Set(["synthetic", "recorded"]);
+const fixtureIdentifier = /^[a-z0-9][a-z0-9._:|-]*$/;
 const fixtureFields = new Set([
   "schema",
   "benchmark",
@@ -403,6 +404,16 @@ function requireString(obj, field, label) {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${label}.${field} must be a non-empty string`);
   }
+  return value;
+}
+
+function requireFixtureIdentifier(obj, field, label) {
+  const value = requireString(obj, field, label);
+  validateSanitizedProse(value, `${label}.${field}`);
+  if (!fixtureIdentifier.test(value)) {
+    throw new Error(`${label}.${field} must be a lowercase host-neutral identifier`);
+  }
+  return value;
 }
 
 function requireBoolean(obj, field, label) {
@@ -431,6 +442,7 @@ function requireEnum(obj, field, label, allowed) {
   if (!allowed.has(value)) {
     throw new Error(`${label}.${field} must be one of ${[...allowed].join(", ")}`);
   }
+  return value;
 }
 
 function expectedTerminalReceipt(c, semantics) {
@@ -508,14 +520,14 @@ function validateFixture(doc) {
     const label = `cases[${index}]`;
     requireObject(c, label);
     requireExactFields(c, label, caseFields);
-    requireString(c, "id", label);
+    requireFixtureIdentifier(c, "id", label);
     requireString(c, "scenario", label);
     validateSanitizedProse(c.scenario, `${label}.scenario`);
 
     const scope = requireField(c, "scope", label);
     requireObject(scope, `${label}.scope`);
     requireExactFields(scope, `${label}.scope`, scopeFields);
-    requireString(scope, "host", `${label}.scope`);
+    requireFixtureIdentifier(scope, "host", `${label}.scope`);
     requireEnum(scope, "agent_role", `${label}.scope`, agentRoles);
     requireEnum(scope, "skill_state", `${label}.scope`, skillStates);
     requireEnum(scope, "project_instructions", `${label}.scope`, projectInstructionStates);
@@ -524,7 +536,7 @@ function validateFixture(doc) {
     const receipt = requireField(c, "receipt", label);
     requireObject(receipt, `${label}.receipt`);
     requireExactFields(receipt, `${label}.receipt`, receiptFields);
-    requireString(receipt, "host", `${label}.receipt`);
+    requireFixtureIdentifier(receipt, "host", `${label}.receipt`);
     if (receipt.host !== scope.host) {
       throw new Error(`${label}.receipt.host must match ${label}.scope.host`);
     }
@@ -589,7 +601,12 @@ function validateFixture(doc) {
     requireExactFields(expected, `${label}.expected`, expectedFields);
     requireBoolean(expected, "consulted", `${label}.expected`);
     requireBoolean(expected, "host_enforced", `${label}.expected`);
-    requireEnum(expected, "classification", `${label}.expected`, classifications);
+    const expectedClassification = requireEnum(
+      expected,
+      "classification",
+      `${label}.expected`,
+      classifications,
+    );
     requireBoolean(expected, "false_trigger", `${label}.expected`);
     requireBoolean(expected, "stale_rejected", `${label}.expected`);
     requireBoolean(expected, "repeated_failure_reduced", `${label}.expected`);
@@ -597,7 +614,20 @@ function validateFixture(doc) {
       requireNonnegativeInteger(expected, "time_to_verified_normal_path_max_steps", `${label}.expected`);
     }
     requireBoolean(expected, "blind_retry", `${label}.expected`);
-    requireEnum(expected, "terminal_outcome", `${label}.expected`, expectedTerminalOutcomes);
+    const expectedOutcome = requireEnum(
+      expected,
+      "terminal_outcome",
+      `${label}.expected`,
+      expectedTerminalOutcomes,
+    );
+    if (
+      (expectedClassification === "none")
+      !== (expectedOutcome === "no_artifact")
+    ) {
+      throw new Error(
+        `${label}.expected classification none and terminal_outcome no_artifact must occur together`,
+      );
+    }
     requireBoolean(expected, "terminal_receipt_required", `${label}.expected`);
     requireBoolean(expected, "parent_receipt_required", `${label}.expected`);
     const classificationRequiresReceipt = expected.classification !== "none";

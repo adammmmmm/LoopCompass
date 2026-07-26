@@ -73,6 +73,11 @@ Applies only to the documented managed runtime.
 function recoveryProposalReceipt() {
   const receipt = structuredClone(propagatedCase.terminal_receipt);
   receipt.classification = "recovery";
+  receipt.containment = {
+    used: false,
+    summary: null,
+    verification_gate: null,
+  };
   receipt.proposed_artifact = {
     kind: "recovery",
     content: filledRecoveryArtifact,
@@ -181,6 +186,71 @@ describe("terminal receipt contract", () => {
       () => validateTerminalReceipt(receipt),
       /requires summary and verification_gate when used is true/,
     );
+  });
+
+  it("allows containment only for incident and external classifications", () => {
+    for (const classification of ["recovery", "none"]) {
+      const receipt = structuredClone(persisted);
+      receipt.classification = classification;
+      if (classification === "recovery") {
+        receipt.artifact_ref =
+          "skill-validator-exits-before-validation-at-import-yaml-in-documented-python-runtimes";
+      } else {
+        receipt.terminal_outcome = "no_artifact";
+        receipt.artifact_ref = null;
+        receipt.no_artifact_reason = "The observation is expected test behavior.";
+        receipt.escalation = null;
+      }
+      assert.throws(
+        () => validateTerminalReceipt(receipt),
+        /containment\.used may be true only for incident or external classification/,
+      );
+    }
+  });
+
+  it("bounds every compact prose field and rejects multiline smuggling", () => {
+    const receiptMutations = [
+      (receipt, value) => {
+        receipt.containment.summary = value;
+      },
+      (receipt, value) => {
+        receipt.containment.verification_gate = value;
+      },
+      (receipt, value) => {
+        receipt.escalation.target = value;
+      },
+      (receipt, value) => {
+        receipt.escalation.action = value;
+      },
+    ];
+    for (const mutate of receiptMutations) {
+      for (const value of ["x".repeat(513), "First line.\nSecond line."]) {
+        const receipt = structuredClone(persisted);
+        mutate(receipt, value);
+        assert.throws(
+          () => validateTerminalReceipt(receipt),
+          /must be one line of at most 512 characters/,
+        );
+      }
+    }
+
+    for (const value of ["x".repeat(513), "First line.\nSecond line."]) {
+      const receipt = structuredClone(persisted);
+      receipt.classification = "none";
+      receipt.containment = {
+        used: false,
+        summary: null,
+        verification_gate: null,
+      };
+      receipt.terminal_outcome = "no_artifact";
+      receipt.artifact_ref = null;
+      receipt.no_artifact_reason = value;
+      receipt.escalation = null;
+      assert.throws(
+        () => validateTerminalReceipt(receipt),
+        /must be one line of at most 512 characters/,
+      );
+    }
   });
 
   it("requires an exact escalation for incident and external classifications", () => {
@@ -304,6 +374,28 @@ describe("terminal receipt contract", () => {
     );
   });
 
+  it("binds direct persistence to the mechanical signature slug", () => {
+    assert.doesNotThrow(() => validateTerminalReceipt(structuredClone(persisted)));
+
+    const wrong = structuredClone(persisted);
+    wrong.artifact_ref = "skill-validator-default-runtime-missing-dependency";
+    assert.throws(
+      () => validateTerminalReceipt(wrong),
+      /artifact_ref must equal the mechanical slug of signature/,
+    );
+
+    const collision = structuredClone(persisted);
+    collision.artifact_ref = `${persisted.artifact_ref}-2`;
+    assert.doesNotThrow(() => validateTerminalReceipt(collision));
+
+    const paddedCollision = structuredClone(persisted);
+    paddedCollision.artifact_ref = `${persisted.artifact_ref}-02`;
+    assert.throws(
+      () => validateTerminalReceipt(paddedCollision),
+      /artifact_ref must equal the mechanical slug of signature/,
+    );
+  });
+
   it("requires escalation for authoritative persisted external incidents", () => {
     const authoritativeCase = fixture.cases.find(
       (c) => c.id === "lc-eval-008-subagent-readonly-handoff",
@@ -409,6 +501,11 @@ describe("terminal receipt contract", () => {
   it("enforces classification and proposed-artifact consistency", () => {
     const wrongKind = structuredClone(propagatedCase.terminal_receipt);
     wrongKind.classification = "recovery";
+    wrongKind.containment = {
+      used: false,
+      summary: null,
+      verification_gate: null,
+    };
     assert.throws(
       () => validateTerminalReceipt(wrongKind),
       /proposed_artifact\.kind must be recovery for recovery/,
@@ -448,6 +545,29 @@ describe("terminal receipt contract", () => {
     );
   });
 
+  it("allows normalized functional tokens but rejects template placeholders", () => {
+    const proposed = structuredClone(propagatedCase.terminal_receipt);
+    proposed.proposed_artifact.content = proposed.proposed_artifact.content
+      .replace(
+        "id: panel-launcher-discovery-differs-between-sandbox-and-host-contexts",
+        "id: launcher-at-path-fails-at-ts",
+      )
+      .replace(
+        'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+        'signature: "Launcher at <path> fails at <ts>."',
+      );
+    assert.doesNotThrow(() => validateTerminalReceipt(proposed));
+
+    proposed.proposed_artifact.content = proposed.proposed_artifact.content.replace(
+      "owner: Incident Coordinator",
+      "owner: <incident-coordinator>",
+    );
+    assert.throws(
+      () => validateTerminalReceipt(proposed),
+      /content must be a complete filled sanitized incident artifact/,
+    );
+  });
+
   it("accepts a complete filled multiline recovery artifact", () => {
     const proposed = recoveryProposalReceipt();
     assert.ok(recoveryTemplate.includes("## Recovery"));
@@ -458,6 +578,8 @@ describe("terminal receipt contract", () => {
     const base = propagatedCase.terminal_receipt.proposed_artifact.content;
     const invalidBodies = [
       incidentTemplate,
+      base.replace("schema: 1", "schema: 2"),
+      base.replace("status: detected", "status: closed"),
       base.replace("requires: [repository_write]", "requires:"),
       base.replace("requires: [repository_write]", "requires: repository_write"),
       base.replace("consulted: []", "consulted:"),
@@ -494,6 +616,12 @@ describe("terminal receipt contract", () => {
       filledRecoveryArtifact.replace("first_seen: 2026-07-26", "first_seen: 2026-02-30"),
       filledRecoveryArtifact.replace("last_verified: null", "last_verified: 2026-02-30"),
       filledRecoveryArtifact.replace("expires_after_days: 30", "expires_after_days: 0"),
+      filledRecoveryArtifact.replace("expires_after_days: 30", "expires_after_days: 01"),
+      filledRecoveryArtifact.replace("expires_after_days: 30", "expires_after_days: 1e2"),
+      filledRecoveryArtifact.replace(
+        "expires_after_days: 30",
+        "expires_after_days: 9007199254740992",
+      ),
       filledRecoveryArtifact.replace("expires_after_days: 30", "expires_after_days: 1.5"),
       filledRecoveryArtifact.replace(
         "## Verification\n\nRun from clean preconditions and observe successful validation.",

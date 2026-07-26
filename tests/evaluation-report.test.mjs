@@ -219,6 +219,40 @@ describe("evaluation benchmark report", () => {
     }
   });
 
+  it("sanitizes case and host identifiers without echoing matches", () => {
+    const mutations = [
+      (doc) => {
+        doc.cases[0].id = "private.user@example.com";
+      },
+      (doc) => {
+        doc.cases[0].scope.host = "private.user@example.com";
+      },
+      (doc) => {
+        doc.cases[0].receipt.host = "private.user@example.com";
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      mutate(doc);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stderr, /contains a high-confidence sensitive value/);
+      assert.equal(result.stderr.includes("private.user@example.com"), false);
+    }
+  });
+
+  it("requires classification none and no_artifact to occur together", () => {
+    const expectedMismatch = readFixture();
+    expectedMismatch.cases[2].expected.terminal_outcome = "persisted_artifact";
+    const result = runEvaluateWithDoc(expectedMismatch);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(
+      result.stderr,
+      /expected classification none and terminal_outcome no_artifact must occur together/,
+    );
+  });
+
   it("rejects negative attempt and step counts before scoring", () => {
     const invalidCounts = [
       ["receipt.repeated_failure_attempts_before", (doc) => {
@@ -539,7 +573,7 @@ describe("evaluation benchmark report", () => {
         terminal.containment.verification_gate = "Use a different verification gate.";
       },
       (terminal) => {
-        terminal.artifact_ref = "different-artifact-reference";
+        terminal.artifact_ref = `${terminal.artifact_ref}-2`;
       },
       (terminal) => {
         terminal.escalation.requires = ["process_control"];
@@ -580,7 +614,8 @@ describe("evaluation benchmark report", () => {
   it("scores exact signature, dedupe key, and minimal evidence semantics", () => {
     const mutations = [
       (terminal) => {
-        terminal.signature = "A different normalized validator signature.";
+        terminal.signature =
+          "Skill validator exits before validation at import yaml in documented Python runtimes!";
       },
       (terminal) => {
         terminal.dedupe_key = "different|validator|identity";
