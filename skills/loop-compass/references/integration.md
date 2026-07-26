@@ -81,10 +81,11 @@ consumer-owned surface, including its projection block, obligation markers, and 
 registry.
 The surface declaration is typed: repository-file adapters validate normalized root-confined paths
 and symlink resolution, while external adapters validate a stable project-scoped identifier and
-independent authority against the current project identity. These observations are separate from
-configuration self-assertions. Retained registry state must persistently bind the locator; a
-missing binding fails closed. Adapters use conditional write/version checks or an equivalent lock
-for full-surface reconciliation.
+an exact stable authority identity against the current project identity and declared integration
+authority. These observations are separate from configuration self-assertions. Retained registry
+state must persistently bind the complete typed descriptor, including external project scope; a
+missing binding fails closed for repair and reconciliation. Adapters use conditional write/version
+checks or an equivalent lock for full-surface reconciliation.
 
 ## Version and updates
 

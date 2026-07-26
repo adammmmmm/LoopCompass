@@ -49,7 +49,9 @@ The typed descriptor uses `kind: repository_file` with `locator`, or `kind: exte
 `locator` and `project_scope`. Root confinement, symlink safety, and external authority are
 adapter-observed preflight facts supplied separately from the declaration; configuration text
 cannot attest to its own authority. For an external surface, the observed current project identity
-must exactly equal the declared `project_scope`.
+must exactly equal the declared `project_scope`, and the observed stable authority identity must
+exactly equal the profile's declared integration `authority`. A Boolean self-attestation is not
+authority evidence.
 
 State schema 1 needs no new incident fields. `owner` remains the lifecycle coordinator; it does not
 identify the action actor and does not imply a human. An open incident needs human action when
@@ -168,6 +170,9 @@ history, not repair authority.
 Stage the reconstructed marker and registry advancement together, validate the complete candidate
 history and selected marker against canonical state, and only then commit both changes. Failed
 validation is an exact no-op: it must not leave a synthetic revision 1 behind.
+Crash repair first validates the retained complete surface binding against the enabled
+declaration. A missing or mismatched binding suppresses every marker reconstruction and registry
+advance; repair never backfills the binding from current configuration.
 Projection representation does not gate marker/registry crash repair. First make the valid
 marker/registry repair atomically, then run deterministic projection reconciliation to replace
 stale, incomplete, or divergent entries from the repaired canonical state.
@@ -187,13 +192,16 @@ incident, marker, projection, and closure evidence together. Outside the revisio
 case, a known slug with an absent marker is a deletion failure and must not be reconstructed by
 guessing.
 
-Persist the typed designated-surface locator binding in registry metadata. A retained
+Persist the complete typed designated-surface identity in registry metadata: `kind` plus `locator`,
+and `project_scope` for an external surface. A retained
 known-obligation record with no persisted binding is invalid; never infer or synthesize it from the
 current declaration. While any known-obligation record remains retained, changing that locator is
 prohibited: fail closed and preserve both the old and newly configured surfaces unchanged. This
 small immutability rule avoids a migration protocol that could duplicate or lose obligations after
 restart. A project may change the surface only after its declared retention process has lawfully
 purged every registry record, or under a future separately specified migration protocol.
+Changing `kind` or external `project_scope` is also a surface change even when the locator text is
+unchanged.
 
 Closure evidence is a referenced authority, not a writable collection on the designated attention
 surface. Parse it defensively: a missing, scalar, or malformed evidence collection, and malformed

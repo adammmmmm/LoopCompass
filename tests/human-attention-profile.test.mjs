@@ -176,7 +176,7 @@ function surfaceIdentifier(surface) {
   return isPlainRecord(surface) ? surface.locator : surface;
 }
 
-function validateSurface(surface, observation) {
+function validateSurface(surface, observation, authority) {
   if (!isPlainRecord(surface)) return false;
   if (surface.kind === "repository_file") {
     return Boolean(
@@ -205,7 +205,7 @@ function validateSurface(surface, observation) {
         observation.kind === "external" &&
         observation.locator === surface.locator &&
         observation.project_identity === surface.project_scope &&
-        observation.authority_verified === true
+        observation.authority_identity === authority
     );
   }
   return false;
@@ -233,12 +233,16 @@ function parseProfileDeclaration(value, observation) {
   if (!value.enabled) {
     return { config: value, enabled: false, errors };
   }
-  for (const field of ["authority", "history_retention"]) {
-    if (typeof value[field] !== "string" || !value[field].trim()) {
-      errors.push(`invalid_profile:${field}`);
-    }
+  if (!isStableIdentifier(value.authority)) {
+    errors.push("invalid_profile:authority");
   }
-  if (!validateSurface(value.surface, observation)) {
+  if (
+    typeof value.history_retention !== "string" ||
+    !value.history_retention.trim()
+  ) {
+    errors.push("invalid_profile:history_retention");
+  }
+  if (!validateSurface(value.surface, observation, value.authority)) {
     errors.push("invalid_profile:surface");
   }
   for (const field of [
@@ -262,17 +266,28 @@ function parseProfileDeclaration(value, observation) {
 function surfaceBindingError(testCase, config, registry) {
   if (
     registry.size > 0 &&
-    typeof testCase.registry_surface !== "string"
+    !isPlainRecord(testCase.registry_surface)
   ) {
     return "missing_registry_surface_binding";
   }
   if (
     registry.size > 0 &&
-    testCase.registry_surface !== surfaceIdentifier(config.surface)
+    JSON.stringify(testCase.registry_surface) !==
+      JSON.stringify(surfaceBindingIdentity(config.surface))
   ) {
     return "surface_change_with_retained_obligations";
   }
   return null;
+}
+
+function surfaceBindingIdentity(surface) {
+  return surface.kind === "external"
+    ? {
+        kind: surface.kind,
+        locator: surface.locator,
+        project_scope: surface.project_scope,
+      }
+    : { kind: surface.kind, locator: surface.locator };
 }
 
 function incidentsBySlug(testCase, errors = []) {
@@ -1118,6 +1133,13 @@ function repairRegistryCrash(testCase) {
     failed: failedRegistry,
     unscopedInvalid: unscopedRegistry,
   } = registryBySlug(working, errors);
+  if (surfaceBindingError(working, config, registry)) {
+    return {
+      ...testCase,
+      known_obligations: knownObligations,
+      obligations: markerHistory,
+    };
+  }
   const { unscopedInvalid: unscopedProjection } = projectionsBySlug(
     testCase,
     errors,
@@ -1570,7 +1592,10 @@ describe("optional human-attention profile", () => {
         root_confined: true,
         symlink_checked: true,
       },
-      registry_surface: "HANDOFF.md",
+      registry_surface: {
+        kind: "repository_file",
+        locator: "HANDOFF.md",
+      },
       incidents: [
         {
           slug: "long-capability-required",
@@ -1659,6 +1684,28 @@ describe("optional human-attention profile", () => {
       projections: reconcileProjections(replayRepair),
     };
     assert.deepEqual(replay, firstPass);
+  });
+
+  it("refuses crash repair when the persisted surface binding is missing or changed", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (entry) => entry.id === "first-marker-write-crash-is-recoverable",
+    );
+    for (const mutate of [
+      (testCase) => delete testCase.registry_surface,
+      (testCase) => {
+        testCase.registry_surface = {
+          kind: "repository_file",
+          locator: "OTHER.md",
+        };
+      },
+    ]) {
+      const testCase = resolveCase(fixture, structuredClone(rawCase));
+      mutate(testCase);
+      const original = structuredClone(testCase);
+      assert.deepEqual(repairRegistryCrash(testCase), original);
+      assert.deepEqual(testCase, original);
+    }
   });
 
   it("repairs either first-write crash window and rejects bad reconstruction metadata", () => {
@@ -2674,15 +2721,25 @@ describe("optional human-attention profile", () => {
       kind: "external",
       locator: "queue:loopcompass-operator",
       project_identity: "loopcompass",
-      authority_verified: true,
+      authority_identity: "incident-coordinator",
     };
-    external.registry_surface = "queue:loopcompass-operator";
+    external.registry_surface = {
+      kind: "external",
+      locator: "queue:loopcompass-operator",
+      project_scope: "loopcompass",
+    };
     external.projections[0].surface = "queue:loopcompass-operator";
     assert.deepEqual(assessConformance(external), []);
 
     const wrongProject = structuredClone(external);
     wrongProject.adapter_observation.project_identity = "other-project";
     assert.deepEqual(assessConformance(wrongProject), [
+      "invalid_profile:surface",
+    ]);
+
+    const replayedAuthority = structuredClone(external);
+    replayedAuthority.profile_config.authority = "replacement-coordinator";
+    assert.deepEqual(assessConformance(replayedAuthority), [
       "invalid_profile:surface",
     ]);
   });
@@ -2695,7 +2752,10 @@ describe("optional human-attention profile", () => {
         (entry) => entry.id === "enabled-exactly-one-human-capability",
       ),
     );
-    testCase.registry_surface = "HANDOFF.md";
+    testCase.registry_surface = {
+      kind: "repository_file",
+      locator: "HANDOFF.md",
+    };
     testCase.profile_config.surface.locator = "OPERATOR_QUEUE.md";
     testCase.adapter_observation.locator = "OPERATOR_QUEUE.md";
     const original = structuredClone(testCase);
@@ -2725,6 +2785,45 @@ describe("optional human-attention profile", () => {
     assert.throws(
       () => reconcileProjections(missingBinding),
       /obligation conflict blocks reconciliation/,
+    );
+
+    const changedKind = resolveCase(
+      fixture,
+      fixture.cases.find(
+        (entry) => entry.id === "enabled-exactly-one-human-capability",
+      ),
+    );
+    changedKind.profile_config.surface = {
+      kind: "external",
+      locator: "handoff.md",
+      project_scope: "loopcompass",
+    };
+    changedKind.adapter_observation = {
+      kind: "external",
+      locator: "handoff.md",
+      project_identity: "loopcompass",
+      authority_identity: "incident-coordinator",
+    };
+    changedKind.registry_surface = {
+      kind: "repository_file",
+      locator: "handoff.md",
+    };
+    assert.ok(
+      assessConformance(changedKind).includes(
+        "surface_change_with_retained_obligations",
+      ),
+    );
+
+    const changedScope = structuredClone(changedKind);
+    changedScope.registry_surface = {
+      kind: "external",
+      locator: "handoff.md",
+      project_scope: "old-project",
+    };
+    assert.ok(
+      assessConformance(changedScope).includes(
+        "surface_change_with_retained_obligations",
+      ),
     );
   });
 
