@@ -23,6 +23,25 @@ const recoveryTemplate = readFileSync(
   path.join(root, "skills", "loop-compass", "assets", "recovery-template.md"),
   "utf8",
 );
+const prohibitedLineSeparators = ["\r", "\n", "\u0085", "\u2028", "\u2029"];
+
+function rawTemplateMarkers(template) {
+  const prose = template.replace(/<!--[\s\S]*?-->/g, "");
+  return [...prose.matchAll(/<([\s\S]*?)>/g)].map((match) => match[1]);
+}
+
+function templateMarkers(template) {
+  return rawTemplateMarkers(template).map((marker) =>
+    marker.replace(/\s+/gu, " ").trim(),
+  );
+}
+
+const allShippedTemplateMarkers = [
+  ...new Set([
+    ...templateMarkers(incidentTemplate),
+    ...templateMarkers(recoveryTemplate),
+  ]),
+];
 const fixture = JSON.parse(
   readFileSync(path.join(root, "fixtures", "evaluation", "cases.json"), "utf8"),
 );
@@ -171,12 +190,13 @@ describe("terminal receipt contract", () => {
       /evidence must contain at most 8 one-line items of at most 512 characters/,
     );
 
-    const multiline = structuredClone(persisted);
-    multiline.evidence = ["First output line.\nSecond transcript line."];
-    assert.throws(
-      () => validateTerminalReceipt(multiline),
-      /evidence must contain at most 8 one-line items/,
-    );
+    for (const separator of prohibitedLineSeparators) {
+      const multiline = structuredClone(persisted);
+      multiline.evidence = [`First output line.${separator}PrivatePayload`];
+      const error = captureError(() => validateTerminalReceipt(multiline));
+      assert.match(error.message, /evidence must contain at most 8 one-line items/);
+      assert.equal(error.message.includes("PrivatePayload"), false);
+    }
   });
 
   it("requires bounded containment details and a verification gate", () => {
@@ -224,17 +244,26 @@ describe("terminal receipt contract", () => {
       },
     ];
     for (const mutate of receiptMutations) {
-      for (const value of ["x".repeat(513), "First line.\nSecond line."]) {
+      for (const value of [
+        "x".repeat(513),
+        ...prohibitedLineSeparators.map(
+          (separator) => `First line.${separator}PrivatePayload`,
+        ),
+      ]) {
         const receipt = structuredClone(persisted);
         mutate(receipt, value);
-        assert.throws(
-          () => validateTerminalReceipt(receipt),
-          /must be one line of at most 512 characters/,
-        );
+        const error = captureError(() => validateTerminalReceipt(receipt));
+        assert.match(error.message, /must be one line of at most 512 characters/);
+        assert.equal(error.message.includes("PrivatePayload"), false);
       }
     }
 
-    for (const value of ["x".repeat(513), "First line.\nSecond line."]) {
+    for (const value of [
+      "x".repeat(513),
+      ...prohibitedLineSeparators.map(
+        (separator) => `First line.${separator}PrivatePayload`,
+      ),
+    ]) {
       const receipt = structuredClone(persisted);
       receipt.classification = "none";
       receipt.containment = {
@@ -246,10 +275,35 @@ describe("terminal receipt contract", () => {
       receipt.artifact_ref = null;
       receipt.no_artifact_reason = value;
       receipt.escalation = null;
-      assert.throws(
-        () => validateTerminalReceipt(receipt),
-        /must be one line of at most 512 characters/,
+      const error = captureError(() => validateTerminalReceipt(receipt));
+      assert.match(error.message, /must be one line of at most 512 characters/);
+      assert.equal(error.message.includes("PrivatePayload"), false);
+    }
+  });
+
+  it("bounds escalation capabilities on terminal and parent receipts", () => {
+    const invalidRequires = [
+      Array.from({ length: 9 }, (_, index) => `capability_${index + 1}`),
+      ["x".repeat(129)],
+      ...prohibitedLineSeparators.map((separator) => [
+        `repository_write${separator}PrivatePayload`,
+      ]),
+    ];
+
+    for (const requires of invalidRequires) {
+      const terminal = structuredClone(persisted);
+      terminal.escalation.requires = requires;
+      let error = captureError(() => validateTerminalReceipt(terminal));
+      assert.match(error.message, /requires must contain at most 8 one-line items/);
+      assert.equal(error.message.includes("PrivatePayload"), false);
+
+      const parent = structuredClone(propagatedCase.parent_receipt);
+      parent.escalation.requires = requires;
+      error = captureError(() =>
+        validateParentReceipt(parent, propagatedCase.terminal_receipt),
       );
+      assert.match(error.message, /requires must contain at most 8 one-line items/);
+      assert.equal(error.message.includes("PrivatePayload"), false);
     }
   });
 
@@ -555,6 +609,10 @@ describe("terminal receipt contract", () => {
       .replace(
         'signature: "Panel launcher discovery differs between sandbox and host contexts."',
         'signature: "Launcher at <path> fails at <ts>."',
+      )
+      .replace(
+        "Evidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.",
+        "Evidence: <https://example.test/docs>, HTML <code>status</code>, and type <T> are safe technical prose.",
       );
     assert.doesNotThrow(() => validateTerminalReceipt(proposed));
 
@@ -564,6 +622,79 @@ describe("terminal receipt contract", () => {
     );
     assert.throws(
       () => validateTerminalReceipt(proposed),
+      /content must be a complete filled sanitized incident artifact/,
+    );
+  });
+
+  it("rejects every exact shipped template marker, including multiline markers", () => {
+    assert.ok(allShippedTemplateMarkers.length > 10);
+    assert.ok(allShippedTemplateMarkers.some((marker) => marker.includes("frontmatter owner")));
+
+    for (const marker of allShippedTemplateMarkers) {
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.proposed_artifact.content =
+        proposed.proposed_artifact.content.replace(
+          "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+          `Normal path: <${marker}>`,
+        );
+      assert.throws(
+        () => validateTerminalReceipt(proposed),
+        /content must be a complete filled sanitized incident artifact/,
+        marker,
+      );
+    }
+
+    const multilineMarker = rawTemplateMarkers(incidentTemplate).find(
+      (marker) => /[\r\n\u0085\u2028\u2029]/u.test(marker),
+    );
+    assert.ok(multilineMarker);
+    const proposed = structuredClone(propagatedCase.terminal_receipt);
+    proposed.proposed_artifact.content =
+      proposed.proposed_artifact.content.replace(
+        "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+        `Normal path: <${multilineMarker}>`,
+      );
+    assert.throws(
+      () => validateTerminalReceipt(proposed),
+      /content must be a complete filled sanitized incident artifact/,
+    );
+  });
+
+  it("requires exact or unpadded -N proposed capsule identity", () => {
+    const baseId =
+      "panel-launcher-discovery-differs-between-sandbox-and-host-contexts";
+    for (const suffix of ["-0", "-1", "-01", "-02"]) {
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.proposed_artifact.content =
+        proposed.proposed_artifact.content.replace(
+          `id: ${baseId}`,
+          `id: ${baseId}${suffix}`,
+        );
+      assert.throws(
+        () => validateTerminalReceipt(proposed),
+        /content must be a complete filled sanitized incident artifact/,
+      );
+    }
+
+    const collision = structuredClone(propagatedCase.terminal_receipt);
+    collision.proposed_artifact.content =
+      collision.proposed_artifact.content.replace(
+        `id: ${baseId}`,
+        `id: ${baseId}-2`,
+      );
+    assert.doesNotThrow(() => validateTerminalReceipt(collision));
+
+    const child = structuredClone(propagatedCase.terminal_receipt);
+    child.proposed_artifact.content = child.proposed_artifact.content.replace(
+      `id: ${baseId}`,
+      `id: ${baseId}-01`,
+    );
+    const parent = structuredClone(propagatedCase.parent_receipt);
+    parent.proposed_artifact = structuredClone(child.proposed_artifact);
+    parent.forwarded_receipt = structuredClone(child);
+    parent.child_payload_sha256 = receiptPayloadDigest(child);
+    assert.throws(
+      () => validateParentReceipt(parent, child),
       /content must be a complete filled sanitized incident artifact/,
     );
   });

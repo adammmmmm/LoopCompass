@@ -43,11 +43,14 @@ escalation:
 ```
 
 All keys are required; fields marked `null` stay present. `evidence` contains 1–8 single-line,
-sanitized facts, each at most 512 characters. `requires` is a non-empty list when used.
+sanitized facts, each at most 512 characters. `requires` contains 1–8 capability names when used,
+each one line and at most 128 characters.
 `containment.summary` and `containment.verification_gate` are non-empty only when
 `containment.used` is true. Containment is valid only for `incident` and `external`
 classifications. Containment summary and gate, escalation target and action, and
-`no_artifact_reason` are each one line of at most 512 characters.
+`no_artifact_reason` are each one line of at most 512 characters. One line excludes carriage
+return, line feed, next line (`U+0085`), line separator (`U+2028`), and paragraph separator
+(`U+2029`).
 
 The schema is closed: do not add raw-log, transcript, private-payload, or host-specific fields.
 Sanitize and summarize necessary evidence into the modeled fields. `signature` is a normalized
@@ -61,10 +64,12 @@ including type-correct, non-empty required frontmatter and a non-empty body unde
 template section. Incident dates must be real calendar dates. Recovery scope contains only the
 required non-empty OS, shell, tool, and versions values; its dates and positive expiry follow the
 recovery schema, and `expires_after_days` is a positive base-10 integer without alternate numeric
-notation. Shipped template placeholders are not filled values. The functional substitutions
-`<user-home>` and `<project-root>` and normalized signature tokens `<secret>`, `<id>`, `<hex>`,
-`<ts>`, `<path>`, and `<email>` may remain in a complete sanitized artifact. The content is not a
-one-line instruction, summary, patch fragment, or artifact id.
+notation. Its id is the mechanical signature slug or that slug plus an unpadded `-N` collision
+suffix where `N` is at least 2. Every exact shipped template placeholder is unfilled, including a
+marker split across lines. Normalized signature tokens such as `<path>` and `<ts>`, safe Markdown
+autolinks, HTML, and technical angle-bracket prose are not template placeholders and remain valid
+when otherwise sanitized. The content is not a one-line instruction, summary, patch fragment, or
+artifact id.
 
 Outcome-specific rules:
 

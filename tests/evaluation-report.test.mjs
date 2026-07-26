@@ -242,6 +242,89 @@ describe("evaluation benchmark report", () => {
     }
   });
 
+  it("validates and sanitizes stored and rendered benchmark metadata", () => {
+    const sensitiveMutations = [
+      (doc) => {
+        doc.benchmark = "private.user@example.com";
+      },
+      (doc) => {
+        doc.description = "Contact private.user@example.com for benchmark details.";
+      },
+      (doc) => {
+        doc.baseline.repository = "private.user@example.com";
+      },
+    ];
+    for (const mutate of sensitiveMutations) {
+      const doc = readFixture();
+      mutate(doc);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stderr, /contains a high-confidence sensitive value/);
+      assert.equal(result.stderr.includes("private.user@example.com"), false);
+    }
+
+    const invalidMetadata = [
+      [(doc) => {
+        doc.description = "x".repeat(513);
+      }, /description must be one non-Markdown line of at most 512 characters/],
+      [(doc) => {
+        doc.description = "Safe text\u2028Injected heading";
+      }, /description must be one non-Markdown line/],
+      [(doc) => {
+        doc.description = "Safe text | injected table cell";
+      }, /description must be one non-Markdown line/],
+      [(doc) => {
+        doc.baseline.repository = "owner/repository/extra";
+      }, /repository must be an owner\/repository identifier/],
+      [(doc) => {
+        doc.baseline.commit = "ABCDEF";
+      }, /commit must be a lowercase 40-character Git commit/],
+    ];
+    for (const [mutate, expectedError] of invalidMetadata) {
+      const doc = readFixture();
+      mutate(doc);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stderr, expectedError);
+    }
+  });
+
+  it("validates optional artifact-observation fields when present", () => {
+    const accepted = readFixture();
+    accepted.cases[0].receipt.applied_existing_artifact = null;
+    accepted.cases[0].receipt.candidate_artifact_status = null;
+    let result = runEvaluateWithDoc(accepted);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const invalidApplied = readFixture();
+    invalidApplied.cases[0].receipt.applied_existing_artifact = "true";
+    result = runEvaluateWithDoc(invalidApplied);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /applied_existing_artifact must be boolean or null/);
+
+    for (const value of ["unknown", 42]) {
+      const invalidStatus = readFixture();
+      invalidStatus.cases[0].receipt.candidate_artifact_status = value;
+      result = runEvaluateWithDoc(invalidStatus);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(
+        result.stderr,
+        /candidate_artifact_status must be null or one of candidate, verified, stale, superseded/,
+      );
+    }
+  });
+
+  it("requires read-only subagents to expect proposal and parent closure", () => {
+    const doc = readFixture();
+    doc.cases[0].scope.agent_role = "subagent-readonly";
+    const result = runEvaluateWithDoc(doc);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(
+      result.stderr,
+      /subagent-readonly requires expected proposed_artifact, terminal semantics, and parent closure/,
+    );
+  });
+
   it("requires classification none and no_artifact to occur together", () => {
     const expectedMismatch = readFixture();
     expectedMismatch.cases[2].expected.terminal_outcome = "persisted_artifact";

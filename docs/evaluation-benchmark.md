@@ -67,6 +67,11 @@ path, email, or secret shape.
 `fixture.metrics` must exactly match the evaluator's single ordered metric registry. Missing,
 duplicate, unknown, or reordered entries fail validation. The same registry drives report
 rendering, including `skill_decision_quality`, so inventory and output cannot drift independently.
+The benchmark name is a sanitized host-neutral identifier. Baseline repository and commit values
+use strict `owner/repository` and lowercase 40-character Git commit shapes. The stored description
+is a sanitized, non-Markdown single line of at most 512 characters, preventing report or fixture
+metadata from injecting extra structure. When present, `receipt.applied_existing_artifact` is
+boolean or null, and `receipt.candidate_artifact_status` is null or a recovery lifecycle status.
 
 Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and optionally
 `receipt.parent_receipt`, following the shipped
@@ -97,6 +102,10 @@ expectations. A required
 parent receipt may be deliberately absent in a negative fixture, where it scores as failed closure.
 Receipt ids must be unique across a fixture, and every parent links both the child id and canonical
 child-payload SHA-256 digest.
+
+Every `subagent-readonly` scope expects `proposed_artifact`, complete terminal semantics, and parent
+closure semantics. The observed parent may remain absent in a deliberate negative fixture, but the
+expected contract cannot downgrade or omit the worker-to-parent obligation.
 
 The paired validator-workaround cases distinguish task completion from mechanism health. Passing
 validation in an unrelated runtime is containment while the documented runtime remains broken;

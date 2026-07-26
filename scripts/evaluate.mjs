@@ -23,7 +23,17 @@ const agentRoles = new Set(["parent", "subagent-readonly"]);
 const skillStates = new Set(["present", "missing"]);
 const projectInstructionStates = new Set(["present", "inherited", "missing"]);
 const receiptTypes = new Set(["synthetic", "recorded"]);
+const candidateArtifactStatuses = new Set([
+  "candidate",
+  "verified",
+  "stale",
+  "superseded",
+]);
 const fixtureIdentifier = /^[a-z0-9][a-z0-9._:|-]*$/;
+const repositoryIdentifier = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const fixtureLineBreakPattern = /[\r\n\u0085\u2028\u2029]/u;
+const unsafeMarkdownPattern = /[\\`|<>\[\]]/u;
+const maximumFixtureDescriptionLength = 512;
 const fixtureFields = new Set([
   "schema",
   "benchmark",
@@ -416,11 +426,51 @@ function requireFixtureIdentifier(obj, field, label) {
   return value;
 }
 
+function requireFixtureDescription(obj, field, label) {
+  const value = requireString(obj, field, label);
+  validateSanitizedProse(value, `${label}.${field}`);
+  if (
+    value.length > maximumFixtureDescriptionLength
+    || fixtureLineBreakPattern.test(value)
+    || unsafeMarkdownPattern.test(value)
+  ) {
+    throw new Error(
+      `${label}.${field} must be one non-Markdown line of at most ${maximumFixtureDescriptionLength} characters`,
+    );
+  }
+  return value;
+}
+
+function requireRepositoryIdentifier(obj, field, label) {
+  const value = requireString(obj, field, label);
+  validateSanitizedProse(value, `${label}.${field}`);
+  if (!repositoryIdentifier.test(value)) {
+    throw new Error(`${label}.${field} must be an owner/repository identifier`);
+  }
+  return value;
+}
+
+function requireCommitDigest(obj, field, label) {
+  const value = requireString(obj, field, label);
+  if (!/^[0-9a-f]{40}$/.test(value)) {
+    throw new Error(`${label}.${field} must be a lowercase 40-character Git commit`);
+  }
+  return value;
+}
+
 function requireBoolean(obj, field, label) {
   const value = requireField(obj, field, label);
   if (typeof value !== "boolean") {
     throw new Error(`${label}.${field} must be boolean`);
   }
+}
+
+function requireNullableBoolean(obj, field, label) {
+  const value = requireField(obj, field, label);
+  if (value !== null && typeof value !== "boolean") {
+    throw new Error(`${label}.${field} must be boolean or null`);
+  }
+  return value;
 }
 
 function requireNonnegativeInteger(obj, field, label) {
@@ -441,6 +491,16 @@ function requireEnum(obj, field, label, allowed) {
   const value = requireField(obj, field, label);
   if (!allowed.has(value)) {
     throw new Error(`${label}.${field} must be one of ${[...allowed].join(", ")}`);
+  }
+  return value;
+}
+
+function requireNullableEnum(obj, field, label, allowed) {
+  const value = requireField(obj, field, label);
+  if (value !== null && !allowed.has(value)) {
+    throw new Error(
+      `${label}.${field} must be null or one of ${[...allowed].join(", ")}`,
+    );
   }
   return value;
 }
@@ -495,13 +555,13 @@ function validateFixture(doc) {
   if (doc.schema !== 1) {
     throw new Error("fixture.schema must be 1");
   }
-  requireString(doc, "benchmark", "fixture");
+  requireFixtureIdentifier(doc, "benchmark", "fixture");
   requireObject(requireField(doc, "baseline", "fixture"), "fixture.baseline");
   requireExactFields(doc.baseline, "fixture.baseline", baselineFields);
-  requireString(doc.baseline, "repository", "fixture.baseline");
-  requireString(doc.baseline, "commit", "fixture.baseline");
+  requireRepositoryIdentifier(doc.baseline, "repository", "fixture.baseline");
+  requireCommitDigest(doc.baseline, "commit", "fixture.baseline");
   requireBoolean(doc, "live_integration_required", "fixture");
-  requireString(doc, "description", "fixture");
+  requireFixtureDescription(doc, "description", "fixture");
   const metrics = requireField(doc, "metrics", "fixture");
   requireArray(metrics, "fixture.metrics");
   const expectedMetricIds = metricRegistry.map(([id]) => id);
@@ -545,6 +605,21 @@ function validateFixture(doc) {
     requireString(receipt, "failure", `${label}.receipt`);
     validateSanitizedProse(receipt.failure, `${label}.receipt.failure`);
     requireEnum(receipt, "classification", `${label}.receipt`, classifications);
+    if (hasField(receipt, "applied_existing_artifact")) {
+      requireNullableBoolean(
+        receipt,
+        "applied_existing_artifact",
+        `${label}.receipt`,
+      );
+    }
+    if (hasField(receipt, "candidate_artifact_status")) {
+      requireNullableEnum(
+        receipt,
+        "candidate_artifact_status",
+        `${label}.receipt`,
+        candidateArtifactStatuses,
+      );
+    }
     requireBoolean(receipt, "stale_rejected", `${label}.receipt`);
     requireNonnegativeInteger(receipt, "repeated_failure_attempts_before", `${label}.receipt`);
     requireNonnegativeInteger(receipt, "repeated_failure_attempts_after", `${label}.receipt`);
@@ -716,6 +791,20 @@ function validateFixture(doc) {
           `${label}.expected proposed_artifact requires terminal_receipt_required and parent_receipt_required`,
         );
       }
+    }
+    if (
+      scope.agent_role === "subagent-readonly"
+      && (
+        expectedOutcome !== "proposed_artifact"
+        || expected.terminal_receipt_required !== true
+        || !hasField(expected, "terminal_receipt_semantics")
+        || expected.parent_receipt_required !== true
+        || !hasField(expected, "parent_receipt_semantics")
+      )
+    ) {
+      throw new Error(
+        `${label}.scope.agent_role subagent-readonly requires expected proposed_artifact, terminal semantics, and parent closure`,
+      );
     }
   });
 }

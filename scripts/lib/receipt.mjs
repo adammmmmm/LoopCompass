@@ -81,19 +81,34 @@ const requiredArtifactSections = Object.freeze({
   recovery: ["Symptom", "Recovery", "Verification", "Limits"],
 });
 const recoveryScopeFields = new Set(["os", "shell", "tool", "versions"]);
-const allowedFunctionalPlaceholders = new Set([
-  "user-home",
-  "project-root",
-  "secret",
-  "id",
-  "hex",
-  "ts",
-  "path",
-  "email",
+const shippedTemplatePlaceholders = new Set([
+  "slug-from-normalized-signature",
+  "normalized symptom or error",
+  "capability",
+  "incident-coordinator",
+  "YYYY-MM-DD",
+  "Repair the broken mechanism",
+  "The intended operation that failed.",
+  "Sanitized expected behavior, observed behavior, and minimal reproduction; no raw logs.",
+  "The mechanism and source of authority that must change.",
+  'Temporary containment, the actor responsible for operating or expiring it, and expiry, or "None". The incident coordinator remains the frontmatter owner.',
+  "How to remove containment and exercise the exact original normal path from clean preconditions.",
+  "any-or-specific",
+  "tool-name",
+  "version-range-or-unknown",
+  "integer",
+  "Correct path in one line",
+  "What the agent observes.",
+  "The shortest correct operating path.",
+  'Sanitized evidence that the recovery caused the intended outcome, or "Pending" while candidate.',
+  "Where this recovery does not apply or remains uncertain.",
 ]);
 const maximumEvidenceItems = 8;
 const maximumEvidenceItemLength = 512;
 const maximumCompactProseLength = 512;
+const maximumRequiresItems = 8;
+const maximumRequiresItemLength = 128;
+const lineBreakPattern = /[\r\n\u0085\u2028\u2029]/u;
 
 function hasField(value, field) {
   return Object.prototype.hasOwnProperty.call(value, field);
@@ -157,7 +172,7 @@ function requireSanitizedString(value, field, label) {
 
 function requireNormalizedSignature(value, field, label) {
   const result = requireSanitizedString(value, field, label);
-  if (normalizeSignature(result) !== result || /[\r\n]/.test(result)) {
+  if (normalizeSignature(result) !== result || lineBreakPattern.test(result)) {
     fail(label, `.${field} must be a normalized one-line signature`);
   }
   return result;
@@ -192,7 +207,7 @@ function requireNullableSanitizedString(value, field, label) {
 
 function validateCompactProse(value, label) {
   validateSanitizedProse(value, label);
-  if (value.length > maximumCompactProseLength || /[\r\n]/.test(value)) {
+  if (value.length > maximumCompactProseLength || lineBreakPattern.test(value)) {
     fail(
       label,
       ` must be one line of at most ${maximumCompactProseLength} characters`,
@@ -267,7 +282,7 @@ function validateEvidence(value, label) {
     || evidence.some(
       (item) =>
         item.length > maximumEvidenceItemLength
-        || /[\r\n]/.test(item),
+        || lineBreakPattern.test(item),
     )
   ) {
     fail(
@@ -276,6 +291,24 @@ function validateEvidence(value, label) {
     );
   }
   return evidence;
+}
+
+function validateRequires(value, label) {
+  const requires = requireSanitizedStringArray(value, "requires", label);
+  if (
+    requires.length > maximumRequiresItems
+    || requires.some(
+      (item) =>
+        item.length > maximumRequiresItemLength
+        || lineBreakPattern.test(item),
+    )
+  ) {
+    fail(
+      label,
+      `.requires must contain at most ${maximumRequiresItems} one-line items of at most ${maximumRequiresItemLength} characters`,
+    );
+  }
+  return requires;
 }
 
 function requireNullableObject(value, field, label) {
@@ -291,7 +324,7 @@ function validateEscalation(escalation, label) {
     return;
   }
   requireExactFields(escalation, label, escalationFields);
-  requireSanitizedStringArray(escalation, "requires", label);
+  validateRequires(escalation, label);
   requireCompactProse(escalation, "target", label);
   requireCompactProse(escalation, "action", label);
 }
@@ -383,11 +416,13 @@ function hasNonemptyField(fields, field) {
     && fields[field].trim().length > 0;
 }
 
-function hasOnlyAllowedFunctionalPlaceholders(content) {
+function containsShippedTemplatePlaceholder(content) {
   const prose = content.replace(/<!--[\s\S]*?-->/g, "");
-  const placeholders = [...prose.matchAll(/<([^>\n]+)>/g)].map((match) => match[1].trim());
-  return placeholders.every((placeholder) =>
-    allowedFunctionalPlaceholders.has(placeholder),
+  const placeholders = [...prose.matchAll(/<([\s\S]*?)>/g)].map((match) =>
+    match[1].replace(/\s+/gu, " ").trim(),
+  );
+  return placeholders.some((placeholder) =>
+    shippedTemplatePlaceholders.has(placeholder),
   );
 }
 
@@ -454,6 +489,13 @@ function validateProposedArtifact(artifact, label) {
     sectionHasBody(body, section),
   );
   const filename = fields.id ? `${fields.id}.md` : "proposed-artifact.md";
+  const mechanicalIdValid =
+    typeof fields.id === "string"
+    && typeof fields.signature === "string"
+    && artifactRefMatchesCanonicalId(
+      fields.id,
+      slugFromSignature(fields.signature),
+    );
   const validation = validateCapsuleText(content, {
     kind,
     filename,
@@ -463,7 +505,8 @@ function validateProposedArtifact(artifact, label) {
   });
   if (
     !content.includes("\n")
-    || !hasOnlyAllowedFunctionalPlaceholders(content)
+    || containsShippedTemplatePlaceholder(content)
+    || !mechanicalIdValid
     || !schemaValid
     || !completeSections
     || validation.errors.length > 0
