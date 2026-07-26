@@ -342,6 +342,18 @@ describe("evaluation benchmark report", () => {
       (doc) => {
         doc.description = "Benchmark &colon; encoded separator.";
       },
+      (doc) => {
+        doc.cases[0].scenario = "Contact private&#64example.com.";
+      },
+      (doc) => {
+        doc.cases[0].receipt.failure = "&#x40g encoded failure.";
+      },
+      (doc) => {
+        doc.description = "Benchmark &lt encoded boundary.";
+      },
+      (doc) => {
+        doc.cases[0].scenario = "Copyright marker &copy";
+      },
     ];
     for (const mutate of mutations) {
       const doc = readFixture();
@@ -351,6 +363,11 @@ describe("evaluation benchmark report", () => {
       assert.match(result.stderr, /contains character-reference syntax/);
       assert.equal(result.stdout, "");
     }
+
+    const safe = readFixture();
+    safe.cases[0].scenario = "AT&T-compatible launcher behavior.";
+    const safeResult = runEvaluateWithDoc(safe);
+    assert.equal(safeResult.status, 0, safeResult.stderr || safeResult.stdout);
   });
 
   it("rejects unsafe Unicode and controls in fixture prose without echoing them", () => {

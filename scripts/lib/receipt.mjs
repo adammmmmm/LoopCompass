@@ -58,7 +58,7 @@ const highConfidenceSensitivePatterns = [
   /\b(?:sk-[A-Za-z0-9_-]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{10,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/i,
 ];
 const htmlCharacterReferencePattern =
-  /&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]+);/i;
+  /&(?:#[0-9]{1,7};?|#x[0-9a-f]{1,6};?|[a-z][a-z0-9]+;|amp|lt|gt|quot|copy|reg|nbsp)/i;
 const requiredArtifactFields = Object.freeze({
   incident: [
     "id",

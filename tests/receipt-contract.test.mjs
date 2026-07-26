@@ -1503,9 +1503,25 @@ describe("terminal receipt contract", () => {
             "&#x54;he intended repair remains pending.",
           );
       },
+      (receipt) => {
+        receipt.evidence = ["Contact private&#64example.com for access."];
+      },
+      (receipt) => {
+        receipt.containment.summary = "Use bounded &lt containment.";
+      },
+      (receipt) => {
+        receipt.proposed_artifact.content =
+          receipt.proposed_artifact.content.replace(
+            "Make launcher discovery and authentication preflight host-aware.",
+            "&#x40g encoded proposal content.",
+          );
+      },
+      (receipt) => {
+        receipt.evidence = ["Copyright marker &copy"];
+      },
     ];
     for (const [index, mutate] of mutations.entries()) {
-      const receipt = index === 2
+      const receipt = index === 2 || index === 5
         ? structuredClone(propagatedCase.terminal_receipt)
         : structuredClone(persisted);
       mutate(receipt);
@@ -1516,6 +1532,10 @@ describe("terminal receipt contract", () => {
       );
       assert.equal(JSON.stringify(receipt), before);
     }
+
+    const literalAmpersand = structuredClone(persisted);
+    literalAmpersand.evidence = ["AT&T-compatible launcher behavior verified."];
+    assert.doesNotThrow(() => validateTerminalReceipt(literalAmpersand));
   });
 
   it("requires NFC-normalized receipt signatures", () => {
