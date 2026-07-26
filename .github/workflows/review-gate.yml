@@ -1,6 +1,12 @@
 name: delivery-policy
 
 on:
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Pull request number to re-evaluate after resolving a shared-HEAD conflict
+        required: true
+        type: number
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, edited]
   issue_comment:
@@ -15,7 +21,7 @@ permissions:
   statuses: write
 
 concurrency:
-  group: delivery-policy-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: delivery-policy-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull_request_number }}
   cancel-in-progress: true
 
 jobs:
@@ -23,6 +29,7 @@ jobs:
     if: >-
       (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
       (github.event_name != 'pull_request_review' ||
+      github.event.action == 'dismissed' ||
       github.event.review.user.login != 'github-actions[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -111,9 +111,11 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
     assert.doesNotMatch(otherWorkflow, /pull-requests: write/);
   }
   assert.match(reviewWorkflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
-  assert.match(reviewWorkflow, /group: delivery-policy-/);
+  assert.match(reviewWorkflow, /group: delivery-policy-.*inputs\.pull_request_number/);
   assert.match(reviewWorkflow, /cancel-in-progress: true/);
   assert.match(reviewWorkflow, /types: \[opened, reopened, synchronize, ready_for_review, edited\]/);
+  assert.match(reviewWorkflow, /^  workflow_dispatch:\n    inputs:\n      pull_request_number:/m);
+  assert.match(reviewWorkflow, /github\.event\.action == 'dismissed'/);
   assert.match(reviewWorkflow, /github-actions\[bot\]/);
   assert.match(
     reviewGateScript,
@@ -128,8 +130,9 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
     /\/repos\/\$\{repo\}\/actions\/permissions\/workflow/,
   );
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs branches/);
-  assert.match(branchWorkflow, /scripts\/review-gate\.mjs audit/);
-  assert.match(branchWorkflow, /Audit live repository delivery policy\n\s+if: always\(\)/);
+  assert.doesNotMatch(branchWorkflow, /scripts\/review-gate\.mjs audit/);
+  assert.match(branchWorkflow, /live_settings_audit.*unverifiable/);
+  assert.match(branchWorkflow, /scheduled\s+GITHUB_TOKEN cannot read administrator-only/);
   assert.match(workflows, /timeout-minutes: 10/);
   assert.match(dependabot, /package-ecosystem: github-actions/);
 });

@@ -779,7 +779,8 @@ export function resolvePullRequestNumber(event) {
   const candidate =
     event.pull_request?.number ??
     (event.issue?.pull_request ? event.issue.number : null) ??
-    event.review?.pull_request_url?.split("/").at(-1);
+    event.review?.pull_request_url?.split("/").at(-1) ??
+    event.inputs?.pull_request_number;
   const number = Number(candidate);
   if (!Number.isInteger(number) || number <= 0) {
     throw new Error("event does not identify a pull request");
@@ -1087,15 +1088,20 @@ export async function runPolicyEvaluation({
     if (!exactSha(originalHead)) {
       throw new Error("initial pull request HEAD is not an exact SHA");
     }
+    // Fence stale green states before any association or status-history read.
+    // A later check may reassert a newer run, but no preflight API latency may
+    // leave an old terminal state visible after this run has validated HEAD.
+    await publish(originalHead, "pending", undefined, runUrl);
     const initialAssociationFailure = await failUntrustedAssociation();
     if (initialAssociationFailure) return initialAssociationFailure;
     const preflightStatuses = await listStatuses(originalHead);
-    if (newestHigherRun(preflightStatuses, runUrl)) {
+    const higherBeforePreflight = newestHigherRun(preflightStatuses, runUrl);
+    if (higherBeforePreflight) {
+      await publish(originalHead, "reassert", higherBeforePreflight.statuses);
       return { outcome: "superseded", headSha: originalHead };
     }
     const preflightFailure = await failUntrustedHistory(preflightStatuses);
     if (preflightFailure) return preflightFailure;
-    await publish(originalHead, "pending", undefined, runUrl);
     const postPendingAssociationFailure = await failUntrustedAssociation();
     if (postPendingAssociationFailure) return postPendingAssociationFailure;
     const postPendingStatuses = await listStatuses(originalHead);
@@ -1263,24 +1269,22 @@ export function evaluateRepositoryPolicy({
     "required_review_thread_resolution",
     "required_reviewers",
   ];
-  const optionalPullKeys = ["dismissal_restriction"];
   const expectedCheckKeys = [
     "do_not_enforce_on_create",
     "required_status_checks",
     "strict_required_status_checks_policy",
   ];
-  const unknownPullKeys = Object.keys(pull).filter(
-    (key) => ![...requiredPullKeys, ...optionalPullKeys].includes(key),
-  );
   const missingPullKeys = requiredPullKeys.filter((key) => !(key in pull));
-  if (unknownPullKeys.length > 0 || missingPullKeys.length > 0) {
-    drifts.push("pull request rule parameter keys differ");
+  if (missingPullKeys.length > 0) {
+    drifts.push(
+      `pull request rule is missing required parameters: ${missingPullKeys.sort().join(", ")}`,
+    );
   }
-  if (
-    Object.keys(checks).sort().join(",") !==
-    [...expectedCheckKeys].sort().join(",")
-  ) {
-    drifts.push("status-check rule parameter keys differ");
+  const missingCheckKeys = expectedCheckKeys.filter((key) => !(key in checks));
+  if (missingCheckKeys.length > 0) {
+    drifts.push(
+      `status-check rule is missing required parameters: ${missingCheckKeys.sort().join(", ")}`,
+    );
   }
   for (const key of ["name", "source_type", "source", "target"]) {
     if (ruleset?.[key] !== desired[key]) drifts.push(`ruleset ${key} differs`);
@@ -1364,12 +1368,8 @@ export function evaluateRepositoryPolicy({
   const desiredWorkflowPermissions = isRecord(desired.actions_workflow_permissions)
     ? desired.actions_workflow_permissions
     : {};
-  if (
-    !isRecord(workflowPermissions) ||
-    Object.keys(workflowPermissions).sort().join(",") !==
-      Object.keys(desiredWorkflowPermissions).sort().join(",")
-  ) {
-    drifts.push("Actions workflow permission keys differ");
+  if (!isRecord(workflowPermissions)) {
+    drifts.push("Actions workflow permissions are unverifiable");
   }
   for (const [key, value] of Object.entries(desiredWorkflowPermissions)) {
     if (workflowPermissions?.[key] !== value) {

@@ -1225,6 +1225,7 @@ test("event resolution and layered status payloads are deterministic", () => {
     resolvePullRequestNumber({ review: { pull_request_url: "https://api.github.com/pulls/9" } }),
     9,
   );
+  assert.equal(resolvePullRequestNumber({ inputs: { pull_request_number: "11" } }), 11);
   assert.throws(() => resolvePullRequestNumber({ issue: { number: 10 } }));
   const pending = buildStatusPayloads({
     state: "pending",
@@ -1464,7 +1465,10 @@ test("driver fence yields to newer runs and never writes terminal status after H
     statuses: newerStatuses,
   });
   assert.equal(superseded.outcome.outcome, "superseded");
-  assert.deepEqual(superseded.published, []);
+  assert.deepEqual(
+    superseded.published.map((item) => item.state),
+    ["pending", "reassert"],
+  );
 
   const drifted = await runDriver([
     rawSnapshot(),
@@ -1549,7 +1553,10 @@ test("older runs do not publish over a higher run discovered before or after pen
     runUrl: runA,
   });
   assert.equal(supersededBefore.outcome, "superseded");
-  assert.deepEqual(before, []);
+  assert.deepEqual(
+    before.map((item) => item[1]),
+    ["pending", "reassert"],
+  );
 
   const after = [];
   let reads = 0;
@@ -1796,13 +1803,43 @@ test("shared HEAD across two open pull requests cannot reuse another pull reques
     runUrl: currentRun,
   });
   assert.equal(result.outcome, "fail");
-  assert.deepEqual(published.map((item) => item.state), ["terminal"]);
+  assert.deepEqual(published.map((item) => item.state), ["pending", "terminal"]);
   assert.match(
-    published[0].value.deliveryReasons.join(" "),
+    published[1].value.deliveryReasons.join(" "),
     /exactly one open current pull request/,
   );
-  assert.equal(published[0].targetUrl, currentRun);
+  assert.equal(published[1].targetUrl, currentRun);
   assert.equal(reviewDecisions.at(-1).event, "REQUEST_CHANGES");
+});
+
+test("driver publishes pending immediately after exact HEAD and before remote preflight reads", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  const calls = [];
+  await runPolicyEvaluation({
+    loadHead: async () => {
+      calls.push("head");
+      return sha;
+    },
+    loadSnapshot: async () => {
+      calls.push("snapshot");
+      return rawSnapshot();
+    },
+    loadAssociatedPullRequests: async () => {
+      calls.push("association");
+      return associatedPullRequests();
+    },
+    publish: async (_head, state) => calls.push(`publish:${state}`),
+    publishReview: async () => calls.push("review"),
+    listStatuses: async () => {
+      calls.push("statuses");
+      return ownedStatuses(runUrl);
+    },
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl,
+  });
+  assert.deepEqual(calls.slice(0, 3), ["head", "publish:pending", "association"]);
 });
 
 test("driver exception path fails only the original owned status contexts", async () => {
@@ -1962,13 +1999,10 @@ test("repository policy drift fixtures cover every required live control", () =>
     (value) =>
       (value.ruleset.rules[0].parameters.required_approving_review_count = 0),
     (value) => (value.ruleset.rules[0].parameters.required_reviewers = [{}]),
-    (value) => (value.ruleset.rules[0].parameters.future_option = true),
     (value) => delete value.ruleset.rules[0].parameters.required_reviewers,
-    (value) => (value.ruleset.rules[1].parameters.future_option = true),
     (value) => (value.settings.allow_auto_merge = false),
     (value) => (value.workflowPermissions.default_workflow_permissions = "write"),
     (value) => (value.workflowPermissions.can_approve_pull_request_reviews = false),
-    (value) => (value.workflowPermissions.future_option = true),
   ];
   for (const mutate of mutations) {
     const value = structuredClone({ ruleset, settings, workflowPermissions });
@@ -1977,6 +2011,18 @@ test("repository policy drift fixtures cover every required live control", () =>
       evaluateRepositoryPolicy({ ...value, desired }).length > 0,
     );
   }
+  const additiveResponseFields = structuredClone({
+    ruleset,
+    settings,
+    workflowPermissions,
+  });
+  additiveResponseFields.ruleset.rules[0].parameters.future_option = true;
+  additiveResponseFields.ruleset.rules[1].parameters.future_option = true;
+  additiveResponseFields.workflowPermissions.future_option = true;
+  assert.deepEqual(
+    evaluateRepositoryPolicy({ ...additiveResponseFields, desired }),
+    [],
+  );
   const hiddenBypass = structuredClone(ruleset);
   delete hiddenBypass.bypass_actors;
   assert.ok(

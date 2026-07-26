@@ -24,8 +24,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/review-gate.mjs branches
-      - name: Audit live repository delivery policy
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/review-gate.mjs audit
+      - name: Record privileged policy audit boundary
+        run: >-
+          echo '{"live_settings_audit":"unverifiable","reason":"scheduled
+          GITHUB_TOKEN cannot read administrator-only repository delivery settings;
+          run the documented manual audit with a least-privilege administrator token"}'

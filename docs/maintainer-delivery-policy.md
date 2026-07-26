@@ -132,19 +132,24 @@ repository audit logs are the external evidence for destructive administrative c
   audit reports every other branch without a same-repository pull request; a same-named fork branch
   or malformed pull-request head does not satisfy the rule.
 - A commit SHA must be the HEAD of exactly one open pull request for the gate to evaluate it. Shared
-  open HEADs fail closed so commit-scoped statuses cannot be reused by another pull request.
+  open HEADs fail closed so commit-scoped statuses cannot be reused by another pull request. After
+  closing the duplicate pull request or moving it to a different HEAD, use the delivery-policy
+  workflow's manual dispatch with the affected pull request number to recover the original pull
+  request immediately; normal pull request activity also re-evaluates it.
 
 The auditable repository policy is `.github/delivery-policy.json`. Changes to the policy or its
 enforcement are themselves sensitive. It also records the desired live ruleset: strict required
 `verify`, `model-review-gate`, and `delivery-policy` contexts; squash-only merge; required review
 conversation resolution; current-HEAD approval; stale-review dismissal; and no bypass actors. Each
 required context is source-bound to the
-GitHub Actions application ID recorded from the repository API. The scheduled audit runs even when
-branch hygiene fails and compares the visible live repository-scoped ruleset and merge settings
-with this desired state. It also requires repository Actions defaults to remain read-only while
-allowing Actions to approve pull-request reviews; only the trusted gate workflow receives local
-`pull-requests: write`. Hidden bypass actors, unknown rule parameters, or insufficient visibility
-are `unverifiable`, never compliant. Complete closure evidence requires running
+GitHub Actions application ID recorded from the repository API. The scheduled workflow audits
+branch hygiene using its credential-free read access and explicitly records that administrator-only
+live settings are unverifiable from the scheduled identity. Live policy auditing also requires
+repository Actions defaults to remain read-only while allowing Actions to approve pull-request
+reviews; only the trusted gate workflow receives local `pull-requests: write`. The live audit
+tolerates additive API response fields while checking every configured security-relevant value.
+Hidden bypass actors, missing required parameters, or insufficient visibility are `unverifiable`,
+never compliant. Complete closure evidence requires running
 `node scripts/review-gate.mjs audit` with an explicit read-only maintainer or administrator
 credential. No credential is stored by the workflow.
 
