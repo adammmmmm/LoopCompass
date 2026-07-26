@@ -1047,6 +1047,14 @@ describe("terminal receipt contract", () => {
         "owner: Incident Coordinator",
         'owner: "Incident\\u0000Coordinator"',
       ),
+      (content) => content.replace(
+        "owner: Incident Coordinator",
+        'owner: "\\tIncident Coordinator"',
+      ),
+      (content) => content.replace(
+        "owner: Incident Coordinator",
+        'owner: "Incident Coordinator\\n"',
+      ),
     ];
     for (const mutate of incidentMutations) {
       const invalid = structuredClone(propagatedCase.terminal_receipt);
@@ -1088,6 +1096,20 @@ describe("terminal receipt contract", () => {
       () => validateTerminalReceipt(signatureControl),
       /unsafe Unicode or control character/,
     );
+
+    for (const [field, replacement] of [
+      ["  os: any", '  os: "\\tany"'],
+      ["first_seen: 2026-07-26", 'first_seen: "2026-07-26\\n"'],
+      ["expires_after_days: 30", 'expires_after_days: "\\t30"'],
+    ]) {
+      const boundaryControl = recoveryProposalReceipt();
+      boundaryControl.proposed_artifact.content =
+        boundaryControl.proposed_artifact.content.replace(field, replacement);
+      assert.throws(
+        () => validateTerminalReceipt(boundaryControl),
+        /unsafe Unicode or control character/,
+      );
+    }
 
     const benign = recoveryProposalReceipt();
     benign.proposed_artifact.content = benign.proposed_artifact.content.replace(

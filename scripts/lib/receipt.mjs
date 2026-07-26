@@ -548,6 +548,7 @@ function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
   if (decoded === null || !decodedArtifactScalarIsValid(decoded)) {
     return null;
   }
+  validateSanitizedProse(decoded, "decoded artifact scalar");
   return strictPlainScalar(decoded);
 }
 
