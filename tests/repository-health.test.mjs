@@ -106,7 +106,10 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.match(reviewWorkflow, /statuses: write/);
   assert.match(reviewWorkflow, /pull-requests: write/);
   assert.match(reviewWorkflow, /actions: read/);
-  assert.match(reviewWorkflow, /run-name: delivery-policy-/);
+  assert.match(
+    reviewWorkflow,
+    /run-name: delivery-policy-.+-head-\$\{\{ github\.event\.pull_request\.head\.sha/,
+  );
   for (const otherWorkflow of [
     verifyWorkflow,
     releaseWorkflow,

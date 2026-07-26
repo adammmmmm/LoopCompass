@@ -20,7 +20,10 @@ model identity; public seat identifiers use `R<n>`. Every material finding has a
 disposition, blocker fixes are re-verified, and review conversations are resolved. A push changes
 the HEAD generation, dismisses stale approvals, and invalidates all earlier evidence. The trusted
 workflow-run identifier for each open or synchronize event is the durable per-pull-request
-generation marker, so returning to an earlier SHA does not reactivate its evidence.
+generation marker. The establishing run name records the immutable pull-request HEAD because a
+`pull_request_target` run's API `head_sha` identifies the base branch, not the proposed change.
+Selection uses the newest establishing run ID, so rerunning an older workflow cannot replace a
+newer generation and returning to an earlier SHA does not reactivate its evidence.
 
 Concurrent runs are ordered by numeric Actions run identifiers. Full paginated status history lets
 the higher run reclaim lower-run writes, while foreign or unparseable status sources fail closed.

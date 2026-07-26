@@ -1,5 +1,5 @@
 name: delivery-policy
-run-name: delivery-policy-${{ github.event.action || 'manual' }}-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull_request_number }}
+run-name: delivery-policy-${{ github.event.action || 'manual' }}-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull_request_number }}-head-${{ github.event.pull_request.head.sha || 'none' }}
 
 on:
   workflow_dispatch:

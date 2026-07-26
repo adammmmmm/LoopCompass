@@ -48,18 +48,6 @@ function repository() {
 }
 
 async function resolveHeadGeneration(event, repo, pullNumber, headSha) {
-  if (
-    event.pull_request &&
-    ["opened", "synchronize"].includes(event.action)
-  ) {
-    const run = await api(`/repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`);
-    return {
-      id: Number(run.id),
-      pullNumber,
-      headSha,
-      createdAt: run.created_at,
-    };
-  }
   const candidates = [];
   for (let page = 1; ; page += 1) {
     const response = await api(
@@ -71,6 +59,18 @@ async function resolveHeadGeneration(event, repo, pullNumber, headSha) {
         run.pull_requests?.some((pull) => Number(pull.number) === pullNumber)),
     );
     if (runs.length < 100) break;
+  }
+  if (
+    event.pull_request &&
+    ["opened", "synchronize"].includes(event.action)
+  ) {
+    const run = await api(`/repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`);
+    candidates.push({
+      ...run,
+      display_title:
+        `delivery-policy-${event.action}-pr-${pullNumber}-head-${headSha}`,
+      pull_requests: [{ number: pullNumber }],
+    });
   }
   return selectWorkflowHeadGeneration(candidates, pullNumber);
 }

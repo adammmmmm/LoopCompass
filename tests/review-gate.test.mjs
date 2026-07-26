@@ -1242,15 +1242,19 @@ test("selector fails forward to the latest maintainer marker and ignores foreign
     created_at: "2026-01-01T00:02:00Z",
     updated_at: "2026-01-01T00:02:00Z",
   };
-  const quotedMarker = {
+  const ignoredContexts = [
+    "> <!-- loopcompass-review:v1\n> {}",
+    "```html\n<!-- loopcompass-review:v1\n{}\n```",
+    "    <!-- loopcompass-review:v1\n    {}",
+  ].map((body, index) => ({
     ...comment(metadata()),
-    id: 13,
-    body: "Documentation mentions loopcompass-review:v1 without publishing metadata.",
-    created_at: "2026-01-01T00:03:00Z",
-    updated_at: "2026-01-01T00:03:00Z",
-  };
+    id: 13 + index,
+    body,
+    created_at: `2026-01-01T00:0${3 + index}:00Z`,
+    updated_at: `2026-01-01T00:0${3 + index}:00Z`,
+  }));
   assert.equal(
-    selectReviewComment([older, latest, foreign, quotedMarker], ["maintainer"]),
+    selectReviewComment([older, latest, foreign, ...ignoredContexts], ["maintainer"]),
     latest,
   );
 });
@@ -1456,21 +1460,21 @@ test("workflow runs provide a trusted per-pull-request head generation", () => {
       [
         {
           id: 10,
-          display_title: "delivery-policy-opened-pr-1",
-          head_sha: sha,
+          display_title: `delivery-policy-opened-pr-1-head-${sha}`,
+          head_sha: "c".repeat(40),
           created_at: "2026-01-01T00:00:00Z",
           pull_requests: [{ number: 1 }],
         },
         {
           id: 12,
-          display_title: "delivery-policy-synchronize-pr-1",
-          head_sha: otherSha,
+          display_title: `delivery-policy-synchronize-pr-1-head-${otherSha}`,
+          head_sha: "c".repeat(40),
           created_at: "2026-01-01T00:02:00Z",
           pull_requests: [{ number: 1 }],
         },
         {
           id: 99,
-          display_title: "delivery-policy-synchronize-pr-2",
+          display_title: `delivery-policy-synchronize-pr-2-head-${sha}`,
           head_sha: sha,
           created_at: "2026-01-01T00:03:00Z",
           pull_requests: [{ number: 2 }],
@@ -1485,6 +1489,41 @@ test("workflow runs provide a trusted per-pull-request head generation", () => {
       createdAt: "2026-01-01T00:02:00Z",
     },
   );
+});
+
+test("an older establishing run rerun cannot replace the latest head generation", () => {
+  const headB = "b".repeat(40);
+  const runs = [
+    {
+      id: 10,
+      run_attempt: 2,
+      display_title: `delivery-policy-opened-pr-1-head-${sha}`,
+      head_sha: "c".repeat(40),
+      run_started_at: "2026-01-01T00:04:00Z",
+      created_at: "2026-01-01T00:00:00Z",
+      pull_requests: [{ number: 1 }],
+    },
+    {
+      id: 11,
+      display_title: `delivery-policy-synchronize-pr-1-head-${headB}`,
+      head_sha: "c".repeat(40),
+      created_at: "2026-01-01T00:01:00Z",
+      pull_requests: [{ number: 1 }],
+    },
+    {
+      id: 12,
+      display_title: `delivery-policy-synchronize-pr-1-head-${sha}`,
+      head_sha: "c".repeat(40),
+      created_at: "2026-01-01T00:02:00Z",
+      pull_requests: [{ number: 1 }],
+    },
+  ];
+  assert.deepEqual(selectWorkflowHeadGeneration(runs, 1), {
+    id: 12,
+    pullNumber: 1,
+    headSha: sha,
+    createdAt: "2026-01-01T00:02:00Z",
+  });
 });
 
 function ownedStatuses(runUrl) {

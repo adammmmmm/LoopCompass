@@ -258,6 +258,30 @@ export function parseReviewComment(body) {
   }
 }
 
+function containsCanonicalReviewOpen(body) {
+  const source = normalizeLineEndings(body);
+  if (!nonEmpty(source)) return false;
+  let fence = null;
+  for (const line of source.split("\n")) {
+    const fenceMatch = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0];
+      if (fence === marker) fence = null;
+      else if (fence === null) fence = marker;
+      continue;
+    }
+    if (
+      fence !== null ||
+      /^(?: {4}|\t)/.test(line) ||
+      /^ {0,3}>/.test(line)
+    ) {
+      continue;
+    }
+    if (line === REVIEW_OPEN.trimEnd()) return true;
+  }
+  return false;
+}
+
 export function renderHumanAuthorization(headSha, headGeneration = 1) {
   const metadata = {
     schema: 1,
@@ -857,7 +881,8 @@ export function selectReviewComment(comments, maintainers = []) {
     .filter(
       (comment) =>
         isRecord(comment) &&
-        allowed.has(normalize(comment.author)) && comment.body?.includes(REVIEW_OPEN),
+        allowed.has(normalize(comment.author)) &&
+        containsCanonicalReviewOpen(comment.body),
     )
     .sort((left, right) => {
       const time = new Date(right.created_at) - new Date(left.created_at);
@@ -887,7 +912,7 @@ export function analyzeReviewHistory(
     }
     if (
       !allowed.has(normalize(comment.author)) ||
-      !comment.body?.includes(REVIEW_OPEN)
+      !containsCanonicalReviewOpen(comment.body)
     ) {
       continue;
     }
@@ -978,23 +1003,29 @@ export function resolvePullRequestNumber(event) {
 }
 
 export function selectWorkflowHeadGeneration(runs, pullNumber) {
+  const title = new RegExp(
+    `^delivery-policy-(?:opened|synchronize)-pr-${pullNumber}-head-([0-9a-f]{40})$`,
+    "i",
+  );
   return (Array.isArray(runs) ? runs : [])
+    .map((run) => {
+      const match = title.exec(run?.display_title ?? "");
+      return { run, encodedHead: match?.[1]?.toLowerCase() ?? null };
+    })
     .filter(
-      (run) =>
+      ({ run, encodedHead }) =>
         Number.isSafeInteger(Number(run?.id)) &&
         Number(run.id) > 0 &&
-        exactSha(run.head_sha) &&
-        validTimestamp(run.created_at) &&
-        new RegExp(`^delivery-policy-(?:opened|synchronize)-pr-${pullNumber}$`)
-          .test(run.display_title ?? "") &&
+        exactSha(encodedHead) &&
+        validTimestamp(run.run_started_at ?? run.created_at) &&
         run.pull_requests?.some((pull) => Number(pull?.number) === pullNumber),
     )
-    .sort((left, right) => Number(right.id) - Number(left.id))
-    .map((run) => ({
+    .sort((left, right) => Number(right.run.id) - Number(left.run.id))
+    .map(({ run, encodedHead }) => ({
       id: Number(run.id),
       pullNumber,
-      headSha: run.head_sha,
-      createdAt: run.created_at,
+      headSha: encodedHead,
+      createdAt: run.run_started_at ?? run.created_at,
     }))[0] ?? null;
 }
 
