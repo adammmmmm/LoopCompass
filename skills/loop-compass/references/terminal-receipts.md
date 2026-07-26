@@ -73,8 +73,9 @@ validation. The canonical receipt representation uses a JSON-compatible double-q
 `signature`, strict bracketed `requires` and `consulted` lists whose entries are bare safe scalars
 or JSON-compatible double-quoted strings, and safe plain scalars for the remaining fields.
 Unbalanced lists or quotes, malformed escapes, anchors, aliases, and tags fail validation.
-JSON escapes are decoded once and the same decoded signature drives normalization, identity, and
-capsule validation; an escape that decodes to an unsafe control still fails.
+JSON escapes are decoded once and the same decoded signature and list items drive strict schema and
+shared capsule validation. Quoted commas remain inside one list item; an escape that decodes to an
+unsafe control or unresolved structural marker still fails.
 Incident dates must be real calendar dates. Proposal validation checks containment
 expiry date shape deterministically but defers whether the expiry is current to authoritative
 persistence, when the actual persistence date is known. Recovery scope contains only the required
@@ -85,13 +86,13 @@ terminal receipt signature. Its id is the mechanical signature slug or that slug
 `-N` collision suffix where `N` is at least 2.
 
 Long prose placeholders shipped in a template are invalid anywhere in the proposed artifact,
-including HTML comments, whether bare, angle-wrapped, nested, or split across whitespace, including
-format-control or other default-ignorable insertion. Short structural tokens such as `<integer>`
-and `<capability>` are
-invalid when they are the complete value of a frontmatter field or required section, but remain
-valid in ordinary technical prose. Normalized signature tokens such as `<path>` and `<ts>`, safe
-Markdown autolinks, HTML, and other technical angle-bracket prose remain valid when otherwise
-sanitized. The content is not a one-line instruction, summary, patch fragment, or artifact id.
+including HTML comments, whether bare, angle-wrapped, nested, split across whitespace, or split by
+render-transparent comments and inline tags. Format-control and other default-ignorable insertion
+also fail. Short structural tokens such as `<integer>` and `<capability>` are invalid when they are
+the complete value of a frontmatter field or required section, but remain valid in ordinary
+technical prose. Normalized signature tokens such as `<path>` and `<ts>`, safe Markdown autolinks,
+HTML, and other technical angle-bracket prose remain valid when otherwise sanitized. The content
+is not a one-line instruction, summary, patch fragment, or artifact id.
 
 Outcome-specific rules:
 

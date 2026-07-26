@@ -776,6 +776,38 @@ describe("terminal receipt contract", () => {
     assert.doesNotThrow(() => validateTerminalReceipt(safe));
   });
 
+  it("rejects render-equivalent markers split by comments or paired tags", () => {
+    for (const marker of proseTemplateMarkers) {
+      const boundary = marker.indexOf(" ");
+      assert.ok(boundary > 0, marker);
+      const before = marker.slice(0, boundary);
+      const after = marker.slice(boundary);
+      for (const injected of [
+        `${before}<!-- harmless boundary -->${after}`,
+        `${before}<em>${after}</em>`,
+      ]) {
+        const proposed = structuredClone(propagatedCase.terminal_receipt);
+        proposed.proposed_artifact.content =
+          proposed.proposed_artifact.content.replace(
+            "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+            `Normal path: ${injected}`,
+          );
+        assert.throws(
+          () => validateTerminalReceipt(proposed),
+          /content must be a complete filled sanitized incident artifact/,
+          marker,
+        );
+      }
+    }
+
+    const safe = structuredClone(propagatedCase.terminal_receipt);
+    safe.proposed_artifact.content = safe.proposed_artifact.content.replace(
+      "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+      "Normal path: use <code>status</code> with <!-- harmless detail --> ordinary verification prose.",
+    );
+    assert.doesNotThrow(() => validateTerminalReceipt(safe));
+  });
+
   it("rejects nested, default-ignorable, and whitespace-obscured template markers", () => {
     const mutations = [
       (content) => content.replace(
@@ -1035,6 +1067,34 @@ describe("terminal receipt contract", () => {
       proposed.proposed_artifact.content = content;
       assert.throws(
         () => validateTerminalReceipt(proposed),
+        /content must be a complete filled sanitized incident artifact/,
+      );
+    }
+  });
+
+  it("uses one decoded inline-list representation for schema validation", () => {
+    const quotedComma = structuredClone(propagatedCase.terminal_receipt);
+    quotedComma.proposed_artifact.content =
+      quotedComma.proposed_artifact.content.replace(
+        "requires: [repository_write]",
+        'requires: ["repository_write,review"]',
+      );
+    const parsed = parseFrontmatter(quotedComma.proposed_artifact.content);
+    assert.deepEqual(parsed.fields.requires, ["repository_write,review"]);
+    assert.doesNotThrow(() => validateTerminalReceipt(quotedComma));
+
+    for (const encoded of [
+      'requires: ["repository_write\\u0000"]',
+      'requires: ["\\u003ccapability\\u003e"]',
+    ]) {
+      const invalid = structuredClone(propagatedCase.terminal_receipt);
+      invalid.proposed_artifact.content =
+        invalid.proposed_artifact.content.replace(
+          "requires: [repository_write]",
+          encoded,
+        );
+      assert.throws(
+        () => validateTerminalReceipt(invalid),
         /content must be a complete filled sanitized incident artifact/,
       );
     }

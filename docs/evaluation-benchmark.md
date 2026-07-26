@@ -68,12 +68,12 @@ path, email, or secret shape.
 Case ids are unique. Every observed receipt object includes explicit `terminal_receipt` and
 `parent_receipt` properties whose values are either complete objects or `null`; omission is not an
 alternate representation of a miss.
-The evaluator also owns a minimum required corpus inventory. Fixtures that erase the classified
-positive, expected-negative, read-only proposal-and-closure, or missing-parent negative partitions
-fail before scoring. Each mandatory id is bound to its expected classification, terminal outcome,
-receipt requirements, and relevant observed closure shape, so preserving a name while replacing
-its scenario does not preserve the partition. A fixture cannot redefine those denominators by
-deleting or relabeling its own cases.
+The evaluator owns the complete required case inventory and a canonical digest of every case's
+semantic projection: id, agent role, skill state, project-instruction state, and the full expected
+result. Deleting, adding, renaming, or replacing any case fails before scoring, including
+blind-retry, missing-instruction, and workaround-negative cases. Observed receipts remain mutable
+inputs so the benchmark can score them, but a submitted fixture cannot redefine its own semantic
+ground truth or denominators.
 
 `fixture.metrics` must exactly match the evaluator's single ordered metric registry. Missing,
 duplicate, unknown, or reordered entries fail validation. The same registry drives report

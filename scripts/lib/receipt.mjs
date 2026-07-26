@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { parseIsoDate, validateCapsuleText } from "./capsule.mjs";
-import { parseFrontmatter } from "./frontmatter.mjs";
+import { parseFrontmatter, parseInlineListValue } from "./frontmatter.mjs";
 import {
   isMechanicalSlugOrCollision,
   normalizeSignature,
@@ -473,43 +473,27 @@ function strictPlainScalar(raw) {
 }
 
 function parseStrictInlineList(raw, { nonempty }) {
-  const value = raw.trim();
-  if (!value.startsWith("[") || !value.endsWith("]")) {
+  const items = parseInlineListValue(raw);
+  if (items === null || (nonempty && items.length === 0)) {
     return null;
   }
-  const inner = value.slice(1, -1).trim();
-  if (inner.length === 0) {
-    return nonempty ? null : [];
-  }
-  const items = [];
-  let start = 0;
-  let quoted = false;
-  let escaped = false;
-  for (let index = 0; index <= inner.length; index += 1) {
-    const character = inner[index];
-    if (quoted) {
-      if (escaped) {
-        escaped = false;
-      } else if (character === "\\") {
-        escaped = true;
-      } else if (character === '"') {
-        quoted = false;
-      }
-    } else if (character === '"') {
-      quoted = true;
-    } else if (character === "," || index === inner.length) {
-      const item = inner.slice(start, index).trim();
-      const parsed = item.startsWith('"')
-        ? parseStrictQuotedString(item)
-        : strictPlainScalar(item);
-      if (parsed === null) {
-        return null;
-      }
-      items.push(parsed);
-      start = index + 1;
+  for (const parsed of items) {
+    if (strictPlainScalar(parsed) === null) {
+      return null;
+    }
+    try {
+      validateSanitizedProse(parsed, "frontmatter list item");
+    } catch {
+      return null;
+    }
+    if (
+      scalarLooksUnresolved(parsed)
+      || structuralTemplatePlaceholders.has(unwrapStructuralPlaceholder(parsed))
+    ) {
+      return null;
     }
   }
-  return quoted || escaped || items.length === 0 ? null : items;
+  return items;
 }
 
 function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
@@ -518,10 +502,10 @@ function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
     return parseStrictQuotedString(value);
   }
   if (kind === "incident" && !nested && field === "requires") {
-    return parseStrictInlineList(value, { nonempty: true }) === null ? null : value;
+    return parseStrictInlineList(value, { nonempty: true });
   }
   if (kind === "incident" && !nested && field === "consulted") {
-    return parseStrictInlineList(value, { nonempty: false }) === null ? null : value;
+    return parseStrictInlineList(value, { nonempty: false });
   }
   return strictPlainScalar(value);
 }
@@ -596,20 +580,6 @@ function parseStrictProposedFrontmatter(source, kind) {
     && [...recoveryScopeFields].every((field) => scope.has(field))
     ? fields
     : null;
-}
-
-function parseInlineList(raw, { nonempty }) {
-  const match = /^\[(.*)\]$/.exec(raw.trim());
-  if (!match) {
-    return null;
-  }
-  if (match[1].trim() === "") {
-    return nonempty ? null : [];
-  }
-  const items = match[1].split(",").map((item) =>
-    item.trim().replace(/^(["'])(.*)\1$/, "$2"),
-  );
-  return items.some((item) => item.length === 0) ? null : items;
 }
 
 function parseNestedMap(source, key) {
@@ -709,9 +679,15 @@ function unwrapStructuralPlaceholder(value) {
 
 function containsShippedTemplatePlaceholder(content, source, body, kind) {
   const normalizedRawContent = normalizeTemplateMarker(content);
+  const renderEquivalentContent = normalizeTemplateMarker(
+    content
+      .replace(/<!--[\s\S]*?-->/gu, "")
+      .replace(/<\/?[A-Za-z][^>]*>/gu, ""),
+  );
   if (
     [...proseTemplatePlaceholders].some((marker) =>
-      normalizedRawContent.includes(normalizeTemplateMarker(marker)),
+      normalizedRawContent.includes(normalizeTemplateMarker(marker))
+      || renderEquivalentContent.includes(normalizeTemplateMarker(marker)),
     )
     ||
     angleCandidatesFromEveryStart(content).some((candidate) =>
@@ -742,20 +718,16 @@ function containsShippedTemplatePlaceholder(content, source, body, kind) {
 
 function validateIncidentArtifactSchema(fields, source) {
   const requiredPresent = requiredArtifactFields.incident.every((field) =>
-    hasNonemptyField(fields, field),
+    field === "requires"
+      ? Array.isArray(fields[field]) && fields[field].length > 0
+      : field === "consulted"
+        ? Array.isArray(fields[field])
+        : hasNonemptyField(fields, field),
   );
-  const requires = hasField(fields, "requires")
-    ? parseInlineList(fields.requires, { nonempty: true })
-    : null;
-  const consulted = hasField(fields, "consulted")
-    ? parseInlineList(fields.consulted, { nonempty: false })
-    : null;
   const containmentExpiryValid =
     fields.containment_expires === "null"
     || parseIsoDate(fields.containment_expires) !== null;
   return requiredPresent
-    && requires !== null
-    && consulted !== null
     && parseIsoDate(fields.opened) !== null
     && containmentExpiryValid
     && source.length > 0;

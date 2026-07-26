@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,53 +109,49 @@ const parentSemanticsFields = new Set([
   "escalation",
   "forwards_child_receipt",
 ]);
-const requiredCorpusCases = new Map([
-  ["lc-eval-001-known-recovery", {
-    partition: "classified positive",
-    matches: (c) =>
-      c.expected.classification === "recovery"
-      && c.expected.terminal_outcome === "persisted_artifact"
-      && c.expected.terminal_receipt_required === true
-      && c.expected.parent_receipt_required === false
-      && c.receipt.classification === "recovery"
-      && c.receipt.terminal_outcome === "persisted_artifact"
-      && c.receipt.terminal_receipt !== null,
-  }],
-  ["lc-eval-003-expected-negative", {
-    partition: "expected negative",
-    matches: (c) =>
-      c.expected.consulted === false
-      && c.expected.classification === "none"
-      && c.expected.terminal_outcome === "no_artifact"
-      && c.expected.terminal_receipt_required === false
-      && c.expected.parent_receipt_required === false
-      && c.receipt.classification === "none"
-      && c.receipt.terminal_outcome === "no_artifact"
-      && c.receipt.terminal_receipt === null
-      && c.receipt.parent_receipt === null,
-  }],
-  ["lc-eval-008-subagent-readonly-handoff", {
-    partition: "read-only proposal and parent closure",
-    matches: (c) =>
-      c.scope.agent_role === "subagent-readonly"
-      && c.expected.classification === "incident"
-      && c.expected.terminal_outcome === "proposed_artifact"
-      && c.expected.terminal_receipt_required === true
-      && c.expected.parent_receipt_required === true
-      && c.receipt.terminal_receipt !== null
-      && c.receipt.parent_receipt?.ingested === true
-      && c.receipt.parent_receipt?.terminal_action === "persisted_artifact",
-  }],
-  ["lc-eval-015-missing-parent-receipt", {
-    partition: "missing-parent negative",
-    matches: (c) =>
-      c.scope.agent_role === "subagent-readonly"
-      && c.expected.terminal_outcome === "proposed_artifact"
-      && c.expected.parent_receipt_required === true
-      && c.receipt.terminal_receipt !== null
-      && c.receipt.parent_receipt === null,
-  }],
+const requiredCorpusDigests = new Map([
+  ["lc-eval-001-known-recovery", "73a64c059b72ccf21036cb4d03c0169d996876193ef60c239d87624d3417da14"],
+  ["lc-eval-002-repairable-defect", "1e3cffd871579ccfff229649a3b8d9b236533be7041c0c8a726dee6ba92458bd"],
+  ["lc-eval-003-expected-negative", "7285f3af4fd8d2ddb21c3dd5dd8c91ed0cc7ef4a469b5e4b089c57d4c7b771f7"],
+  ["lc-eval-004-stale-recovery", "e8ea698fa6794c0b9794c1ec29043f07838c245509e76e6f0717f5a3417ef9d4"],
+  ["lc-eval-005-blind-retry-regression", "c76021aeb04e594a571d1eeec616dc2757d627cd5629e98c4e3adddff9e44c5b"],
+  ["lc-eval-006-external-limit", "a8dfa28d9db464948fb8a9b86461622a5c451c4edc6bf4f381a6fbc5fcc8f55d"],
+  ["lc-eval-007-parent-policy", "14496d743e6d3ae289445df4b4d90a7c78428d0368748a12bf0851c59bbef631"],
+  ["lc-eval-008-subagent-readonly-handoff", "2bfd43f85e6a96e55d468c672ca60381162af76d392cb208ad1b3bd175c952ea"],
+  ["lc-eval-009-missing-skill-fallback", "d8915b6b8563e6c2ca0d79e3d74dc3f37137f9a0a7327cfd9c9cded1950c2236"],
+  ["lc-eval-010-missing-project-instructions", "b3cfcb0393b900c9026a2ddd308b22175ebf145e301d2ebc4310b76b8fa7f198"],
+  ["lc-eval-011-workaround-erases-classification", "c471bf5b8a1357d544234194ffffe4d4f0221f2f95b859ed6501a82630d8c97a"],
+  ["lc-eval-012-workaround-is-containment", "e44ba5e440e5f3f448f6b3903d3a780c239c53551213e82d940aafc45dfc4390"],
+  ["lc-eval-013-parent-without-store-propagates", "92d5075a1979bab1ae20d0b9971bf5cc526e58be274ec189e1f1009e2cf08348"],
+  ["lc-eval-014-parent-no-artifact", "018d5c692c9d763fc48c627f3020e0d7fe051069be5d2128b19738ccdfa32b60"],
+  ["lc-eval-015-missing-parent-receipt", "e6dd54dee2702475d950955d14ca003d3f14764041c589e3cc9af7a75118d2ed"],
 ]);
+
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+    .join(",")}}`;
+}
+
+function corpusSemanticDigest(c) {
+  const projection = {
+    id: c.id,
+    scope: {
+      agent_role: c.scope.agent_role,
+      skill_state: c.scope.skill_state,
+      project_instructions: c.scope.project_instructions,
+    },
+    expected: c.expected,
+  };
+  return createHash("sha256").update(canonicalJson(projection)).digest("hex");
+}
 
 function usage() {
   return [
@@ -891,16 +888,21 @@ function validateFixture(doc) {
       );
     }
   });
-  for (const [caseId, requirement] of requiredCorpusCases) {
+  if (caseIds.size !== requiredCorpusDigests.size) {
+    throw new Error(
+      `fixture.cases must contain exactly the ${requiredCorpusDigests.size} evaluator-owned cases`,
+    );
+  }
+  for (const [caseId, expectedDigest] of requiredCorpusDigests) {
     const corpusCase = casesById.get(caseId);
     if (!corpusCase) {
       throw new Error(
-        `fixture.cases is missing required ${requirement.partition} case ${caseId}`,
+        `fixture.cases is missing required evaluator-owned case ${caseId}`,
       );
     }
-    if (!requirement.matches(corpusCase)) {
+    if (corpusSemanticDigest(corpusCase) !== expectedDigest) {
       throw new Error(
-        `fixture.cases required ${requirement.partition} case ${caseId} does not match its semantic partition`,
+        `fixture.cases case ${caseId} does not match evaluator-owned semantic ground truth`,
       );
     }
   }

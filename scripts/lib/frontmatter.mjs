@@ -2,9 +2,58 @@
  * Minimal YAML-ish frontmatter parse/validate for LoopCompass artifacts.
  */
 
+export function parseInlineListValue(raw) {
+  const value = String(raw ?? "").trim();
+  if (!value.startsWith("[") || !value.endsWith("]")) {
+    return null;
+  }
+  const inner = value.slice(1, -1).trim();
+  if (inner.length === 0) {
+    return [];
+  }
+  const items = [];
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = 0; index <= inner.length; index += 1) {
+    const character = inner[index];
+    if (quoted) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        quoted = false;
+      }
+    } else if (character === '"') {
+      quoted = true;
+    } else if (character === "," || index === inner.length) {
+      const item = inner.slice(start, index).trim();
+      if (item.length === 0) {
+        return null;
+      }
+      if (item.startsWith('"')) {
+        try {
+          const decoded = JSON.parse(item);
+          if (typeof decoded !== "string" || decoded.length === 0) {
+            return null;
+          }
+          items.push(decoded);
+        } catch {
+          return null;
+        }
+      } else {
+        items.push(item);
+      }
+      start = index + 1;
+    }
+  }
+  return quoted || escaped || items.length === 0 ? null : items;
+}
+
 /**
  * @param {string} text
- * @returns {{ fields: Record<string, string>, body: string }}
+ * @returns {{ fields: Record<string, string | string[]>, body: string }}
  */
 export function parseFrontmatter(text) {
   const src = String(text ?? "").replace(/\r\n/g, "\n");
@@ -21,7 +70,10 @@ export function parseFrontmatter(text) {
     const match = /^([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
     if (!match) continue;
     let value = match[2].trim();
-    if (value.startsWith('"') && value.endsWith('"')) {
+    const inlineList = parseInlineListValue(value);
+    if (inlineList !== null) {
+      value = inlineList;
+    } else if (value.startsWith('"') && value.endsWith('"')) {
       try {
         const decoded = JSON.parse(value);
         if (typeof decoded === "string") {

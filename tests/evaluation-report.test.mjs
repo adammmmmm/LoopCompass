@@ -217,63 +217,43 @@ describe("evaluation benchmark report", () => {
     assert.match(result.stderr, /cases\[1\]\.id duplicates cases\[0\]\.id/);
   });
 
-  it("rejects an empty corpus or deletion of required benchmark partitions", () => {
-    const requiredCases = [
-      ["lc-eval-001-known-recovery", "classified positive"],
-      ["lc-eval-003-expected-negative", "expected negative"],
-      ["lc-eval-008-subagent-readonly-handoff", "read-only proposal and parent closure"],
-      ["lc-eval-015-missing-parent-receipt", "missing-parent negative"],
-    ];
-
+  it("rejects an empty corpus or deletion of any evaluator-owned case", () => {
+    const requiredIds = readFixture().cases.map((c) => c.id);
     const empty = readFixture();
     empty.cases = [];
     const emptyResult = runEvaluateWithDoc(empty);
     assert.equal(emptyResult.status, 1);
-    assert.match(emptyResult.stderr, /missing required classified positive case/);
+    assert.match(emptyResult.stderr, /must contain exactly the 15 evaluator-owned cases/);
 
-    for (const [id, partition] of requiredCases) {
+    for (const id of requiredIds) {
       const doc = readFixture();
       doc.cases = doc.cases.filter((c) => c.id !== id);
       const result = runEvaluateWithDoc(doc);
       assert.equal(result.status, 1);
-      assert.match(result.stderr, new RegExp(`missing required ${partition} case ${id}`));
+      assert.match(result.stderr, /must contain exactly the 15 evaluator-owned cases/);
     }
   });
 
-  it("binds required corpus ids to their semantic partitions", () => {
-    const substitutions = [
-      ["lc-eval-001-known-recovery", "classified positive"],
-      ["lc-eval-008-subagent-readonly-handoff", "read-only proposal and parent closure"],
-      ["lc-eval-015-missing-parent-receipt", "missing-parent negative"],
-    ];
-    for (const [targetId, partition] of substitutions) {
+  it("binds every corpus id to evaluator-owned semantic ground truth", () => {
+    const requiredIds = readFixture().cases.map((c) => c.id);
+    assert.ok(requiredIds.includes("lc-eval-005-blind-retry-regression"));
+    assert.ok(requiredIds.includes("lc-eval-010-missing-project-instructions"));
+    assert.ok(requiredIds.includes("lc-eval-011-workaround-erases-classification"));
+
+    for (const targetId of requiredIds) {
       const doc = readFixture();
-      const targetIndex = doc.cases.findIndex((c) => c.id === targetId);
-      const replacement = structuredClone(
-        doc.cases.find((c) => c.id === "lc-eval-003-expected-negative"),
-      );
-      replacement.id = targetId;
-      doc.cases[targetIndex] = replacement;
+      const target = doc.cases.find((c) => c.id === targetId);
+      target.expected.blind_retry = !target.expected.blind_retry;
+      target.receipt.blind_retry = target.expected.blind_retry;
       const result = runEvaluateWithDoc(doc);
       assert.equal(result.status, 1);
       assert.match(
         result.stderr,
-        new RegExp(`required ${partition} case ${targetId} does not match its semantic partition`),
+        new RegExp(
+          `case ${targetId} does not match evaluator-owned semantic ground truth`,
+        ),
       );
     }
-
-    const expectedNegative = readFixture();
-    const negativeCase = expectedNegative.cases.find(
-      (c) => c.id === "lc-eval-003-expected-negative",
-    );
-    negativeCase.receipt.consulted = true;
-    negativeCase.expected.consulted = true;
-    const result = runEvaluateWithDoc(expectedNegative);
-    assert.equal(result.status, 1);
-    assert.match(
-      result.stderr,
-      /required expected negative case lc-eval-003-expected-negative does not match its semantic partition/,
-    );
   });
 
   it("rejects a receipt whose host does not match its declared scope", () => {
@@ -405,7 +385,6 @@ describe("evaluation benchmark report", () => {
   it("bounds every rendered identifier and rejects table-cell injection", () => {
     const exact = readFixture();
     exact.benchmark = "b".repeat(128);
-    exact.cases[1].id = "c".repeat(128);
     exact.cases[0].scope.host = "h".repeat(128);
     exact.cases[0].receipt.host = "h".repeat(128);
     let result = runEvaluateWithDoc(exact);
