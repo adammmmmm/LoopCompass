@@ -6,7 +6,10 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.mjs";
-import { slugFromSignature } from "./signature.mjs";
+import {
+  isMechanicalSlugOrCollision,
+  slugFromSignature,
+} from "./signature.mjs";
 
 export const RECOVERY_STATUSES = new Set([
   "candidate",
@@ -32,7 +35,10 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export function parseIsoDate(raw) {
   if (!raw || !DATE_RE.test(raw)) return null;
   const d = new Date(`${raw}T00:00:00.000Z`);
-  return Number.isNaN(d.getTime()) ? null : d;
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== raw) {
+    return null;
+  }
+  return d;
 }
 
 /**
@@ -73,9 +79,7 @@ export function validateCapsuleText(text, opts) {
     const expected = slugFromSignature(fields.signature);
     // Allow collision suffixes -2, -3 on id when signature slug is the prefix.
     const id = fields.id;
-    const ok =
-      id === expected ||
-      (id.startsWith(`${expected}-`) && /^[0-9]+$/.test(id.slice(expected.length + 1)));
+    const ok = isMechanicalSlugOrCollision(id, expected);
     if (!ok) {
       errors.push(
         `${filename}: id must be mechanical slug of signature (expected ${expected} or ${expected}-N, got ${id})`,

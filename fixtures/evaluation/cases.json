@@ -10,13 +10,17 @@
   "metrics": [
     "consultation_recall",
     "host_enforcement_quality",
+    "skill_decision_quality",
     "classification_accuracy_when_consulted",
     "false_trigger_rate",
     "stale_rejection_rate",
     "repeated_failure_reduction",
     "blind_retry_rate",
     "time_to_verified_normal_path",
-    "terminal_outcome_compliance"
+    "terminal_outcome_compliance",
+    "terminal_receipt_completeness",
+    "terminal_receipt_semantic_accuracy",
+    "worker_to_parent_closure"
   ],
   "cases": [
     {
@@ -33,7 +37,7 @@
         "host": "codex-synthetic",
         "consulted": true,
         "host_enforced": true,
-        "failure": "uv sync failed writing cache under /home/runner/.cache/uv with disk full on ephemeral runner",
+        "failure": "uv sync failed writing cache under <user-home>/.cache/uv with disk full on an ephemeral runner",
         "classification": "recovery",
         "applied_existing_artifact": true,
         "stale_rejected": false,
@@ -41,7 +45,31 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 2,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-001",
+          "signature": "uv cache write fails when an ephemeral runner disk is full.",
+          "dedupe_key": "uv|cache-write|ephemeral-disk-full",
+          "classification": "recovery",
+          "evidence": [
+            "The cache write fails after the ephemeral runner exhausts disk space.",
+            "The verified recovery restores sufficient writable cache capacity."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "uv-cache-write-fails-when-an-ephemeral-runner-disk-is-full",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -52,7 +80,28 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "uv cache write fails when an ephemeral runner disk is full.",
+          "dedupe_key": "uv|cache-write|ephemeral-disk-full",
+          "evidence": [
+            "The cache write fails after the ephemeral runner exhausts disk space.",
+            "The verified recovery restores sufficient writable cache capacity."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "uv-cache-write-fails-when-an-ephemeral-runner-disk-is-full",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt_required": false
       }
     },
     {
@@ -69,7 +118,7 @@
         "host": "claude-synthetic",
         "consulted": true,
         "host_enforced": true,
-        "failure": "build wrapper failed because it hardcodes C:\\Users\\dev\\project\\scripts\\build.ps1 on CI",
+        "failure": "build wrapper failed because it hardcodes <project-root>/scripts/build.ps1 on CI",
         "classification": "incident",
         "applied_existing_artifact": false,
         "stale_rejected": false,
@@ -77,7 +126,37 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-002",
+          "signature": "Build wrapper hardcodes a workstation-specific script path on CI.",
+          "dedupe_key": "build-wrapper|hardcoded-script-path|ci",
+          "classification": "incident",
+          "evidence": [
+            "The wrapper resolves a workstation-specific path instead of the project root.",
+            "The same wrapper failure reproduces on a clean CI runner."
+          ],
+          "task_outcome": "incomplete",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "build-wrapper-hardcodes-a-workstation-specific-script-path-on-ci",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "build wrapper repair owner",
+            "action": "Resolve the script from the project root and verify the wrapper on clean CI."
+          }
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -88,7 +167,34 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Build wrapper hardcodes a workstation-specific script path on CI.",
+          "dedupe_key": "build-wrapper|hardcoded-script-path|ci",
+          "evidence": [
+            "The wrapper resolves a workstation-specific path instead of the project root.",
+            "The same wrapper failure reproduces on a clean CI runner."
+          ],
+          "task_outcome": "incomplete",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "build-wrapper-hardcodes-a-workstation-specific-script-path-on-ci",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "build wrapper repair owner",
+            "action": "Resolve the script from the project root and verify the wrapper on clean CI."
+          }
+        },
+        "parent_receipt_required": false
       }
     },
     {
@@ -113,7 +219,9 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 0,
         "blind_retry": false,
-        "terminal_outcome": "no_artifact"
+        "terminal_outcome": "no_artifact",
+        "terminal_receipt": null,
+        "parent_receipt": null
       },
       "expected": {
         "consulted": false,
@@ -123,7 +231,9 @@
         "stale_rejected": false,
         "repeated_failure_reduced": false,
         "blind_retry": false,
-        "terminal_outcome": "no_artifact"
+        "terminal_outcome": "no_artifact",
+        "terminal_receipt_required": false,
+        "parent_receipt_required": false
       }
     },
     {
@@ -148,7 +258,37 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-004",
+          "signature": "Git push remains rejected after credential rotation invalidates the cached credential.",
+          "dedupe_key": "git-push|credential-rotation|cached-credential-stale",
+          "classification": "incident",
+          "evidence": [
+            "Current authentication evidence contradicts the cached-credential recovery.",
+            "The stale recovery is rejected before another push."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "git-push-remains-rejected-after-credential-rotation-invalidates-the-cached-credential",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "credential_update"
+            ],
+            "target": "repository credential owner",
+            "action": "Install the current credential and verify the authoritative push path."
+          }
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -159,7 +299,34 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Git push remains rejected after credential rotation invalidates the cached credential.",
+          "dedupe_key": "git-push|credential-rotation|cached-credential-stale",
+          "evidence": [
+            "Current authentication evidence contradicts the cached-credential recovery.",
+            "The stale recovery is rejected before another push."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "git-push-remains-rejected-after-credential-rotation-invalidates-the-cached-credential",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "credential_update"
+            ],
+            "target": "repository credential owner",
+            "action": "Install the current credential and verify the authoritative push path."
+          }
+        },
+        "parent_receipt_required": false
       }
     },
     {
@@ -184,7 +351,9 @@
         "repeated_failure_attempts_after": 3,
         "steps_to_verified_normal_path": null,
         "blind_retry": true,
-        "terminal_outcome": "missing"
+        "terminal_outcome": "missing",
+        "terminal_receipt": null,
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -195,7 +364,33 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "GitHub Actions permission failure repeats under the same command and credential class.",
+          "dedupe_key": "github-actions|permission-failure|blind-retry",
+          "evidence": [
+            "The same permission failure repeats three times without a context change."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "github-actions-permission-failure-repeats-under-the-same-command-and-credential-class",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "workflow_permission_change"
+            ],
+            "target": "workflow permission owner",
+            "action": "Grant the required workflow permission and verify the original action."
+          }
+        },
+        "parent_receipt_required": false
       }
     },
     {
@@ -220,7 +415,37 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 4,
         "blind_retry": false,
-        "terminal_outcome": "proposed_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-006",
+          "signature": "Provider websocket rejects connections above the documented concurrency limit.",
+          "dedupe_key": "provider-websocket|documented-concurrency-limit",
+          "classification": "external",
+          "evidence": [
+            "The provider documentation and clean reproduction agree on the concurrency limit.",
+            "No project-side repair can raise the provider-managed limit."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "external",
+          "containment": {
+            "used": true,
+            "summary": "Keep concurrent connections within the documented provider limit.",
+            "verification_gate": "Recheck the authoritative provider limit before changing concurrency."
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "provider-websocket-rejects-connections-above-the-documented-concurrency-limit",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "vendor_policy_change"
+            ],
+            "target": "provider support",
+            "action": "Raise the documented concurrency limit or confirm that the current limit remains authoritative."
+          }
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -231,7 +456,34 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 4,
         "blind_retry": false,
-        "terminal_outcome": "proposed_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Provider websocket rejects connections above the documented concurrency limit.",
+          "dedupe_key": "provider-websocket|documented-concurrency-limit",
+          "evidence": [
+            "The provider documentation and clean reproduction agree on the concurrency limit.",
+            "No project-side repair can raise the provider-managed limit."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "external",
+          "containment": {
+            "used": true,
+            "summary": "Keep concurrent connections within the documented provider limit.",
+            "verification_gate": "Recheck the authoritative provider limit before changing concurrency."
+          },
+          "artifact_ref": "provider-websocket-rejects-connections-above-the-documented-concurrency-limit",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "vendor_policy_change"
+            ],
+            "target": "provider support",
+            "action": "Raise the documented concurrency limit or confirm that the current limit remains authoritative."
+          }
+        },
+        "parent_receipt_required": false
       }
     },
     {
@@ -256,7 +508,31 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 2,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-007",
+          "signature": "Release manifest digest differs when generated before LF canonicalization.",
+          "dedupe_key": "release-manifest|digest|lf-canonicalization",
+          "classification": "recovery",
+          "evidence": [
+            "The verified release path hashes LF-canonical skill bytes.",
+            "Regeneration after canonicalization makes package validation pass."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "release-manifest-digest-differs-when-generated-before-lf-canonicalization",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -267,7 +543,28 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Release manifest digest differs when generated before LF canonicalization.",
+          "dedupe_key": "release-manifest|digest|lf-canonicalization",
+          "evidence": [
+            "The verified release path hashes LF-canonical skill bytes.",
+            "Regeneration after canonicalization makes package validation pass."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "release-manifest-digest-differs-when-generated-before-lf-canonicalization",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt_required": false
       }
     },
     {
@@ -292,7 +589,58 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 3,
         "blind_retry": false,
-        "terminal_outcome": "proposed_artifact"
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "worker-lc-eval-008",
+          "signature": "Windows path normalization fails deterministically.",
+          "dedupe_key": "path-normalizer|windows-path|read-only-worker",
+          "classification": "incident",
+          "evidence": [
+            "The same normalized input fails twice in the documented path.",
+            "The worker has read-only repository authority."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: windows-path-normalization-fails-deterministically\nschema: 1\nsignature: \"Windows path normalization fails deterministically.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair Windows path normalization\n\n## Failure\n\nNormal path: normalize a Windows path through the documented implementation.\n\nEvidence: the same sanitized input fails twice and the read-only worker cannot persist state.\n\n## Repair\n\nCorrect the path-normalization mechanism and its authoritative tests.\n\n## Containment\n\nNone.\n\n## Verification\n\nExercise the documented path from clean preconditions after repair."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "writable parent",
+            "action": "Persist the proposed incident and return its canonical artifact id."
+          }
+        },
+        "parent_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-008",
+          "child_receipt_id": "worker-lc-eval-008",
+          "child_payload_sha256": "22bbe657ec3a3570ab3fc62e27c801aa441bad3cd456bfa83949d579bfe9787e",
+          "ingested": true,
+          "terminal_action": "persisted_artifact",
+          "artifact_ref": "windows-path-normalization-fails-deterministically",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "repository repair owner",
+            "action": "Repair and verify the documented Windows path normalization path."
+          },
+          "forwarded_receipt": null
+        }
       },
       "expected": {
         "consulted": true,
@@ -303,7 +651,51 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "proposed_artifact"
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt_required": true,
+        "parent_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Windows path normalization fails deterministically.",
+          "dedupe_key": "path-normalizer|windows-path|read-only-worker",
+          "evidence": [
+            "The same normalized input fails twice in the documented path.",
+            "The worker has read-only repository authority."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: windows-path-normalization-fails-deterministically\nschema: 1\nsignature: \"Windows path normalization fails deterministically.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair Windows path normalization\n\n## Failure\n\nNormal path: normalize a Windows path through the documented implementation.\n\nEvidence: the same sanitized input fails twice and the read-only worker cannot persist state.\n\n## Repair\n\nCorrect the path-normalization mechanism and its authoritative tests.\n\n## Containment\n\nNone.\n\n## Verification\n\nExercise the documented path from clean preconditions after repair."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "writable parent",
+            "action": "Persist the proposed incident and return its canonical artifact id."
+          }
+        },
+        "parent_receipt_semantics": {
+          "terminal_action": "persisted_artifact",
+          "artifact_ref": "windows-path-normalization-fails-deterministically",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "repository repair owner",
+            "action": "Repair and verify the documented Windows path normalization path."
+          },
+          "forwards_child_receipt": false
+        }
       }
     },
     {
@@ -328,7 +720,31 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-009",
+          "signature": "Host skill discovery misses LoopCompass while project policy provides direct recovery lookup.",
+          "dedupe_key": "skill-discovery|missing-skill|policy-fallback",
+          "classification": "recovery",
+          "evidence": [
+            "Project policy directs a direct recovery search when skill discovery is unavailable.",
+            "The verified recovery succeeds after the policy fallback is followed."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "host-skill-discovery-misses-loopcompass-while-project-policy-provides-direct-recovery-lookup",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -339,7 +755,28 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Host skill discovery misses LoopCompass while project policy provides direct recovery lookup.",
+          "dedupe_key": "skill-discovery|missing-skill|policy-fallback",
+          "evidence": [
+            "Project policy directs a direct recovery search when skill discovery is unavailable.",
+            "The verified recovery succeeds after the policy fallback is followed."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "host-skill-discovery-misses-loopcompass-while-project-policy-provides-direct-recovery-lookup",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt_required": false
       }
     },
     {
@@ -364,7 +801,9 @@
         "repeated_failure_attempts_after": 2,
         "steps_to_verified_normal_path": null,
         "blind_retry": true,
-        "terminal_outcome": "no_artifact"
+        "terminal_outcome": "no_artifact",
+        "terminal_receipt": null,
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -375,7 +814,583 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Environment-specific browser transport fails repeatedly without project-policy consultation.",
+          "dedupe_key": "browser-transport|environment-specific|missing-policy-consultation",
+          "evidence": [
+            "The same transport failure repeats without consulting project memory."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "environment-specific-browser-transport-fails-repeatedly-without-project-policy-consultation",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "browser transport repair owner",
+            "action": "Repair and verify the authoritative transport path in the affected environment."
+          }
+        },
+        "parent_receipt_required": false
+      }
+    },
+    {
+      "id": "lc-eval-011-workaround-erases-classification",
+      "scenario": "A deterministic validator dependency failure is bypassed with an unrelated runtime, then task success is claimed without consultation or a terminal receipt.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": false,
+        "host_enforced": false,
+        "failure": "quick_validate.py exits at import yaml in the documented runtimes, then passes in an unrelated project virtual environment",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 2,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": true,
+        "terminal_outcome": "missing",
+        "terminal_receipt": null,
+        "parent_receipt": null
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "parent_receipt_required": false,
+        "terminal_receipt_semantics": {
+          "signature": "Skill validator exits before validation at import yaml in documented Python runtimes.",
+          "dedupe_key": "skill-validator|import-yaml|default-runtime-missing-dependency",
+          "evidence": [
+            "The documented runtimes reproduce ModuleNotFoundError at import yaml.",
+            "An unrelated project environment contains the missing dependency."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": true,
+            "summary": "Run the unchanged validator in the pre-existing unrelated environment for this task only.",
+            "verification_gate": "Run the documented validator path from clean preconditions without the unrelated environment."
+          },
+          "artifact_ref": "skill-validator-exits-before-validation-at-import-yaml-in-documented-python-runtimes",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "skill validator owner",
+            "action": "Declare or bundle the runtime dependency, then verify the documented launcher from clean preconditions."
+          }
+        }
+      }
+    },
+    {
+      "id": "lc-eval-012-workaround-is-containment",
+      "scenario": "An alternate runtime completes validation, but the actor separately records broken mechanism health, bounded containment, and an incident.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "quick_validate.py exits at import yaml in the documented runtimes, then passes in an unrelated project virtual environment",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-012",
+          "signature": "Skill validator exits before validation at import yaml in documented Python runtimes.",
+          "dedupe_key": "skill-validator|import-yaml|default-runtime-missing-dependency",
+          "classification": "incident",
+          "evidence": [
+            "The documented runtimes reproduce ModuleNotFoundError at import yaml.",
+            "An unrelated project environment contains the missing dependency."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": true,
+            "summary": "Run the unchanged validator in the pre-existing unrelated environment for this task only.",
+            "verification_gate": "Run the documented validator path from clean preconditions without the unrelated environment."
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "skill-validator-exits-before-validation-at-import-yaml-in-documented-python-runtimes",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "skill validator owner",
+            "action": "Declare or bundle the runtime dependency, then verify the documented launcher from clean preconditions."
+          }
+        },
+        "parent_receipt": null
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": false,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true,
+        "parent_receipt_required": false,
+        "terminal_receipt_semantics": {
+          "signature": "Skill validator exits before validation at import yaml in documented Python runtimes.",
+          "dedupe_key": "skill-validator|import-yaml|default-runtime-missing-dependency",
+          "evidence": [
+            "The documented runtimes reproduce ModuleNotFoundError at import yaml.",
+            "An unrelated project environment contains the missing dependency."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": true,
+            "summary": "Run the unchanged validator in the pre-existing unrelated environment for this task only.",
+            "verification_gate": "Run the documented validator path from clean preconditions without the unrelated environment."
+          },
+          "artifact_ref": "skill-validator-exits-before-validation-at-import-yaml-in-documented-python-runtimes",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "skill validator owner",
+            "action": "Declare or bundle the runtime dependency, then verify the documented launcher from clean preconditions."
+          }
+        }
+      }
+    },
+    {
+      "id": "lc-eval-013-parent-without-store-propagates",
+      "scenario": "A read-only worker hands off a complete incident candidate to a parent without a project store, which preserves the full payload in a further exact escalation.",
+      "scope": {
+        "host": "claude-synthetic",
+        "agent_role": "subagent-readonly",
+        "skill_state": "present",
+        "project_instructions": "inherited",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "claude-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "launcher discovery in a sandbox differs from host discovery and the read-only worker cannot persist an incident",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 1,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "worker-lc-eval-013",
+          "signature": "Panel launcher discovery differs between sandbox and host contexts.",
+          "dedupe_key": "launcher-discovery|sandbox-host-context-mismatch",
+          "classification": "incident",
+          "evidence": [
+            "The sandbox search path omits a verified user-local launcher.",
+            "Host-backed authentication is not observable from the sandbox."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": true,
+            "summary": "Use a verified launcher and the required host execution context for this run.",
+            "verification_gate": "Run the installed resolver without ad hoc launcher or authentication hints."
+          },
+          "terminal_outcome": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "project-owning parent",
+            "action": "Persist the proposed incident in the nearest authoritative project."
+          }
+        },
+        "parent_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-013",
+          "child_receipt_id": "worker-lc-eval-013",
+          "child_payload_sha256": "5c9a186a932090fd3fa7f380b21ca2a40e1d3177d8e020772e4bccb6fc596815",
+          "ingested": true,
+          "terminal_action": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "project-owning coordinator",
+            "action": "Persist the complete incident candidate and return the canonical artifact id."
+          },
+          "forwarded_receipt": {
+            "receipt_schema": 1,
+            "receipt_id": "worker-lc-eval-013",
+            "signature": "Panel launcher discovery differs between sandbox and host contexts.",
+            "dedupe_key": "launcher-discovery|sandbox-host-context-mismatch",
+            "classification": "incident",
+            "evidence": [
+              "The sandbox search path omits a verified user-local launcher.",
+              "Host-backed authentication is not observable from the sandbox."
+            ],
+            "task_outcome": "blocked",
+            "mechanism_health": "broken",
+            "containment": {
+              "used": true,
+              "summary": "Use a verified launcher and the required host execution context for this run.",
+              "verification_gate": "Run the installed resolver without ad hoc launcher or authentication hints."
+            },
+            "terminal_outcome": "proposed_artifact",
+            "artifact_ref": null,
+            "no_artifact_reason": null,
+            "proposed_artifact": {
+              "kind": "incident",
+              "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+            },
+            "escalation": {
+              "requires": [
+                "repository_write"
+              ],
+              "target": "project-owning parent",
+              "action": "Persist the proposed incident in the nearest authoritative project."
+            }
+          }
+        }
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": false,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt_required": true,
+        "parent_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Panel launcher discovery differs between sandbox and host contexts.",
+          "dedupe_key": "launcher-discovery|sandbox-host-context-mismatch",
+          "evidence": [
+            "The sandbox search path omits a verified user-local launcher.",
+            "Host-backed authentication is not observable from the sandbox."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": true,
+            "summary": "Use a verified launcher and the required host execution context for this run.",
+            "verification_gate": "Run the installed resolver without ad hoc launcher or authentication hints."
+          },
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "project-owning parent",
+            "action": "Persist the proposed incident in the nearest authoritative project."
+          }
+        },
+        "parent_receipt_semantics": {
+          "terminal_action": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "project-owning coordinator",
+            "action": "Persist the complete incident candidate and return the canonical artifact id."
+          },
+          "forwards_child_receipt": true
+        }
+      }
+    },
+    {
+      "id": "lc-eval-014-parent-no-artifact",
+      "scenario": "A read-only worker proposes an incident, but the authoritative parent proves the failure came directly from the current unverified edit and records no artifact.",
+      "scope": {
+        "host": "claude-synthetic",
+        "agent_role": "subagent-readonly",
+        "skill_state": "present",
+        "project_instructions": "inherited",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "claude-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "generated-file validation fails while a delegated worker is inspecting an unverified edit",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 1,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "worker-lc-eval-014",
+          "signature": "Generated-file mismatch may come from the current unverified edit.",
+          "dedupe_key": "generated-validation|unverified-edit|read-only-worker",
+          "classification": "incident",
+          "evidence": [
+            "The worker cannot determine whether the mismatch predates the current edit."
+          ],
+          "task_outcome": "incomplete",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: generated-file-mismatch-may-come-from-the-current-unverified-edit\nschema: 1\nsignature: \"Generated-file mismatch may come from the current unverified edit.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Classify generated-file mismatch\n\n## Failure\n\nNormal path: validate generated files against the clean baseline.\n\nEvidence: the read-only worker cannot determine whether the mismatch predates the current edit.\n\n## Repair\n\nPersist only if the mismatch reproduces without the current unverified edit.\n\n## Containment\n\nNone.\n\n## Verification\n\nCompare the generated files with the clean baseline."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "authoritative parent",
+            "action": "Compare against the clean baseline and persist only if the mechanism remains broken."
+          }
+        },
+        "parent_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-014",
+          "child_receipt_id": "worker-lc-eval-014",
+          "child_payload_sha256": "5ce010e988d393d5389845c3591b084093e94d770e5bab8c8a7dd72192398733",
+          "ingested": true,
+          "terminal_action": "no_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": "The mismatch is caused directly by the current unverified edit and is excluded from LoopCompass.",
+          "proposed_artifact": null,
+          "escalation": null,
+          "forwarded_receipt": null
+        }
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": false,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt_required": true,
+        "parent_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Generated-file mismatch may come from the current unverified edit.",
+          "dedupe_key": "generated-validation|unverified-edit|read-only-worker",
+          "evidence": [
+            "The worker cannot determine whether the mismatch predates the current edit."
+          ],
+          "task_outcome": "incomplete",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: generated-file-mismatch-may-come-from-the-current-unverified-edit\nschema: 1\nsignature: \"Generated-file mismatch may come from the current unverified edit.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Classify generated-file mismatch\n\n## Failure\n\nNormal path: validate generated files against the clean baseline.\n\nEvidence: the read-only worker cannot determine whether the mismatch predates the current edit.\n\n## Repair\n\nPersist only if the mismatch reproduces without the current unverified edit.\n\n## Containment\n\nNone.\n\n## Verification\n\nCompare the generated files with the clean baseline."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "authoritative parent",
+            "action": "Compare against the clean baseline and persist only if the mechanism remains broken."
+          }
+        },
+        "parent_receipt_semantics": {
+          "terminal_action": "no_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": "The mismatch is caused directly by the current unverified edit and is excluded from LoopCompass.",
+          "proposed_artifact": null,
+          "escalation": null,
+          "forwards_child_receipt": false
+        }
+      }
+    },
+    {
+      "id": "lc-eval-015-missing-parent-receipt",
+      "scenario": "A read-only worker emits a complete incident candidate, but the receiving parent provides no linked ingestion or terminal-action receipt.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "subagent-readonly",
+        "skill_state": "present",
+        "project_instructions": "inherited",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "build wrapper configuration fails deterministically and the read-only worker cannot persist the incident",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 1,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "worker-lc-eval-015",
+          "signature": "Build wrapper configuration fails deterministically.",
+          "dedupe_key": "build-wrapper|configuration-failure|read-only-worker",
+          "classification": "incident",
+          "evidence": [
+            "The documented build wrapper reproduces the same configuration failure."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: build-wrapper-configuration-fails-deterministically\nschema: 1\nsignature: \"Build wrapper configuration fails deterministically.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair build wrapper configuration\n\n## Failure\n\nNormal path: run the documented build wrapper configuration.\n\nEvidence: the same sanitized configuration failure reproduces deterministically.\n\n## Repair\n\nCorrect the wrapper configuration contract and its authoritative tests.\n\n## Containment\n\nNone.\n\n## Verification\n\nRun the documented build wrapper from clean preconditions."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "writable parent",
+            "action": "Persist the incident candidate and return a linked parent receipt."
+          }
+        },
+        "parent_receipt": null
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": false,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt_required": true,
+        "parent_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Build wrapper configuration fails deterministically.",
+          "dedupe_key": "build-wrapper|configuration-failure|read-only-worker",
+          "evidence": [
+            "The documented build wrapper reproduces the same configuration failure."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "---\nid: build-wrapper-configuration-fails-deterministically\nschema: 1\nsignature: \"Build wrapper configuration fails deterministically.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair build wrapper configuration\n\n## Failure\n\nNormal path: run the documented build wrapper configuration.\n\nEvidence: the same sanitized configuration failure reproduces deterministically.\n\n## Repair\n\nCorrect the wrapper configuration contract and its authoritative tests.\n\n## Containment\n\nNone.\n\n## Verification\n\nRun the documented build wrapper from clean preconditions."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "writable parent",
+            "action": "Persist the incident candidate and return a linked parent receipt."
+          }
+        },
+        "parent_receipt_semantics": {
+          "terminal_action": "persisted_artifact",
+          "artifact_ref": "build-wrapper-configuration-fails-deterministically",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "build wrapper repair owner",
+            "action": "Repair and verify the documented build wrapper configuration."
+          },
+          "forwards_child_receipt": false
+        }
       }
     }
   ]

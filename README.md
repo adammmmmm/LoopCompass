@@ -222,8 +222,10 @@ node scripts/evaluate.mjs --fixture fixtures/evaluation/cases.json
 ```
 
 Reports separate host-enforcement quality from skill-decision quality and identify the receipt
-types present. Bundled fixtures are measurement cases, not live-host performance evidence. See
-[the evaluation benchmark](docs/evaluation-benchmark.md) for metrics and the fixture contract.
+types present. Structured terminal receipts also measure payload completeness and synthetic
+worker-to-parent closure without creating a default receipt store. Bundled fixtures are measurement
+cases, not live-host performance evidence. See [the evaluation benchmark](docs/evaluation-benchmark.md)
+for metrics and the fixture contract.
 
 ---
 

@@ -46,6 +46,8 @@ const REQUIRED_TOP_LEVEL = [
   "references/classification.md",
   "references/human-attention.md",
   "references/integration.md",
+  "references/pii-sanitation.md",
+  "references/terminal-receipts.md",
 ];
 
 function die(message) {

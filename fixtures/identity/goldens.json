@@ -15,6 +15,12 @@
       "expect_equal_normalized": true
     },
     {
+      "id": "unicode-nfc-equivalence",
+      "raw_a": "Café validator fails",
+      "raw_b": "Café validator fails",
+      "expect_equal_normalized": true
+    },
+    {
       "id": "slug-basic",
       "normalized": "Git Push Denied",
       "slug": "git-push-denied"

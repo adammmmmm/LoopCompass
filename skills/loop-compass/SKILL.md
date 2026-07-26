@@ -81,8 +81,8 @@ review, but agents must not apply or inject it. Promote it to `verified` only af
 causally supported and verified within its stated scope.
 
 1. Copy [recovery-template.md](assets/recovery-template.md).
-2. Normalize the signature only after sanitation, removing volatile paths, IDs, timestamps, and
-   secret-bearing values.
+2. Normalize the signature only after sanitation: first normalize Unicode to NFC, then remove
+   volatile paths, IDs, timestamps, and secret-bearing values.
 3. Derive the slug mechanically from the exact normalized signature: lowercase it, replace each
    maximal run outside ASCII `a-z` and `0-9` with one hyphen, trim leading and trailing hyphens,
    truncate to 96 characters, then trim any trailing hyphen again. Use `failure` if the result is
@@ -105,6 +105,11 @@ If `<slug>.md` already contains a different normalized signature, append the low
 integer suffix beginning with `-2`. Never choose alternate descriptive words. A simultaneous write
 to the same deterministic path must remain a visible file or Git conflict rather than silently
 creating a second artifact.
+
+On upgrade, audit any pre-existing non-NFC signature before normal retrieval. Canonicalize its
+signature to NFC, recompute the mechanical id and filename, and deduplicate against both artifact
+directories in one reviewed migration. Do not auto-rewrite committed state or retain two
+canonically equivalent artifacts.
 
 ## Open and repair an incident
 
@@ -180,8 +185,17 @@ primary task without cancelling classification.
 
 A delegated agent with shared repository write authority follows the same contract directly. A
 brief-only or read-only worker returns the normalized signature, classification, minimal evidence,
-proposed artifact content when applicable, and exact escalation to its parent. The parent must
+the complete filled incident or recovery artifact when applicable, and exact escalation to its
+parent. The parent must
 persist, record `no artifact`, or escalate in the same turn.
+
+Use the machine-detectable [terminal receipt contract](references/terminal-receipts.md) for
+read-only, missing-store, and other cross-actor handoffs. The receipt keeps `task_outcome` separate
+from `mechanism_health` and records containment explicitly. A receiving parent returns a linked
+receipt proving ingestion and one terminal action. A parent that still lacks authority propagates
+the complete payload and proposed artifact unchanged with a new exact escalation; a receipt id or narrative summary
+alone is insufficient. The linked parent receipt uses a distinct id and canonical child-payload
+digest so acknowledgment cannot be detached from the exact sanitized child content.
 
 ## Verification contract
 
