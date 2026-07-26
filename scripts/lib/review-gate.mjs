@@ -18,6 +18,8 @@ const exactSha = (value) => typeof value === "string" && /^[0-9a-f]{40}$/.test(v
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const validTimestamp = (value) =>
   nonEmpty(value) && Number.isFinite(new Date(value).getTime());
+const normalizeLineEndings = (value) =>
+  typeof value === "string" ? value.replace(/\r\n/g, "\n") : value;
 
 function globRegex(pattern) {
   let source = "^";
@@ -95,20 +97,22 @@ export function renderVisibleReview(metadata) {
 }
 
 export function parseReviewComment(body) {
-  if (!nonEmpty(body) || !body.includes(REVIEW_MARKER)) return null;
-  const start = body.indexOf(REVIEW_OPEN);
-  if (start < 0 || body.indexOf(REVIEW_OPEN, start + REVIEW_OPEN.length) >= 0) {
+  const source = normalizeLineEndings(body);
+  if (!nonEmpty(source) || !source.includes(REVIEW_MARKER)) return null;
+  const start = source.indexOf(REVIEW_OPEN);
+  if (start < 0 || source.indexOf(REVIEW_OPEN, start + REVIEW_OPEN.length) >= 0) {
     return { error: "review comment must contain exactly one canonical metadata marker" };
   }
-  const end = body.indexOf(REVIEW_CLOSE, start + REVIEW_OPEN.length);
+  const end = source.indexOf(REVIEW_CLOSE, start + REVIEW_OPEN.length);
   if (end < 0) return { error: "review metadata marker is not closed" };
-  if (body.slice(end + REVIEW_CLOSE.length).trim().length > 0) {
+  if (!["", "\n"].includes(source.slice(end + REVIEW_CLOSE.length))) {
     return { error: "review comment contains text after the metadata marker" };
   }
   try {
     return {
-      metadata: JSON.parse(body.slice(start + REVIEW_OPEN.length, end)),
-      visible: body.slice(0, start).trimEnd(),
+      metadata: JSON.parse(source.slice(start + REVIEW_OPEN.length, end)),
+      visible: source.slice(0, start).trimEnd(),
+      body: source,
     };
   } catch {
     return { error: "review metadata is not valid JSON" };
@@ -131,30 +135,30 @@ export function renderHumanAuthorization(headSha) {
 }
 
 export function parseHumanAuthorization(body) {
-  if (!nonEmpty(body) || !body.includes(AUTHORIZATION_MARKER)) return null;
+  const source = normalizeLineEndings(body);
+  if (!nonEmpty(source) || !source.includes(AUTHORIZATION_MARKER)) return null;
   const open = `<!-- ${AUTHORIZATION_MARKER}\n`;
-  const start = body.indexOf(open);
-  if (start < 0 || body.indexOf(open, start + open.length) >= 0) {
+  const start = source.indexOf(open);
+  if (start < 0 || source.indexOf(open, start + open.length) >= 0) {
     return {
       error: "operator authorization must contain exactly one canonical metadata marker",
     };
   }
-  const end = body.indexOf(REVIEW_CLOSE, start + open.length);
+  const end = source.indexOf(REVIEW_CLOSE, start + open.length);
   if (end < 0) {
     return { error: "operator authorization marker is malformed" };
   }
   try {
-    const metadata = JSON.parse(body.slice(start + open.length, end));
+    const metadata = JSON.parse(source.slice(start + open.length, end));
     const canonical = renderHumanAuthorization(metadata?.head_sha);
     const canonicalWithLineFeed = `${canonical}\n`;
-    const canonicalWithCrlf = `${canonical}\r\n`;
     if (
       !isRecord(metadata) ||
       Object.keys(metadata).sort().join(",") !== "head_sha,schema,verdict" ||
       metadata.schema !== 1 ||
       !exactSha(metadata.head_sha) ||
       metadata.verdict !== "approved" ||
-      ![canonical, canonicalWithLineFeed, canonicalWithCrlf].includes(body)
+      ![canonical, canonicalWithLineFeed].includes(source)
     ) {
       return { error: "operator authorization record is invalid" };
     }
@@ -178,7 +182,7 @@ function validateKeys(value, allowed, required, label, reasons) {
   return true;
 }
 
-function validateVisibleContract(visible, metadata) {
+function validateVisibleContract(visible, metadata, rawBody) {
   const errors = [];
   let expected = "";
   try {
@@ -192,17 +196,17 @@ function validateVisibleContract(visible, metadata) {
   const privateName = ["pa", "nel"].join("");
   const privatePhrase = ["private", "orchestration"].join("[\\s-]+");
   if (
-    /\b(?:I|we|our|ours|my|mine)\b/i.test(visible) ||
-    /\bthe agent\b/i.test(visible) ||
-    new RegExp(`\\b${privateName}\\b`, "i").test(visible) ||
-    new RegExp(`\\b${privatePhrase}\\b`, "i").test(visible)
+    /\b(?:I|we|our|ours|my|mine)\b/i.test(rawBody) ||
+    /\bthe agent\b/i.test(rawBody) ||
+    new RegExp(`\\b${privateName}\\b`, "i").test(rawBody) ||
+    new RegExp(`\\b${privatePhrase}\\b`, "i").test(rawBody)
   ) {
-    errors.push("visible review summary must use attribution-neutral, declarative language");
+    errors.push("review evidence must use attribution-neutral, declarative language");
   }
   return errors;
 }
 
-function latestEffectiveHumanApproval(nativeApprovals, maintainers, headSha) {
+function latestEffectiveHumanApproval(nativeApprovals, maintainers, headSha, author) {
   const allowed = new Set(maintainers.map(normalize));
   const byMaintainer = new Map();
   const ordered = (Array.isArray(nativeApprovals) ? [...nativeApprovals] : []).sort((left, right) => {
@@ -213,6 +217,7 @@ function latestEffectiveHumanApproval(nativeApprovals, maintainers, headSha) {
     const login = normalize(review.user?.login);
     if (
       !allowed.has(login) ||
+      login === normalize(author) ||
       normalize(review.user?.type) === "bot" ||
       review.performed_via_github_app
     ) {
@@ -328,7 +333,11 @@ function validHumanAttestation({
     !validTimestamp(authorization.created_at) ||
     !validTimestamp(comment.created_at) ||
     authorization.created_at !== authorization.updated_at ||
-    new Date(authorization.created_at) > new Date(comment.created_at)
+    new Date(authorization.created_at) > new Date(comment.created_at) ||
+    (authorization.created_at === comment.created_at &&
+      (!Number.isSafeInteger(Number(authorization.id)) ||
+        !Number.isSafeInteger(Number(comment.id)) ||
+        Number(authorization.id) >= Number(comment.id)))
   ) {
     return false;
   }
@@ -356,6 +365,7 @@ function deliveryEvaluation({
     nativeApprovals,
     config.human_maintainers,
     headSha,
+    author,
   );
   const attestation = validHumanAttestation({
     metadata: parsed?.metadata,
@@ -382,11 +392,17 @@ export function validateReviewRecord({
   authorizationComments = [],
   nativeApprovals = [],
   priorFindingIds = [],
+  priorExecutionIds = [],
+  priorEvidenceDigests = [],
   expectedPreviousCommentId = null,
   historyErrors = [],
   allowChangesRequested = false,
 }) {
   priorFindingIds = Array.isArray(priorFindingIds) ? priorFindingIds : [];
+  priorExecutionIds = Array.isArray(priorExecutionIds) ? priorExecutionIds : [];
+  priorEvidenceDigests = Array.isArray(priorEvidenceDigests)
+    ? priorEvidenceDigests
+    : [];
   historyErrors = Array.isArray(historyErrors) ? historyErrors : ["review history is malformed"];
   const delivery = classifyDelivery({ author, changedFiles, filesComplete, config });
   const parsed = parseReviewComment(comment?.body);
@@ -489,6 +505,16 @@ export function validateReviewRecord({
         if (!/^[0-9a-f]{64}$/.test(review.evidence_digest ?? "")) {
           modelReasons.push("every review requires a 64-hex evidence digest");
         }
+        if (priorExecutionIds.map(normalize).includes(normalize(review.execution_id))) {
+          modelReasons.push("review execution IDs must not be reused from prior evidence");
+        }
+        if (
+          priorEvidenceDigests
+            .map(normalize)
+            .includes(normalize(review.evidence_digest))
+        ) {
+          modelReasons.push("review evidence digests must not be reused from prior evidence");
+        }
         for (const [value, set, message] of [
         [normalize(review.seat), seats, "review seats must be unique"],
         [normalize(review.model), models, "model identities must be independent"],
@@ -577,7 +603,9 @@ export function validateReviewRecord({
           );
         }
       }
-      modelReasons.push(...validateVisibleContract(parsed.visible, metadata));
+      modelReasons.push(
+        ...validateVisibleContract(parsed.visible, metadata, parsed.body),
+      );
     }
   }
   modelReasons.push(...historyErrors);
@@ -619,6 +647,8 @@ export function analyzeReviewHistory(
   pullNumber,
 ) {
   const identifiers = new Set();
+  const executionIds = new Set();
+  const evidenceDigests = new Set();
   const allowed = new Set(config.human_maintainers.map(normalize));
   const prior = [];
   const errors = [];
@@ -660,6 +690,8 @@ export function analyzeReviewHistory(
       pullNumber,
       authorizationComments: comments,
       priorFindingIds: [...identifiers],
+      priorExecutionIds: [...executionIds],
+      priorEvidenceDigests: [...evidenceDigests],
       expectedPreviousCommentId: precedingId,
       allowChangesRequested: true,
     });
@@ -668,9 +700,17 @@ export function analyzeReviewHistory(
     }
     if (isRecord(entry.parsed?.metadata) && Array.isArray(entry.parsed.metadata.reviews)) {
       for (const review of entry.parsed.metadata.reviews) {
-        if (!isRecord(review) || !Array.isArray(review.findings)) continue;
-        for (const finding of review.findings) {
-          if (isRecord(finding) && nonEmpty(finding.id)) identifiers.add(finding.id);
+        if (!isRecord(review)) continue;
+        if (nonEmpty(review.execution_id)) {
+          executionIds.add(normalize(review.execution_id));
+        }
+        if (/^[0-9a-f]{64}$/.test(review.evidence_digest ?? "")) {
+          evidenceDigests.add(normalize(review.evidence_digest));
+        }
+        if (Array.isArray(review.findings)) {
+          for (const finding of review.findings) {
+            if (isRecord(finding) && nonEmpty(finding.id)) identifiers.add(finding.id);
+          }
         }
       }
     }
@@ -678,6 +718,8 @@ export function analyzeReviewHistory(
   }
   return {
     priorFindingIds: [...identifiers].sort(),
+    priorExecutionIds: [...executionIds].sort(),
+    priorEvidenceDigests: [...evidenceDigests].sort(),
     expectedPreviousCommentId: precedingId,
     historyErrors: errors,
   };
@@ -914,13 +956,40 @@ export async function loadStatusHistory({ repository, sha, pages }) {
   return statuses;
 }
 
+export function exclusivePullAssociationError({
+  pullRequests,
+  pullNumber,
+  headSha,
+}) {
+  if (!Number.isInteger(pullNumber) || !exactSha(headSha)) {
+    return "current pull request identity is invalid";
+  }
+  if (!Array.isArray(pullRequests)) {
+    return "pull request association is unverifiable";
+  }
+  const openForHead = pullRequests.filter(
+    (pull) =>
+      normalize(pull?.state) === "open" &&
+      pull?.head?.sha === headSha,
+  );
+  if (
+    openForHead.length !== 1 ||
+    Number(openForHead[0]?.number) !== pullNumber
+  ) {
+    return "commit must belong to exactly one open current pull request";
+  }
+  return null;
+}
+
 export async function runPolicyEvaluation({
   loadHead,
   loadSnapshot,
+  loadAssociatedPullRequests,
   publish,
   listStatuses,
   config,
   repository,
+  pullNumber,
   runUrl,
 }) {
   let originalHead = null;
@@ -938,11 +1007,29 @@ export async function runPolicyEvaluation({
     await publish(originalHead, "terminal", result, runUrl);
     return { outcome: "fail", headSha: originalHead, result };
   };
+  const failUntrustedAssociation = async () => {
+    let reason;
+    try {
+      reason = exclusivePullAssociationError({
+        pullRequests: await loadAssociatedPullRequests(originalHead),
+        pullNumber,
+        headSha: originalHead,
+      });
+    } catch {
+      reason = "pull request association is unverifiable";
+    }
+    if (!reason) return null;
+    const result = policyFailure(reason);
+    await publish(originalHead, "terminal", result, runUrl);
+    return { outcome: "fail", headSha: originalHead, result };
+  };
   try {
     originalHead = await loadHead();
     if (!exactSha(originalHead)) {
       throw new Error("initial pull request HEAD is not an exact SHA");
     }
+    const initialAssociationFailure = await failUntrustedAssociation();
+    if (initialAssociationFailure) return initialAssociationFailure;
     const preflightStatuses = await listStatuses(originalHead);
     if (newestHigherRun(preflightStatuses, runUrl)) {
       return { outcome: "superseded", headSha: originalHead };
@@ -950,6 +1037,8 @@ export async function runPolicyEvaluation({
     const preflightFailure = await failUntrustedHistory(preflightStatuses);
     if (preflightFailure) return preflightFailure;
     await publish(originalHead, "pending", undefined, runUrl);
+    const postPendingAssociationFailure = await failUntrustedAssociation();
+    if (postPendingAssociationFailure) return postPendingAssociationFailure;
     const postPendingStatuses = await listStatuses(originalHead);
     const higherAfterPending = newestHigherRun(postPendingStatuses, runUrl);
     if (higherAfterPending) {
@@ -973,7 +1062,14 @@ export async function runPolicyEvaluation({
     if (finalSnapshot.headSha !== originalHead) {
       return { outcome: "head_drift", headSha: originalHead };
     }
+    if (finalSnapshot.pullNumber !== pullNumber) {
+      const result = policyFailure("pull request snapshot identity changed");
+      await publish(originalHead, "terminal", result, runUrl);
+      return { outcome: "fail", headSha: originalHead, result };
+    }
     const result = evaluateSnapshot(finalSnapshot, config, repository);
+    const preTerminalAssociationFailure = await failUntrustedAssociation();
+    if (preTerminalAssociationFailure) return preTerminalAssociationFailure;
     const statuses = await listStatuses(originalHead);
     const higherBeforeTerminal = newestHigherRun(statuses, runUrl);
     if (higherBeforeTerminal) {
@@ -986,6 +1082,8 @@ export async function runPolicyEvaluation({
       return { outcome: "superseded", headSha: originalHead };
     }
     await publish(originalHead, "terminal", result, runUrl);
+    const postTerminalAssociationFailure = await failUntrustedAssociation();
+    if (postTerminalAssociationFailure) return postTerminalAssociationFailure;
     const postTerminalStatuses = await listStatuses(originalHead);
     const higherRun = newestHigherRun(postTerminalStatuses, runUrl);
     if (higherRun) {
@@ -1005,21 +1103,24 @@ export async function runPolicyEvaluation({
   } catch (error) {
     if (originalHead) {
       try {
-        const statuses = await listStatuses(originalHead);
-        const higherRun = newestHigherRun(statuses, runUrl);
-        if (higherRun) {
-          await publish(originalHead, "reassert", higherRun.statuses);
-        } else {
-          const historyError = statusHistoryTrustError(statuses, runUrl);
-          if (historyError) {
-            await publish(originalHead, "terminal", policyFailure(historyError), runUrl);
-          } else if (currentRunOwnsStatuses(statuses, runUrl)) {
-            await publish(
-              originalHead,
-              "terminal",
-              policyFailure("Policy evaluation did not complete"),
-              runUrl,
-            );
+        const associationFailure = await failUntrustedAssociation();
+        if (!associationFailure) {
+          const statuses = await listStatuses(originalHead);
+          const higherRun = newestHigherRun(statuses, runUrl);
+          if (higherRun) {
+            await publish(originalHead, "reassert", higherRun.statuses);
+          } else {
+            const historyError = statusHistoryTrustError(statuses, runUrl);
+            if (historyError) {
+              await publish(originalHead, "terminal", policyFailure(historyError), runUrl);
+            } else if (currentRunOwnsStatuses(statuses, runUrl)) {
+              await publish(
+                originalHead,
+                "terminal",
+                policyFailure("Policy evaluation did not complete"),
+                runUrl,
+              );
+            }
           }
         }
       } catch {
@@ -1119,6 +1220,9 @@ export function evaluateRepositoryPolicy({ ruleset, settings, desired }) {
   if (checks.strict_required_status_checks_policy !== desired.strict_required_status_checks) {
     drifts.push("strict required status checks differ");
   }
+  if (checks.do_not_enforce_on_create !== desired.do_not_enforce_on_create) {
+    drifts.push("status-check create enforcement differs");
+  }
   const actualChecks = (checks.required_status_checks ?? [])
     .map((item) => `${item.context}:${item.integration_id ?? ""}`)
     .sort();
@@ -1134,11 +1238,16 @@ export function evaluateRepositoryPolicy({ ruleset, settings, desired }) {
   ) {
     drifts.push("allowed merge methods differ");
   }
-  if (
-    pull.required_review_thread_resolution !==
-    desired.required_review_thread_resolution
-  ) {
-    drifts.push("review-thread resolution requirement differs");
+  for (const key of [
+    "dismiss_stale_reviews_on_push",
+    "require_code_owner_review",
+    "require_last_push_approval",
+    "required_approving_review_count",
+    "required_review_thread_resolution",
+  ]) {
+    if (pull[key] !== desired[key]) {
+      drifts.push(`pull request rule ${key} differs`);
+    }
   }
   for (const [key, value] of Object.entries(desired.repository_settings)) {
     if (settings?.[key] !== value) drifts.push(`repository setting ${key} differs`);

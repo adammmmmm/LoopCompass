@@ -15,6 +15,7 @@ test("community health files remain complete and discoverable", async () => {
     conductForm,
     issueConfig,
     readme,
+    maintainerPolicy,
   ] = await Promise.all([
     read(".github/CODE_OF_CONDUCT.md"),
     read(".github/CONTRIBUTING.md"),
@@ -25,6 +26,7 @@ test("community health files remain complete and discoverable", async () => {
     read(".github/ISSUE_TEMPLATE/conduct-concern.yml"),
     read(".github/ISSUE_TEMPLATE/config.yml"),
     read("README.md"),
+    read("docs/maintainer-delivery-policy.md"),
   ]);
 
   for (const policy of [codeOfConduct, contributing, security, pullRequestTemplate]) {
@@ -48,6 +50,13 @@ test("community health files remain complete and discoverable", async () => {
   assert.match(pullRequestTemplate, /sensitive paths\s+always require it/i);
   assert.match(pullRequestTemplate, /Squash is the only merge method/);
   assert.match(pullRequestTemplate, /merged remote branches are deleted/);
+  for (const publicPolicy of [
+    contributing,
+    pullRequestTemplate,
+    maintainerPolicy,
+  ]) {
+    assert.match(publicPolicy, /three independent model reviews/);
+  }
 });
 
 test("GitHub workflows use immutable actions and bounded permissions", async () => {
@@ -58,6 +67,7 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
     branchWorkflow,
     pagesWorkflow,
     dependabot,
+    reviewGateScript,
   ] = await Promise.all([
     read(".github/workflows/validate-manifest.yml"),
     read(".github/workflows/release.yml"),
@@ -65,6 +75,7 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
     read(".github/workflows/branch-lifecycle.yml"),
     read(".github/workflows/pages.yml"),
     read(".github/dependabot.yml"),
+    read("scripts/review-gate.mjs"),
   ]);
   const workflows = [
     verifyWorkflow,
@@ -86,13 +97,18 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.match(verifyWorkflow, /node-version: "24"/);
   assert.doesNotMatch(verifyWorkflow, /release-package|tags:/);
   assert.match(releaseWorkflow, /tags: \["v\*"\]/);
-  assert.match(releaseWorkflow, /needs: verify/);
+  assert.match(releaseWorkflow, /^\s{2}verify-tag:$/m);
+  assert.match(releaseWorkflow, /needs: verify-tag/);
   assert.match(releaseWorkflow, /loopcompass-release-dist/);
   assert.match(reviewWorkflow, /statuses: write/);
   assert.match(reviewWorkflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(reviewWorkflow, /group: delivery-policy-/);
   assert.match(reviewWorkflow, /cancel-in-progress: true/);
   assert.match(reviewWorkflow, /types: \[opened, reopened, synchronize, ready_for_review, edited\]/);
+  assert.match(
+    reviewGateScript,
+    /\/repos\/\$\{repo\}\/commits\/\$\{sha\}\/pulls/,
+  );
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs branches/);
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs audit/);
   assert.match(branchWorkflow, /Audit live repository delivery policy\n\s+if: always\(\)/);
@@ -110,12 +126,17 @@ test("delivery policy records the exact desired live ruleset and settings", asyn
     ref_name: { include: ["refs/heads/main"], exclude: [] },
   });
   assert.equal(policy.desired_ruleset.strict_required_status_checks, true);
+  assert.equal(policy.desired_ruleset.do_not_enforce_on_create, false);
   assert.deepEqual(policy.desired_ruleset.required_status_checks, [
     { context: "verify", integration_id: 15368 },
     { context: "model-review-gate", integration_id: 15368 },
     { context: "delivery-policy", integration_id: 15368 },
   ]);
   assert.deepEqual(policy.desired_ruleset.allowed_merge_methods, ["squash"]);
+  assert.equal(policy.desired_ruleset.dismiss_stale_reviews_on_push, false);
+  assert.equal(policy.desired_ruleset.require_code_owner_review, false);
+  assert.equal(policy.desired_ruleset.require_last_push_approval, false);
+  assert.equal(policy.desired_ruleset.required_approving_review_count, 0);
   assert.equal(policy.desired_ruleset.required_review_thread_resolution, true);
   assert.deepEqual(policy.desired_ruleset.bypass_actors, []);
   assert.deepEqual(policy.desired_repository_settings, {

@@ -27,14 +27,20 @@
     "tests/repository-health.test.mjs",
     "fixtures/review-gate/**",
     "**/auth/**",
+    "**/*auth*/**",
     "**/*auth*",
     "**/permissions/**",
+    "**/*permission*/**",
     "**/*permission*",
     "**/migrations/**",
+    "**/*migration*/**",
     "**/*migration*",
     "**/security/**",
+    "**/*security*/**",
     "**/*security*",
+    "**/*credential*/**",
     "**/*credential*",
+    "**/*secret*/**",
     "**/*secret*"
   ],
   "desired_ruleset": {
@@ -51,6 +57,7 @@
       }
     },
     "strict_required_status_checks": true,
+    "do_not_enforce_on_create": false,
     "required_status_checks": [
       {
         "context": "verify",
@@ -68,6 +75,10 @@
     "allowed_merge_methods": [
       "squash"
     ],
+    "dismiss_stale_reviews_on_push": false,
+    "require_code_owner_review": false,
+    "require_last_push_approval": false,
+    "required_approving_review_count": 0,
     "required_review_thread_resolution": true,
     "bypass_actors": []
   },

@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  verify-tag:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -22,7 +22,7 @@ jobs:
         run: node scripts/verify.mjs
 
   release-package:
-    needs: verify
+    needs: verify-tag
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

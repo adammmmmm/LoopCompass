@@ -5,6 +5,8 @@ relationship, not a status.
 
 ## Review gate
 
+The public requirement is **three independent model reviews**.
+
 Entry to Review requires a complete implementation, focused and full required tests, an open pull
 request with green `verify`, and assembled closure evidence. Exit to Done requires three independent
 model reviews of the current pull request HEAD. Every review has a verdict and a distinct seat and
@@ -58,6 +60,8 @@ Each review record has a unique execution identifier and a SHA-256 digest of its
 evidence. These fields are maintainer attestations that make accidental reuse detectable; they are
 not cryptographic proof that a provider ran or that execution was independent. Execution
 independence remains a process obligation verified before the maintainer records the evidence.
+Execution identifiers and evidence digests cannot be reused in a later review comment, including
+one for a different HEAD.
 
 Review evidence comments are immutable. Post a new reconciled comment after a new HEAD or verdict;
 set `previous_comment_id` to the preceding review comment's numeric identifier. Carry every earlier
@@ -83,14 +87,17 @@ repository audit logs are the external evidence for destructive administrative c
   the canonical maintainer comment. The object contains `reviewer`, `head_sha`,
   `verdict: "approved"`, `kind`, and `authorization_reference`; its reviewer must be the configured
   human maintainer who posted the comment. Bot and App records are rejected. A different maintainer
-  uses `kind: "maintainer_review"`. A self-authored sensitive bootstrap uses
+  uses `kind: "maintainer_review"`; the pull request author's own native approval is not accepted. A
+  self-authored sensitive bootstrap uses
   `kind: "operator_authorization"` and links an earlier immutable issue comment on the same pull
   request. That comment must be authored directly by the configured human maintainer, target the
   exact HEAD, and contain the canonical `loopcompass-human-authorization:v1` approved record.
   Automation validates both comments but must never create either authorization. Edited, missing,
   later, Bot, App, wrong-author, wrong-pull, and stale-SHA authorization records are rejected. An
-  attestation inside syntactically invalid review metadata is not trusted; native current-HEAD
-  approval remains independent and can still satisfy the delivery check.
+  authorization created in the same second as the carrying review comment must also have a lower
+  numeric comment identifier. An attestation inside syntactically invalid review metadata is not
+  trusted; native current-HEAD approval remains independent and can still satisfy the delivery
+  check.
 
   The linked authorization comment has this exact shape:
 
@@ -112,6 +119,8 @@ repository audit logs are the external evidence for destructive administrative c
 - Every durable remote implementation branch receives a draft or open pull request promptly. The
   hourly read-only branch audit reports matching branches that lack a same-repository pull request;
   a same-named fork branch does not satisfy the rule.
+- A commit SHA must be the HEAD of exactly one open pull request for the gate to evaluate it. Shared
+  open HEADs fail closed so commit-scoped statuses cannot be reused by another pull request.
 
 The auditable repository policy is `.github/delivery-policy.json`. Changes to the policy or its
 enforcement are themselves sensitive. It also records the desired live ruleset: strict required

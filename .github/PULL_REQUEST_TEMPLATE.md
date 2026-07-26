@@ -18,7 +18,7 @@
 
 <!--
 Enter Review only after implementation, tests, green verify, and closure evidence are complete.
-Before Done, attach one compact review summary for the current HEAD using
+Before Done, attach one compact summary of three independent model reviews for the current HEAD using
 docs/maintainer-delivery-policy.md. A later push invalidates that evidence.
 -->
 

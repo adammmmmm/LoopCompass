@@ -73,15 +73,19 @@ async function evaluatePullRequest() {
     return { pull, files, comments, reviews };
   };
   const loadHead = async () => (await api(`/repos/${repo}/pulls/${number}`)).head.sha;
+  const loadAssociatedPullRequests = async (sha) =>
+    pages(`/repos/${repo}/commits/${sha}/pulls`);
   const listStatuses = async (sha) =>
     loadStatusHistory({ repository: repo, sha, pages });
   const outcome = await runPolicyEvaluation({
     loadHead,
     loadSnapshot,
+    loadAssociatedPullRequests,
     publish,
     listStatuses,
     config,
     repository: repo,
+    pullNumber: number,
     runUrl,
   });
   console.log(JSON.stringify({ pull_request: number, ...outcome }, null, 2));
