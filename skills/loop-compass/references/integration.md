@@ -79,6 +79,10 @@ incident remains canonical; each human-attention entry is only a resumable proje
 canonical incident slug. Install and update flows must not create, rewrite, or reconcile that
 consumer-owned surface, including its projection block, obligation markers, and known-obligation
 registry.
+The surface declaration is typed: repository-file adapters validate normalized root-confined paths
+and symlink resolution, while external adapters validate a stable project-scoped identifier and
+independent authority. Retained registry state binds the locator, and adapters use conditional
+write/version checks or an equivalent lock for full-surface reconciliation.
 
 ## Version and updates
 

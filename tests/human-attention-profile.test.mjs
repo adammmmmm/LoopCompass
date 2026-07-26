@@ -138,6 +138,7 @@ const RELEASED_OBLIGATIONS = new Set([
 ]);
 const CANONICAL_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const STABLE_IDENTIFIER = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
+const EXTERNAL_SURFACE_ID = /^[a-z0-9]+(?:[-_:/.][a-z0-9]+)*$/;
 const REQUIRED_PROJECTION_FIELDS = [
   "incident_slug",
   "requested_action",
@@ -171,6 +172,35 @@ function isStableIdentifier(value) {
   );
 }
 
+function surfaceIdentifier(surface) {
+  return isPlainRecord(surface) ? surface.locator : surface;
+}
+
+function validateSurface(surface) {
+  if (!isPlainRecord(surface)) return false;
+  if (surface.kind === "repository_file") {
+    return Boolean(
+      typeof surface.locator === "string" &&
+        surface.locator &&
+        !path.posix.isAbsolute(surface.locator) &&
+        path.posix.normalize(surface.locator) === surface.locator &&
+        !surface.locator.split("/").includes("..") &&
+        surface.root_confined === true &&
+        surface.symlink_checked === true
+    );
+  }
+  if (surface.kind === "external") {
+    return Boolean(
+      typeof surface.locator === "string" &&
+        EXTERNAL_SURFACE_ID.test(surface.locator) &&
+        typeof surface.project_scope === "string" &&
+        isStableIdentifier(surface.project_scope) &&
+        surface.authority_verified === true
+    );
+  }
+  return false;
+}
+
 function parseProfileDeclaration(value) {
   const errors = [];
   if (value === null || value === undefined) {
@@ -193,11 +223,12 @@ function parseProfileDeclaration(value) {
   if (!value.enabled) {
     return { config: value, enabled: false, errors };
   }
-  for (const field of ["surface", "authority", "history_retention"]) {
+  for (const field of ["authority", "history_retention"]) {
     if (typeof value[field] !== "string" || !value[field].trim()) {
       errors.push(`invalid_profile:${field}`);
     }
   }
+  if (!validateSurface(value.surface)) errors.push("invalid_profile:surface");
   for (const field of [
     "human_only_capabilities",
     "human_only_decisions",
@@ -214,6 +245,17 @@ function parseProfileDeclaration(value) {
     enabled: true,
     errors,
   };
+}
+
+function surfaceBindingError(testCase, config, registry) {
+  if (
+    registry.size > 0 &&
+    typeof testCase.registry_surface === "string" &&
+    testCase.registry_surface !== surfaceIdentifier(config.surface)
+  ) {
+    return "surface_change_with_retained_obligations";
+  }
+  return null;
 }
 
 function incidentsBySlug(testCase, errors = []) {
@@ -264,9 +306,15 @@ function incidentsBySlug(testCase, errors = []) {
 }
 
 function resolveCase(fixture, testCase) {
+  const profileConfig = fixture.profiles[testCase.profile_config];
   return {
     ...testCase,
-    profile_config: fixture.profiles[testCase.profile_config],
+    profile_config: profileConfig,
+    registry_surface:
+      testCase.registry_surface ??
+      (testCase.known_obligations?.length
+        ? surfaceIdentifier(profileConfig.surface)
+        : undefined),
   };
 }
 
@@ -516,7 +564,7 @@ function canonicalProjection(config, obligation) {
     incident_path: `.loopcompass/incidents/${obligation.incident_slug}.md`,
     state: obligation.state,
     obligation_revision: obligation.revision,
-    surface: config.surface,
+    surface: surfaceIdentifier(config.surface),
   };
 }
 
@@ -539,7 +587,7 @@ function projectionRepresentationErrors(config, obligation, projection) {
     incident_path: `.loopcompass/incidents/${obligation.incident_slug}.md`,
     state: obligation.state,
     obligation_revision: obligation.revision,
-    surface: config.surface,
+    surface: surfaceIdentifier(config.surface),
   };
   for (const [field, expected] of Object.entries(expectedValues)) {
     if (
@@ -718,6 +766,8 @@ function assessConformance(testCase) {
     failed: failedRegistry,
     unscopedInvalid: unscopedRegistry,
   } = registryBySlug(testCase, errors);
+  const bindingError = surfaceBindingError(testCase, config, registry);
+  if (bindingError) errors.push(bindingError);
   const {
     projections: projectionRecords,
     unscopedInvalid: unscopedProjection,
@@ -849,9 +899,7 @@ function assessConformance(testCase) {
       errors.push(`invalid_orphan_projection:${slug}`);
       continue;
     }
-    const closureKnown = hasCompleteClosureEvidence(testCase, slug);
-    const closure = closureKnown ? "verified-closure" : "unknown-closure";
-    errors.push(`orphan_projection:${closure}:${slug}`);
+    errors.push(`orphan_projection:unknown-closure:${slug}`);
   }
 
   return errors.sort();
@@ -871,6 +919,12 @@ function reconcileProjections(testCase) {
     testCase,
     obligationErrors,
   );
+  const bindingError = surfaceBindingError(
+    testCase,
+    testCase.profile_config,
+    registry,
+  );
+  if (bindingError) obligationErrors.push(bindingError);
   const {
     projections: projectionRecords,
     failed: failedProjections,
@@ -940,9 +994,7 @@ function reconcileProjections(testCase) {
       obligationErrors.push(`invalid_orphan_projection:${slug}`);
       continue;
     }
-    if (!hasCompleteClosureEvidence(testCase, slug)) {
-      obligationErrors.push(`orphan_projection:unknown-closure:${slug}`);
-    }
+    obligationErrors.push(`orphan_projection:unknown-closure:${slug}`);
   }
   assert.deepEqual(obligationErrors, [], "obligation conflict blocks reconciliation");
   const deterministic = [];
@@ -965,16 +1017,30 @@ function reconcileProjections(testCase) {
       deterministic.push(projection);
       continue;
     }
-    const hasClosure = hasCompleteClosureEvidence(
-      testCase,
-      projection.incident_slug,
-    );
-    if (!hasClosure) deterministic.push(projection);
+    deterministic.push(projection);
   }
 
   return deterministic.sort((a, b) =>
     a.incident_slug.localeCompare(b.incident_slug),
   );
+}
+
+function reconcileSurfaceWithCas(store, beforeFirstCommit = () => {}) {
+  let firstAttempt = true;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const observedVersion = store.version;
+    const observed = structuredClone(store.state);
+    const projections = reconcileProjections(observed);
+    if (firstAttempt) {
+      firstAttempt = false;
+      beforeFirstCommit();
+    }
+    if (store.version !== observedVersion) continue;
+    store.state = { ...observed, projections };
+    store.version += 1;
+    return structuredClone(store.state);
+  }
+  throw new Error("surface_compare_and_swap_conflict");
 }
 
 function repairRegistryCrash(testCase) {
@@ -1450,7 +1516,12 @@ describe("optional human-attention profile", () => {
     const testCase = {
       profile_config: {
         enabled: true,
-        surface: "HANDOFF.md",
+        surface: {
+          kind: "repository_file",
+          locator: "HANDOFF.md",
+          root_confined: true,
+          symlink_checked: true,
+        },
         authority: "incident-coordinator",
         history_retention: "project-audit-policy",
         human_only_capabilities: [identifier],
@@ -2471,17 +2542,112 @@ describe("optional human-attention profile", () => {
     }
   });
 
-  it("removes a true verified orphan deterministically on replay", () => {
+  it("preserves a markerless orphan even when standalone closure evidence exists", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     const rawCase = fixture.cases.find(
       (testCase) => testCase.id === "true-orphan-with-verified-closure-is-cleaned",
     );
     const testCase = resolveCase(fixture, rawCase);
 
-    const firstPass = reconcileProjections(testCase);
-    assert.deepEqual(firstPass, []);
-    const replay = reconcileProjections({ ...testCase, projections: firstPass });
-    assert.deepEqual(replay, []);
+    const original = structuredClone(testCase);
+    assert.throws(
+      () => reconcileProjections(testCase),
+      /obligation conflict blocks reconciliation/,
+    );
+    assert.deepEqual(testCase, original);
+  });
+
+  it("removes a stale projection only with registry, verified marker, and resolved evidence", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) =>
+        testCase.id === "verified-closed-stale-projection-must-be-cleaned",
+    );
+    const testCase = resolveCase(fixture, rawCase);
+    assert.deepEqual(reconcileProjections(testCase), []);
+  });
+
+  it("rejects unsafe repository locators and accepts an authority-bound external queue", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const base = resolveCase(
+      fixture,
+      fixture.cases.find(
+        (testCase) => testCase.id === "enabled-exactly-one-human-capability",
+      ),
+    );
+    for (const locator of ["../HANDOFF.md", "/tmp/HANDOFF.md"]) {
+      const testCase = structuredClone(base);
+      testCase.profile_config.surface.locator = locator;
+      assert.deepEqual(assessConformance(testCase), ["invalid_profile:surface"]);
+    }
+    const symlinkEscape = structuredClone(base);
+    symlinkEscape.profile_config.surface.symlink_checked = false;
+    assert.deepEqual(assessConformance(symlinkEscape), [
+      "invalid_profile:surface",
+    ]);
+
+    const external = structuredClone(base);
+    external.profile_config.surface = {
+      kind: "external",
+      locator: "queue:loopcompass-operator",
+      project_scope: "loopcompass",
+      authority_verified: true,
+    };
+    external.registry_surface = "queue:loopcompass-operator";
+    external.projections[0].surface = "queue:loopcompass-operator";
+    assert.deepEqual(assessConformance(external), []);
+  });
+
+  it("prohibits designated-surface changes while obligation registry records remain", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const testCase = resolveCase(
+      fixture,
+      fixture.cases.find(
+        (entry) => entry.id === "enabled-exactly-one-human-capability",
+      ),
+    );
+    testCase.registry_surface = "HANDOFF.md";
+    testCase.profile_config.surface.locator = "OPERATOR_QUEUE.md";
+    const original = structuredClone(testCase);
+    assert.ok(
+      assessConformance(testCase).includes(
+        "surface_change_with_retained_obligations",
+      ),
+    );
+    assert.throws(
+      () => reconcileProjections(testCase),
+      /obligation conflict blocks reconciliation/,
+    );
+    assert.deepEqual(testCase, original);
+  });
+
+  it("retries a full-surface CAS conflict and never overwrites newer marker history", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const initial = resolveCase(
+      fixture,
+      fixture.cases.find(
+        (entry) => entry.id === "enabled-exactly-one-human-capability",
+      ),
+    );
+    const store = { version: 1, state: structuredClone(initial) };
+    const result = reconcileSurfaceWithCas(store, () => {
+      const newer = structuredClone(store.state);
+      newer.obligations.push({
+        incident_slug: "console-action-required",
+        state: "verification_pending",
+        revision: 2,
+        human_requirement: "production-console",
+        requested_action: "Perform the production console action.",
+      });
+      newer.known_obligations[0].last_known_revision = 2;
+      newer.projections = reconcileProjections(newer);
+      store.state = newer;
+      store.version += 1;
+    });
+    assert.equal(store.version, 3);
+    assert.equal(result.projections[0].state, "verification_pending");
+    assert.equal(result.projections[0].obligation_revision, 2);
+    assert.equal(result.obligations.at(-1).revision, 2);
   });
 
   it("mutates only the permitted skill path during install", () => {

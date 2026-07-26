@@ -16,8 +16,8 @@ An enabled project declares, in one project-governed configuration or policy sur
 - `enabled: true`;
 - stable identifiers for capabilities reserved for humans;
 - stable identifiers for decisions reserved for humans;
-- exactly one durable, project-designated attention surface, such as `HANDOFF.md` or an equivalent
-  project file, project issue tracker, or operator queue; and
+- exactly one typed, durable, project-designated attention surface, such as `HANDOFF.md` or an
+  equivalent project file, project issue tracker, or operator queue; and
 - the project-designated integration authority responsible for writing and reconciling that
   surface;
 - an explicit audit/retention policy for the minimal known-obligation registry described below.
@@ -37,6 +37,16 @@ reconciliation. A disabled or incomplete declaration grants no mutation authorit
 enabled declaration reports only configuration errors, suppresses repair/recovery diagnostics,
 preserves every existing record unchanged, and never causes a runtime exception. Report the
 configuration failure through the host's normal project-policy path.
+
+A repository-file locator is a normalized relative path confined to the project root. Validate
+that it is neither absolute nor `..`-traversing and resolve it without following a symlink outside
+the project before granting write authority. An external locator is a stable project-scoped
+identifier, not a display name or URL discovered from prose; the adapter must independently verify
+that the declared integration authority controls that project queue. Reject an untyped locator,
+an unverified external authority, and every root or symlink escape.
+The typed descriptor uses `kind: repository_file` with `locator`, or `kind: external` with
+`locator` and `project_scope`. Root confinement, symlink safety, and external authority are
+adapter-verified preflight facts; configuration text cannot attest to its own authority.
 
 State schema 1 needs no new incident fields. `owner` remains the lifecycle coordinator; it does not
 identify the action actor and does not imply a human. An open incident needs human action when
@@ -174,6 +184,13 @@ incident, marker, projection, and closure evidence together. Outside the revisio
 case, a known slug with an absent marker is a deletion failure and must not be reconstructed by
 guessing.
 
+Bind the registry metadata to the typed designated-surface locator. While any known-obligation
+record remains retained, changing that locator is prohibited: fail closed and preserve both the
+old and newly configured surfaces unchanged. This small immutability rule avoids a migration
+protocol that could duplicate or lose obligations after restart. A project may change the surface
+only after its declared retention process has lawfully purged every registry record, or under a
+future separately specified migration protocol.
+
 Closure evidence is a referenced authority, not a writable collection on the designated attention
 surface. Parse it defensively: a missing, scalar, or malformed evidence collection, and malformed
 sibling evidence records, never authorize terminal cleanup and never cause a runtime exception.
@@ -250,7 +267,10 @@ Reconciliation is an idempotent upsert by canonical incident slug:
 6. Replace all existing projections for that slug with the deterministic result. Do not merge
    fields from duplicates or guess which entry is newest or most advanced.
 7. Reconcile entries that no longer match an active obligation as described below.
-8. Re-read the surface and confirm the exactly-one invariant and matching obligation revision
+8. Commit the complete replacement with compare-and-swap against the preflight surface
+   version/hash, or while holding an equivalent adapter lock. On conflict, discard the candidate,
+   re-read all canonical inputs, and recompute; never overwrite newer marker history.
+9. Re-read the surface and confirm the exactly-one invariant and matching obligation revision
    before reporting projection success. Mechanically validate the complete rendered projection
    again; reconciliation must not report success for its own incomplete or corrupt output.
 
@@ -286,16 +306,19 @@ because the human acknowledged, decided, or completed the requested step.
   the selected obligation revision and canonical incident. Do not compare prose timestamps or
   treat one lifecycle state as inherently newer. Search every configured or previously designated
   surface so cross-surface duplicates cannot pass independently.
-- **Orphan with verified closure evidence:** remove it.
+- **Orphan with verified closure evidence but no retained registry and canonical
+  `verified_closed` marker:** retain or quarantine it; evidence alone is not cleanup authority.
 - **Orphan without verified closure evidence:** do not guess that absence means closure. Retain or
   quarantine it on the designated surface and escalate reconciliation to that surface's declared
   authority.
 
-A closure reference authorizes cleanup only after every projection for that orphan passes intrinsic
-representation validation: canonical slug, nonempty requested action and surface, exact canonical
-incident path, active state, and positive integer obligation revision. Closure evidence must never
-be used to delete a malformed projection. Quarantine or repair its representation first; until
-then, it blocks reconciliation for the whole surface.
+A closure reference authorizes cleanup only when a retained registry record selects a canonical
+`verified_closed` marker and that marker's `closure_evidence_ref` resolves to complete durable
+evidence. The projection must also pass intrinsic representation validation: canonical slug,
+nonempty requested action and surface, exact canonical incident path, active state, and positive
+integer obligation revision. Standalone closure evidence never authorizes deletion. Closure
+evidence must never be used to delete a malformed projection. Quarantine or repair its
+representation first; until then, it blocks reconciliation for the whole surface.
 
 A projection for an incident that is still open is never an orphan. Retain it and fail
 reconciliation when its marker or registry is missing, even if stale slug-matching closure evidence
@@ -315,6 +338,8 @@ partial work:
 - If the marker was written but the projection was not, render it from the marker.
 - If duplicates or a partially rewritten projection exist, discard them, render from the selected
   marker revision, and verify one exact result remains.
+- If another reconciler changes the surface after preflight, the conditional write must fail;
+  re-read and recompute rather than overwriting the newer marker or projection.
 - If a crash occurs after human action but before verification, retain or restore
   `verification_pending` from the persisted obligation marker.
 - If closure completed but projection cleanup did not, advance the marker to `verified_closed`

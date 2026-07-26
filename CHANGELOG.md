@@ -12,7 +12,8 @@ uses [Semantic Versioning](https://semver.org/).
 - Community health policies, structured issue forms, and a pull request template.
 - Automated GitHub Actions dependency updates.
 - Optional, disabled-by-default human-attention integration profile with durable obligation
-  markers, fail-closed reconciliation, and deterministic lifecycle fixtures.
+  markers, typed authority-bound surfaces, fail-closed compare-and-swap reconciliation, and
+  deterministic lifecycle fixtures.
 - A current-HEAD delivery gate for three independent model reviews, finding dispositions, and
   conditional human review, plus a scheduled remote-branch lifecycle audit.
 

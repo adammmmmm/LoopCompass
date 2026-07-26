@@ -8,7 +8,12 @@
     },
     "capability": {
       "enabled": true,
-      "surface": "HANDOFF.md",
+      "surface": {
+        "kind": "repository_file",
+        "locator": "HANDOFF.md",
+        "root_confined": true,
+        "symlink_checked": true
+      },
       "authority": "incident-coordinator",
       "history_retention": "project-audit-policy",
       "human_only_capabilities": ["production-console"],
@@ -16,7 +21,12 @@
     },
     "decision": {
       "enabled": true,
-      "surface": "OPERATOR_QUEUE.md",
+      "surface": {
+        "kind": "repository_file",
+        "locator": "OPERATOR_QUEUE.md",
+        "root_confined": true,
+        "symlink_checked": true
+      },
       "authority": "incident-coordinator",
       "history_retention": "project-audit-policy",
       "human_only_capabilities": [],
@@ -24,7 +34,12 @@
     },
     "schema1_underscore": {
       "enabled": true,
-      "surface": "HANDOFF.md",
+      "surface": {
+        "kind": "repository_file",
+        "locator": "HANDOFF.md",
+        "root_confined": true,
+        "symlink_checked": true
+      },
       "authority": "incident-coordinator",
       "history_retention": "project-audit-policy",
       "human_only_capabilities": ["repository_write"],
@@ -32,7 +47,12 @@
     },
     "invalid": {
       "enabled": true,
-      "surface": "",
+      "surface": {
+        "kind": "repository_file",
+        "locator": "",
+        "root_confined": false,
+        "symlink_checked": false
+      },
       "authority": "",
       "history_retention": "",
       "human_only_capabilities": ["production-console"],
@@ -967,7 +987,7 @@
       ],
       "expected": {
         "conformant": false,
-        "errors": ["orphan_projection:verified-closure:old-console-action"]
+        "errors": ["orphan_projection:unknown-closure:old-console-action"]
       }
     },
     {
