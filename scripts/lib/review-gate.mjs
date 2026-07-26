@@ -155,11 +155,11 @@ export function classifyDelivery({ author, changedFiles, filesComplete = true, c
 
 function findingLines(review, finding) {
   return [
-    `**${finding.prefix} (${review.seat}):** ${finding.summary}`,
-    `- Impact: ${finding.impact}`,
-    `- Required fix: ${finding.required_fix}`,
-    `- Verification: ${finding.verification}`,
-    `- Disposition: ${finding.disposition?.status} — ${finding.disposition?.rationale}; ${finding.disposition?.evidence}`,
+    `**${finding.prefix} (${review.seat}):** ${escapeMarkdownScalar(finding.summary)}`,
+    `- Impact: ${escapeMarkdownScalar(finding.impact)}`,
+    `- Required fix: ${escapeMarkdownScalar(finding.required_fix)}`,
+    `- Verification: ${escapeMarkdownScalar(finding.verification)}`,
+    `- Disposition: ${finding.disposition?.status} — ${escapeMarkdownScalar(finding.disposition?.rationale)}; ${escapeMarkdownScalar(finding.disposition?.evidence)}`,
   ].join("\n");
 }
 
@@ -170,7 +170,7 @@ export function renderVisibleReview(metadata) {
   const reviews = Array.isArray(metadata.reviews) ? metadata.reviews : [];
   const verdictLines = reviews.map((review) => {
     const verdict = review.verdict === "approved" ? "Approved" : "Changes requested";
-    return `- ${review.seat} — ${review.model} — ${verdict}`;
+    return `- ${review.seat} — ${escapeMarkdownScalar(review.model)} — ${verdict}`;
   });
   const findings = reviews.flatMap((review) =>
     Array.isArray(review.findings)
@@ -181,9 +181,9 @@ export function renderVisibleReview(metadata) {
     ? [
         "",
         "**Human approval:** `Approved`",
-        `- Reviewer: ${metadata.human_approval.reviewer}`,
-        `- Kind: ${metadata.human_approval.kind}`,
-        `- Authorization: ${metadata.human_approval.authorization_reference}`,
+        `- Reviewer: ${escapeMarkdownScalar(metadata.human_approval.reviewer)}`,
+        `- Kind: ${escapeMarkdownScalar(metadata.human_approval.kind)}`,
+        `- Authorization: ${escapeMarkdownScalar(metadata.human_approval.authorization_reference)}`,
       ]
     : [];
   return [
@@ -202,15 +202,17 @@ export function renderVisibleReview(metadata) {
   ].join("\n");
 }
 
-export function buildBotReviewDecision(result, headSha) {
+export function buildBotReviewDecision(result, headSha, runUrl) {
   if (!exactSha(headSha)) throw new Error("bot review requires an exact HEAD SHA");
   const approved = result?.modelOk === true && result?.deliveryOk === true;
+  const runId = actionsRunId(runUrl);
+  const runEvidence = runId === null ? "" : ` Policy run ${runId}.`;
   return {
     commit_id: headSha,
     event: approved ? "APPROVE" : "REQUEST_CHANGES",
     body: approved
-      ? `Delivery policy attestation for ${headSha}: approved. Three independent model reviews and applicable delivery requirements are satisfied.`
-      : `Delivery policy attestation for ${headSha}: changes requested. Three independent model reviews or applicable delivery requirements are not satisfied.`,
+      ? `Delivery policy attestation for ${headSha}: approved.${runEvidence} Three independent model reviews and applicable delivery requirements are satisfied.`
+      : `Delivery policy attestation for ${headSha}: changes requested.${runEvidence} Three independent model reviews or applicable delivery requirements are not satisfied.`,
   };
 }
 
@@ -274,8 +276,9 @@ function containsCanonicalReviewOpen(body) {
       }
       continue;
     }
-    const open = line.match(/^ {0,3}(`{3,}|~{3,})(?:[^`~]*)$/);
+    const open = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (open) {
+      if (open[1][0] === "`" && open[2].includes("`")) continue;
       fence = { marker: open[1][0], length: open[1].length };
       continue;
     }
@@ -292,6 +295,14 @@ function containsCanonicalReviewOpen(body) {
 
 function safeMarkdownScalar(value) {
   return nonEmpty(value) && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function escapeMarkdownScalar(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replace(/([\\`*_[\]{}])/g, "\\$1");
 }
 
 export function renderHumanAuthorization(headSha, headGeneration = 1) {
@@ -1034,7 +1045,9 @@ export function selectWorkflowHeadGeneration(runs, pullNumber) {
         Number(run.id) > 0 &&
         exactSha(encodedHead) &&
         validTimestamp(run.run_started_at ?? run.created_at) &&
-        run.pull_requests?.some((pull) => Number(pull?.number) === pullNumber),
+        (!Array.isArray(run.pull_requests) ||
+          run.pull_requests.length === 0 ||
+          run.pull_requests.some((pull) => Number(pull?.number) === pullNumber)),
     )
     .sort((left, right) => {
       const id = Number(right.run.id) - Number(left.run.id);
@@ -1356,7 +1369,22 @@ export async function runPolicyEvaluation({
     if (typeof publishReview !== "function") {
       throw new Error("pull request review publisher is required");
     }
-    await publishReview(originalHead, result);
+    return publishReview(originalHead, result);
+  };
+  const finishReviewSafely = async (result) => {
+    await recordReview(result);
+    const afterReview = await listStatuses(originalHead);
+    const higherAfterReview = newestHigherRun(afterReview, runUrl);
+    if (higherAfterReview) {
+      await recordReview(policyFailure("Superseded by a newer policy run"));
+      await publish(originalHead, "reassert", higherAfterReview.statuses);
+      return "superseded_after_review";
+    }
+    const overwritten = lowerRunOverwriteStatuses(afterReview, runUrl);
+    if (overwritten.length > 0) {
+      await publish(originalHead, "reassert", overwritten);
+    }
+    return "reviewed";
   };
   const publishTerminalSafely = async (result) => {
     const before = await listStatuses(originalHead);
@@ -1376,7 +1404,8 @@ export async function runPolicyEvaluation({
     if (overwritten.length > 0) {
       await publish(originalHead, "reassert", overwritten);
     }
-    await recordReview(result);
+    const reviewOutcome = await finishReviewSafely(result);
+    if (reviewOutcome !== "reviewed") return reviewOutcome;
     return "terminal";
   };
   const failPolicy = async (reason) => {
@@ -1485,7 +1514,10 @@ export async function runPolicyEvaluation({
     if (overwrittenTerminal.length > 0) {
       await publish(originalHead, "reassert", overwrittenTerminal);
     }
-    await recordReview(result);
+    const reviewOutcome = await finishReviewSafely(result);
+    if (reviewOutcome !== "reviewed") {
+      return { outcome: reviewOutcome, headSha: originalHead };
+    }
     return { outcome: result.ok ? "pass" : "fail", headSha: originalHead, result };
   } catch (error) {
     if (originalHead) {

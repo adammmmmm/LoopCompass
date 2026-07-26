@@ -1249,6 +1249,7 @@ test("selector fails forward to the latest maintainer marker and ignores foreign
     "    <!-- loopcompass-review:v1\n    {}",
     "````markdown\n```\n<!-- loopcompass-review:v1\n{}\n````",
     "````markdown\n```` trailing text\n<!-- loopcompass-review:v1\n{}\n````",
+    "~~~ info~and`both\n<!-- loopcompass-review:v1\n{}\n~~~",
   ].map((body, index) => ({
     ...comment(metadata()),
     id: 13 + index,
@@ -1260,6 +1261,29 @@ test("selector fails forward to the latest maintainer marker and ignores foreign
     selectReviewComment([older, latest, foreign, ...ignoredContexts], ["maintainer"]),
     latest,
   );
+});
+
+test("rendered scalar delimiters are escaped without hiding public evidence", () => {
+  const unsafe = metadata();
+  unsafe.reviews[0].model = "provider/model<!--";
+  unsafe.reviews[0].findings = [
+    finding({
+      summary: "<!-- hidden --> *emphasis* `code`",
+      disposition: {
+        status: "fixed",
+        rationale: "<details>",
+        evidence: "proof & verification",
+      },
+    }),
+  ];
+  const rendered = renderVisibleReview(unsafe);
+  assert.doesNotMatch(rendered, /provider\/model<!--/);
+  assert.match(rendered, /provider\/model&lt;!--/);
+  assert.equal(
+    rendered.includes("&lt;!-- hidden --&gt; \\*emphasis\\* \\`code\\`"),
+    true,
+  );
+  assert.equal(evaluate({ data: unsafe }).modelOk, true);
 });
 
 test("multiline finding fields cannot inject selectable review metadata", () => {
@@ -1476,6 +1500,15 @@ test("event resolution and layered status payloads are deterministic", () => {
   );
 });
 
+test("bot review attestations are durably bound to their policy run", () => {
+  const decision = buildBotReviewDecision(
+    { modelOk: true, deliveryOk: true },
+    sha,
+    "https://github.com/example/project/actions/runs/123",
+  );
+  assert.match(decision.body, /Policy run 123\./);
+});
+
 test("workflow runs provide a trusted per-pull-request head generation", () => {
   const otherSha = "b".repeat(40);
   assert.deepEqual(
@@ -1512,6 +1545,17 @@ test("workflow runs provide a trusted per-pull-request head generation", () => {
       createdAt: "2026-01-01T00:02:00Z",
     },
   );
+});
+
+test("workflow history remains usable when GitHub omits pull request associations", () => {
+  const candidate = {
+    id: 12,
+    display_title: `delivery-policy-synchronize-pr-1-head-${sha}`,
+    head_sha: "b".repeat(40),
+    created_at: "2026-01-01T00:02:00Z",
+    pull_requests: [],
+  };
+  assert.equal(selectWorkflowHeadGeneration([candidate], 1).headSha, sha);
 });
 
 test("an older establishing run rerun cannot replace the latest head generation", () => {
@@ -1991,6 +2035,48 @@ test("a lower-run failure reasserts higher success that appears after terminal p
     ["success", "success"],
   );
   assert.equal(reviews.length, 0);
+});
+
+test("a lower bot approval is neutralized when a higher run appears during review publication", async () => {
+  const lower = "https://github.com/example/project/actions/runs/100";
+  const higher = "https://github.com/example/project/actions/runs/101";
+  const lowerOwned = ownedStatuses(lower);
+  const higherSuccess = ownedStatuses(higher).map((status) => ({
+    ...status,
+    state: "success",
+  }));
+  let reviewPosted = false;
+  const published = [];
+  const reviews = [];
+  const result = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    loadAssociatedPullRequests: async () => associatedPullRequests(),
+    publish: async (head, state, value, targetUrl) =>
+      published.push({ head, state, value, targetUrl }),
+    publishReview: async (head, value) => {
+      reviews.push(buildBotReviewDecision(value, head));
+      reviewPosted = true;
+    },
+    listStatuses: async () => (reviewPosted ? higherSuccess : lowerOwned),
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl: lower,
+  });
+  assert.equal(result.outcome, "superseded_after_review");
+  assert.deepEqual(
+    reviews.map((review) => review.event),
+    ["APPROVE", "REQUEST_CHANGES"],
+  );
+  assert.deepEqual(
+    published.map((item) => item.state),
+    ["pending", "terminal", "reassert"],
+  );
+  assert.deepEqual(
+    buildObservedStatusPayloads(published.at(-1).value).map((status) => status.state),
+    ["success", "success"],
+  );
 });
 
 test("status ownership misses and pending publication failures overwrite old green", async () => {

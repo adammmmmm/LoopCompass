@@ -109,7 +109,7 @@ async function evaluatePullRequest() {
   const loadAssociatedPullRequests = async (sha) =>
     pages(`/repos/${repo}/commits/${sha}/pulls`);
   const publishReview = async (sha, result) => {
-    const decision = buildBotReviewDecision(result, sha);
+    const decision = buildBotReviewDecision(result, sha, runUrl);
     const reviews = await pages(`/repos/${repo}/pulls/${number}/reviews`);
     if (latestBotReviewMatches(reviews, decision)) return;
     await api(`/repos/${repo}/pulls/${number}/reviews`, {
