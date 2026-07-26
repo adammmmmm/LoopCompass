@@ -94,6 +94,58 @@ describe("release tooling", () => {
     }
   });
 
+  it("rejects YAML-significant filenames in generation and validation", () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-manifest-paths-"));
+    try {
+      for (const name of ["scripts", "skills", "docs"]) {
+        cpSync(path.join(root, name), path.join(fixtureRoot, name), { recursive: true });
+      }
+      for (const name of ["VERSION", "LICENSE", "CHANGELOG.md", "README.md"]) {
+        copyFileSync(path.join(root, name), path.join(fixtureRoot, name));
+      }
+      const references = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "references",
+      );
+      const manifestPath = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "manifest.yaml",
+      );
+      for (const name of ["unsafe # comment.md", "tag!anchor.md", "colon:key.md"]) {
+        const candidate = path.join(references, name);
+        writeFileSync(candidate, "payload\n");
+        const generated = runReleaseAt(fixtureRoot, "generate");
+        assert.notEqual(generated.status, 0);
+        assert.match(
+          generated.stderr,
+          /release operation failed stable filesystem validation/,
+        );
+        assert.doesNotMatch(generated.stderr, /unsafe|comment|anchor|colon/);
+        rmSync(candidate);
+      }
+
+      const canonical = readFileSync(manifestPath, "utf8");
+      const digest = "a".repeat(64);
+      writeFileSync(
+        manifestPath,
+        canonical.replace(/^files:$/m, `files:\n  unsafe # comment.md: ${digest}`),
+      );
+      const validated = runReleaseAt(fixtureRoot, "validate");
+      assert.notEqual(validated.status, 0);
+      assert.match(
+        validated.stderr,
+        /release operation failed stable filesystem validation/,
+      );
+      assert.doesNotMatch(validated.stderr, /unsafe|comment/);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("manifest lists every required skill file with sha256 digests", () => {
     const manifestPath = path.join(root, "skills", "loop-compass", "manifest.yaml");
     assert.ok(existsSync(manifestPath));
@@ -353,6 +405,27 @@ describe("release tooling", () => {
         /release operation failed stable filesystem validation/,
       );
       assert.doesNotMatch(sameInvalidBytes.stderr, /identical drift/);
+      writeFileSync(installedManifest, originalInstalledManifest);
+
+      const unsafePathManifest = originalInstalledManifest.replace(
+        /^files:$/m,
+        `files:\n  unsafe # comment.md: ${"a".repeat(64)}`,
+      );
+      writeFileSync(installedManifest, unsafePathManifest);
+      const unsafeInstall = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.notEqual(unsafeInstall.status, 0);
+      assert.match(
+        unsafeInstall.stderr,
+        /release operation failed stable filesystem validation/,
+      );
+      assert.doesNotMatch(unsafeInstall.stderr, /unsafe|comment/);
       writeFileSync(installedManifest, originalInstalledManifest);
 
       writeFileSync(path.join(installedSkill, ".hidden-payload"), "unexpected\n");

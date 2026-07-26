@@ -2,6 +2,15 @@ import path from "node:path";
 
 export const LOOPCOMPASS_SOURCE = "https://github.com/adammmmmm/LoopCompass";
 
+function assertPortableManifestPath(relative) {
+  if (
+    !/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/.test(relative) ||
+    relative.split("/").some((segment) => segment === "." || segment === "..")
+  ) {
+    throw new Error("manifest file path is not portable");
+  }
+}
+
 export function buildCanonicalManifest({
   version,
   commit,
@@ -23,6 +32,10 @@ export function buildCanonicalManifest({
     "files:",
   ];
   for (const relative of Object.keys(files).sort()) {
+    assertPortableManifestPath(relative);
+    if (!/^[0-9a-f]{64}$/.test(files[relative])) {
+      throw new Error("manifest file digest is not canonical");
+    }
     lines.push(`  ${relative}: ${files[relative]}`);
   }
   lines.push("");
@@ -80,6 +93,7 @@ export function parseCanonicalManifest(text) {
     ) {
       throw new Error("manifest file path");
     }
+    assertPortableManifestPath(relative);
     files[relative] = match[2];
   }
   if (!Object.keys(files).length) throw new Error("manifest inventory is empty");
