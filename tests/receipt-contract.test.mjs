@@ -1039,24 +1039,54 @@ describe("terminal receipt contract", () => {
         "status: detected",
         'status: "\\u003ccapability\\u003e"',
       ),
+      (content) => content.replace(
+        "owner: Incident Coordinator",
+        'owner: "Alice \\u003cincident-coordinator\\u003e"',
+      ),
+      (content) => content.replace(
+        "owner: Incident Coordinator",
+        'owner: "Incident\\u0000Coordinator"',
+      ),
     ];
     for (const mutate of incidentMutations) {
       const invalid = structuredClone(propagatedCase.terminal_receipt);
       invalid.proposed_artifact.content = mutate(invalid.proposed_artifact.content);
       assert.throws(
         () => validateTerminalReceipt(invalid),
-        /content must be a complete filled sanitized incident artifact/,
+        /content must be a complete filled sanitized incident artifact|unsafe Unicode or control character/,
       );
     }
 
     const nested = recoveryProposalReceipt();
     nested.proposed_artifact.content = nested.proposed_artifact.content.replace(
       "  versions: managed",
-      '  versions: "\\u0043orrect path in one line"',
+      '  versions: "managed \\u003cversion-range-or-unknown\\u003e"',
     );
     assert.throws(
       () => validateTerminalReceipt(nested),
       /content must be a complete filled sanitized recovery artifact/,
+    );
+
+    const nestedControl = recoveryProposalReceipt();
+    nestedControl.proposed_artifact.content =
+      nestedControl.proposed_artifact.content.replace(
+        "  versions: managed",
+        '  versions: "managed\\u0000runtime"',
+      );
+    assert.throws(
+      () => validateTerminalReceipt(nestedControl),
+      /unsafe Unicode or control character/,
+    );
+
+    const signatureControl = structuredClone(propagatedCase.terminal_receipt);
+    signatureControl.proposed_artifact.content =
+      signatureControl.proposed_artifact.content.replace(
+        'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+        'signature: "Panel launcher\\u0000 discovery differs between contexts."',
+      );
+    assert.throws(
+      () => validateTerminalReceipt(signatureControl),
+      /unsafe Unicode or control character/,
     );
 
     const benign = recoveryProposalReceipt();

@@ -475,10 +475,34 @@ function strictPlainScalar(raw) {
 function decodedScalarLooksTemplate(value) {
   const normalized = normalizeTemplateMarker(value);
   return scalarLooksUnresolved(value)
-    || structuralTemplatePlaceholders.has(unwrapStructuralPlaceholder(value))
+    || [...structuralTemplatePlaceholders].some((marker) =>
+      normalized.includes(normalizeTemplateMarker(`<${marker}>`)),
+    )
     || [...proseTemplatePlaceholders].some((marker) =>
       normalized.includes(normalizeTemplateMarker(marker)),
     );
+}
+
+function decodedArtifactScalarIsValid(value) {
+  return !decodedScalarLooksTemplate(value);
+}
+
+function validateDecodedArtifactScalars(value, label) {
+  if (typeof value === "string") {
+    validateSanitizedProse(value, label);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      validateDecodedArtifactScalars(item, `${label}[${index}]`),
+    );
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const [field, nested] of Object.entries(value)) {
+      validateDecodedArtifactScalars(nested, `${label}.${field}`);
+    }
+  }
 }
 
 function parseStrictInlineList(raw, { nonempty }) {
@@ -508,7 +532,7 @@ function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
   const value = raw.trim();
   if (field === "signature" && !nested) {
     const signature = parseStrictQuotedString(value);
-    return signature !== null && !decodedScalarLooksTemplate(signature)
+    return signature !== null && decodedArtifactScalarIsValid(signature)
       ? signature
       : null;
   }
@@ -521,7 +545,7 @@ function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
   const decoded = value.startsWith('"')
     ? parseStrictQuotedString(value)
     : value;
-  if (decoded === null || decodedScalarLooksTemplate(decoded)) {
+  if (decoded === null || !decodedArtifactScalarIsValid(decoded)) {
     return null;
   }
   return strictPlainScalar(decoded);
@@ -773,6 +797,7 @@ function validateProposedArtifact(artifact, label) {
   if (fields === null) {
     fail(label, `.content must be a complete filled sanitized ${kind} artifact`);
   }
+  validateDecodedArtifactScalars(fields, `${label}.content.frontmatter`);
   const proposedSignature = requireNormalizedSignature(
     fields,
     "signature",
