@@ -37,6 +37,7 @@ const REQUIRED_SKILL_FILES = [
   "assets/project-policy.md",
   "assets/recovery-template.md",
   "references/classification.md",
+  "references/human-attention.md",
   "references/integration.md",
 ];
 

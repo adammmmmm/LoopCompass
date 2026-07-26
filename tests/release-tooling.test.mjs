@@ -63,6 +63,7 @@ describe("release tooling", () => {
       "assets/recovery-template.md",
       "assets/incident-template.md",
       "references/classification.md",
+      "references/human-attention.md",
       "references/integration.md",
     ]) {
       assert.match(text, new RegExp(`^\\s+${rel.replace(".", "\\.")}:\\s+[0-9a-f]{64}$`, "m"));

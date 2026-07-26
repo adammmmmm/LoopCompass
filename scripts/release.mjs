@@ -44,6 +44,7 @@ const REQUIRED_TOP_LEVEL = [
   "assets/recovery-template.md",
   "assets/incident-template.md",
   "references/classification.md",
+  "references/human-attention.md",
   "references/integration.md",
 ];
 

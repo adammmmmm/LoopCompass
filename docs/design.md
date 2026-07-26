@@ -276,6 +276,8 @@ Mechanical rules are covered by `node scripts/verify.mjs`:
 - signature normalization and slug derivation (`scripts/lib/signature.mjs`, `tests/signature.test.mjs`);
 - classification fixtures (`fixtures/classification/cases.json`);
 - artifact field checks and template contract alignment;
+- optional human-attention lifecycle, crash-repair, marker-history, and projection conformance
+  (`fixtures/human-attention/cases.json`, `tests/human-attention-profile.test.mjs`);
 - project-scope install / update dry-runs;
 - release inventory validate (`scripts/release.mjs validate`).
 
