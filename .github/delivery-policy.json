@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "trusted_contributors": [
+    "adammmmmm"
+  ],
+  "human_maintainers": [
+    "adammmmmm"
+  ],
+  "required_model_reviews": 3,
+  "branch_pr_grace_minutes": 30,
+  "implementation_branch_patterns": [
+    "codex/**",
+    "feature/**",
+    "fix/**"
+  ],
+  "sensitive_paths": [
+    ".github/workflows/**",
+    ".github/actions/**",
+    ".github/delivery-policy.json",
+    ".github/CONTRIBUTING.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "docs/maintainer-delivery-policy.md",
+    "scripts/review-gate.mjs",
+    "scripts/lib/review-gate.mjs",
+    "scripts/release.mjs",
+    "tests/review-gate.test.mjs",
+    "fixtures/review-gate/**",
+    "**/auth/**",
+    "**/*auth*",
+    "**/permissions/**",
+    "**/*permission*",
+    "**/migrations/**",
+    "**/*migration*",
+    "**/security/**",
+    "**/*security*",
+    "**/*credential*",
+    "**/*secret*"
+  ]
+}

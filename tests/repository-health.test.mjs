@@ -46,12 +46,28 @@ test("community health files remain complete and discoverable", async () => {
 });
 
 test("GitHub workflows use immutable actions and bounded permissions", async () => {
-  const [verifyWorkflow, pagesWorkflow, dependabot] = await Promise.all([
+  const [
+    verifyWorkflow,
+    releaseWorkflow,
+    reviewWorkflow,
+    branchWorkflow,
+    pagesWorkflow,
+    dependabot,
+  ] = await Promise.all([
     read(".github/workflows/validate-manifest.yml"),
+    read(".github/workflows/release.yml"),
+    read(".github/workflows/review-gate.yml"),
+    read(".github/workflows/branch-lifecycle.yml"),
     read(".github/workflows/pages.yml"),
     read(".github/dependabot.yml"),
   ]);
-  const workflows = `${verifyWorkflow}\n${pagesWorkflow}`;
+  const workflows = [
+    verifyWorkflow,
+    releaseWorkflow,
+    reviewWorkflow,
+    branchWorkflow,
+    pagesWorkflow,
+  ].join("\n");
   const actionReferences = [...workflows.matchAll(/^\s*-?\s*uses:\s+([^\s#]+)/gm)].map(
     ([, reference]) => reference,
   );
@@ -63,6 +79,13 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.doesNotMatch(workflows, /uses:\s+[^\s]+@v\d/);
   assert.match(verifyWorkflow, /^permissions:\n  contents: read$/m);
   assert.match(verifyWorkflow, /node-version: "24"/);
+  assert.doesNotMatch(verifyWorkflow, /release-package|tags:/);
+  assert.match(releaseWorkflow, /tags: \["v\*"\]/);
+  assert.match(releaseWorkflow, /needs: verify/);
+  assert.match(releaseWorkflow, /loopcompass-release-dist/);
+  assert.match(reviewWorkflow, /statuses: write/);
+  assert.match(reviewWorkflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(branchWorkflow, /scripts\/review-gate\.mjs branches/);
   assert.match(workflows, /timeout-minutes: 10/);
   assert.match(dependabot, /package-ecosystem: github-actions/);
 });

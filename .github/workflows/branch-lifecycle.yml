@@ -1,19 +1,16 @@
-name: verify
+name: branch-lifecycle
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
-  verify:
+  audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -23,5 +20,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-      - name: Verify (tests + release inventory)
-        run: node scripts/verify.mjs
+      - name: Find durable branches without pull requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/review-gate.mjs branches

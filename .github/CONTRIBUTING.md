@@ -24,7 +24,11 @@ provider-neutral, and easy to audit.
 
 ## Development workflow
 
-1. Create a focused branch from `main`.
+Public work moves through `Backlog → Todo → In Progress → Review → Done`. `Blocked` is a label or
+dependency relationship, not a workflow status.
+
+1. Create a focused branch from `main`. Every durable remote implementation branch must promptly
+   have a draft or open pull request.
 2. Make the smallest coherent change that solves the stated problem.
 3. Add or update focused tests for observable behavior and material regressions.
 4. Run the complete verification gate:
@@ -34,7 +38,11 @@ provider-neutral, and easy to audit.
    ```
 
 5. Confirm `git diff --check` passes.
-6. Open a pull request using the repository template.
+6. Open a pull request using the repository template and enter Review when the implementation,
+   required tests, green `verify` check, and closure evidence are complete.
+7. Exit Review only after three independent model reviews approve the current pull request HEAD,
+   every material finding has an evidence-backed disposition, blocker fixes are re-verified, and
+   all review conversations are resolved. Any later push invalidates that sign-off.
 
 CI uses Node.js 24. Installing project dependencies is not required.
 
@@ -55,3 +63,14 @@ CI uses Node.js 24. Installing project dependencies is not required.
 Pull requests should explain the problem, the chosen solution, user-visible impact, and validation
 evidence. Keep unrelated changes separate. A maintainer may ask for changes when a contribution
 adds speculative scope, duplicates coverage, weakens portability, or lacks a reproducible contract.
+
+Trusted first-party, non-sensitive pull requests require independently green `verify` and
+`model-review-gate` and `delivery-policy` checks. External contributions additionally require
+current human maintainer review.
+Sensitive changes always require current human maintainer review, including Actions and workflows,
+authentication or permissions, migrations, release credentials, security boundaries, and the
+review gate itself. Auto-merge may be armed only after the applicable checks and review are green.
+Pull requests merge by squash; merged remote branches are deleted automatically.
+
+The compact public evidence format and maintainer procedure are in
+[the delivery policy](../docs/maintainer-delivery-policy.md).
