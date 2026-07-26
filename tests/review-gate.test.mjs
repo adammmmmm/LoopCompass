@@ -1739,6 +1739,18 @@ test("driver rejects missing or edited same-SHA review comments", async () => {
   const deletion = await runDriver([initial, deleted]);
   assert.equal(deletion.outcome.outcome, "fail");
   assert.equal(deletion.published.at(-1).result.modelOk, false);
+  assert.equal(deletion.published.at(-1).state, "terminal");
+  assert.deepEqual(
+    buildStatusPayloads({
+      state: "terminal",
+      result: deletion.published.at(-1).result,
+      targetUrl: "https://github.com/example/project/actions/runs/7",
+    }).map(({ context, state }) => [context, state]),
+    [
+      ["model-review-gate", "failure"],
+      ["delivery-policy", "success"],
+    ],
+  );
   assert.equal(deletion.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
 
   const editedComment = apiComment();

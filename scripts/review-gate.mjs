@@ -142,7 +142,12 @@ async function evaluatePullRequest() {
     runUrl,
   });
   console.log(JSON.stringify({ pull_request: number, ...outcome }, null, 2));
-  if (outcome.outcome === "fail") process.exitCode = 1;
+  // A policy denial is a successfully evaluated, fail-closed result: the two
+  // required commit statuses and bot review carry that decision. Keep the
+  // workflow job green so an earlier expected denial cannot remain as a stale
+  // failed CheckRun after current-HEAD evidence later satisfies both contexts.
+  // API, driver, and other operational failures still reject this top-level
+  // await and therefore fail the workflow job.
 }
 
 async function auditRepositoryPolicy() {
