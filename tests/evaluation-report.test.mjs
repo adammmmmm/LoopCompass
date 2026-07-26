@@ -47,21 +47,35 @@ describe("evaluation benchmark report", () => {
       /Receipt types: synthetic\. Not live-host evidence absent an explicit live-run protocol\./,
     );
     assert.match(result.stdout, /Baseline commit \| d7879fec762322ae658603104c7c334ade6ba43f/);
-    assert.match(result.stdout, /Cases \| 10/);
-    assert.match(result.stdout, /Consultation recall \| 7\/9 \| 77\.8%/);
-    assert.match(result.stdout, /Host enforcement quality \| 8\/10 \| 80\.0%/);
-    assert.match(result.stdout, /Skill decision quality \| 7\/7 \| 100\.0%/);
-    assert.match(result.stdout, /Classification accuracy when consulted \| 7\/7 \| 100\.0%/);
-    assert.match(result.stdout, /Repeated-failure reduction \| 7\/9 \| 77\.8%/);
-    assert.match(result.stdout, /Blind retry rate \| 2\/10 \| 20\.0%/);
-    assert.match(result.stdout, /Time to verified normal path \| 7\/9 \| 77\.8%/);
-    assert.match(result.stdout, /Terminal outcome compliance \| 8\/10 \| 80\.0%/);
+    assert.match(result.stdout, /Cases \| 13/);
+    assert.match(result.stdout, /Consultation recall \| 9\/12 \| 75\.0%/);
+    assert.match(result.stdout, /Host enforcement quality \| 10\/13 \| 76\.9%/);
+    assert.match(result.stdout, /Skill decision quality \| 9\/9 \| 100\.0%/);
+    assert.match(result.stdout, /Classification accuracy when consulted \| 9\/9 \| 100\.0%/);
+    assert.match(result.stdout, /Repeated-failure reduction \| 7\/10 \| 70\.0%/);
+    assert.match(result.stdout, /Blind retry rate \| 3\/13 \| 23\.1%/);
+    assert.match(result.stdout, /Time to verified normal path \| 7\/10 \| 70\.0%/);
+    assert.match(result.stdout, /Terminal outcome compliance \| 10\/13 \| 76\.9%/);
+    assert.match(result.stdout, /Terminal receipt completeness \| 3\/4 \| 75\.0%/);
+    assert.match(result.stdout, /Worker-to-parent closure \| 2\/2 \| 100\.0%/);
     assert.match(result.stdout, /Live integration required \| false/);
     assert.match(result.stdout, /## Host versus skill breakdown/);
-    assert.match(result.stdout, /codex-synthetic \| 4 \| 3\/4 \(75\.0%\) \| 3\/3 \(100\.0%\)/);
+    assert.match(result.stdout, /codex-synthetic \| 6 \| 4\/6 \(66\.7%\) \| 4\/4 \(100\.0%\)/);
     assert.match(result.stdout, /lc-eval-008-subagent-readonly-handoff/);
     assert.match(result.stdout, /lc-eval-009-missing-skill-fallback/);
     assert.match(result.stdout, /lc-eval-010-missing-project-instructions/);
+    assert.match(
+      result.stdout,
+      /lc-eval-011-workaround-erases-classification .* fail \| n\/a \| fail \| fail/,
+    );
+    assert.match(
+      result.stdout,
+      /lc-eval-012-workaround-is-containment .* pass \| n\/a \| pass \| pass/,
+    );
+    assert.match(
+      result.stdout,
+      /lc-eval-013-parent-without-store-propagates .* pass \| pass \| pass \| pass/,
+    );
   });
 
   it("labels recorded receipts without presenting them as live-host evidence", () => {
@@ -179,8 +193,8 @@ describe("evaluation benchmark report", () => {
     const result = runEvaluateWithDoc(doc);
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /Skill decision quality \| 6\/7 \| 85\.7%/);
-    assert.match(result.stdout, /Classification accuracy when consulted \| 6\/7 \| 85\.7%/);
+    assert.match(result.stdout, /Skill decision quality \| 8\/9 \| 88\.9%/);
+    assert.match(result.stdout, /Classification accuracy when consulted \| 8\/9 \| 88\.9%/);
     assert.match(
       result.stdout,
       /lc-eval-001-known-recovery \| codex-synthetic \| pass \| fail \| fail/,
@@ -195,8 +209,8 @@ describe("evaluation benchmark report", () => {
     const result = runEvaluateWithDoc(doc);
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /Repeated-failure reduction \| 7\/9 \| 77\.8%/);
-    assert.match(result.stdout, /Time to verified normal path \| 7\/9 \| 77\.8%/);
+    assert.match(result.stdout, /Repeated-failure reduction \| 7\/10 \| 70\.0%/);
+    assert.match(result.stdout, /Time to verified normal path \| 7\/10 \| 70\.0%/);
   });
 
   it("reports false triggers from expected no-consultation cases", () => {
@@ -208,5 +222,37 @@ describe("evaluation benchmark report", () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /False trigger rate \| 1\/1 \| 100\.0%/);
+  });
+
+  it("rejects an incomplete structured receipt before scoring", () => {
+    const doc = readFixture();
+    const receiptCase = doc.cases.find(
+      (c) => c.id === "lc-eval-012-workaround-is-containment",
+    );
+    delete receiptCase.receipt.terminal_receipt.mechanism_health;
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /terminal_receipt\.mechanism_health is required/,
+    );
+  });
+
+  it("rejects a parent receipt that does not preserve a propagated payload", () => {
+    const doc = readFixture();
+    const receiptCase = doc.cases.find(
+      (c) => c.id === "lc-eval-013-parent-without-store-propagates",
+    );
+    receiptCase.receipt.parent_receipt.forwarded_receipt.evidence.pop();
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /forwarded_receipt must preserve the complete child receipt unchanged/,
+    );
   });
 });

@@ -16,7 +16,9 @@
     "repeated_failure_reduction",
     "blind_retry_rate",
     "time_to_verified_normal_path",
-    "terminal_outcome_compliance"
+    "terminal_outcome_compliance",
+    "terminal_receipt_completeness",
+    "worker_to_parent_closure"
   ],
   "cases": [
     {
@@ -292,7 +294,57 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 3,
         "blind_retry": false,
-        "terminal_outcome": "proposed_artifact"
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "worker-lc-eval-008",
+          "signature": "Read-only worker observes deterministic Windows path normalization failure and cannot persist the incident.",
+          "dedupe_key": "path-normalizer|windows-path|read-only-worker",
+          "classification": "incident",
+          "evidence": [
+            "The same normalized input fails twice in the documented path.",
+            "The worker has read-only repository authority."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "Open an incident for the deterministic Windows path normalization failure; verify the documented path after repair."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "writable parent",
+            "action": "Persist the proposed incident and return its canonical artifact id."
+          }
+        },
+        "parent_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-008",
+          "child_receipt_id": "worker-lc-eval-008",
+          "ingested": true,
+          "terminal_action": "persisted_artifact",
+          "artifact_ref": "windows-path-normalization-deterministically-fails",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "repository repair owner",
+            "action": "Repair and verify the documented Windows path normalization path."
+          },
+          "forwarded_receipt": null
+        }
       },
       "expected": {
         "consulted": true,
@@ -303,7 +355,9 @@
         "repeated_failure_reduced": true,
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
-        "terminal_outcome": "proposed_artifact"
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt_required": true,
+        "parent_terminal_action": "persisted_artifact"
       }
     },
     {
@@ -376,6 +430,232 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact"
+      }
+    },
+    {
+      "id": "lc-eval-011-workaround-erases-classification",
+      "scenario": "A deterministic validator dependency failure is bypassed with an unrelated runtime, then task success is claimed without consultation or a terminal receipt.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": false,
+        "host_enforced": false,
+        "failure": "quick_validate.py exits at import yaml in the documented runtimes, then passes in an unrelated project virtual environment",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 2,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": true,
+        "terminal_outcome": "missing",
+        "terminal_receipt": null,
+        "parent_receipt": null
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": true,
+        "time_to_verified_normal_path_max_steps": 3,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true
+      }
+    },
+    {
+      "id": "lc-eval-012-workaround-is-containment",
+      "scenario": "An alternate runtime completes validation, but the actor separately records broken mechanism health, bounded containment, and an incident.",
+      "scope": {
+        "host": "codex-synthetic",
+        "agent_role": "parent",
+        "skill_state": "present",
+        "project_instructions": "present",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "codex-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "quick_validate.py exits at import yaml in the documented runtimes, then passes in an unrelated project virtual environment",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 2,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-012",
+          "signature": "Skill validator exits before validation at import yaml in documented Python runtimes.",
+          "dedupe_key": "skill-validator|import-yaml|default-runtime-missing-dependency",
+          "classification": "incident",
+          "evidence": [
+            "The documented runtimes reproduce ModuleNotFoundError at import yaml.",
+            "An unrelated project environment contains the missing dependency."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": true,
+            "summary": "Run the unchanged validator in the pre-existing unrelated environment for this task only.",
+            "verification_gate": "Run the documented validator path from clean preconditions without the unrelated environment."
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "skill-validator-default-runtime-missing-dependency",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "skill validator owner",
+            "action": "Declare or bundle the runtime dependency, then verify the documented launcher from clean preconditions."
+          }
+        },
+        "parent_receipt": null
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": false,
+        "blind_retry": false,
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt_required": true
+      }
+    },
+    {
+      "id": "lc-eval-013-parent-without-store-propagates",
+      "scenario": "A read-only worker hands off a complete incident candidate to a parent without a project store, which preserves the full payload in a further exact escalation.",
+      "scope": {
+        "host": "claude-synthetic",
+        "agent_role": "subagent-readonly",
+        "skill_state": "present",
+        "project_instructions": "inherited",
+        "receipt_type": "synthetic"
+      },
+      "receipt": {
+        "host": "claude-synthetic",
+        "consulted": true,
+        "host_enforced": true,
+        "failure": "launcher discovery in a sandbox differs from host discovery and the read-only worker cannot persist an incident",
+        "classification": "incident",
+        "applied_existing_artifact": false,
+        "stale_rejected": false,
+        "repeated_failure_attempts_before": 1,
+        "repeated_failure_attempts_after": 0,
+        "steps_to_verified_normal_path": null,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "worker-lc-eval-013",
+          "signature": "Launcher availability evaluated inside a sandbox differs from the host execution context.",
+          "dedupe_key": "launcher-discovery|sandbox-host-context-mismatch",
+          "classification": "incident",
+          "evidence": [
+            "The sandbox search path omits a verified user-local launcher.",
+            "Host-backed authentication is not observable from the sandbox."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": true,
+            "summary": "Use a verified launcher and the required host execution context for this run.",
+            "verification_gate": "Run the installed resolver without ad hoc launcher or authentication hints."
+          },
+          "terminal_outcome": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "Open an incident for sandbox-versus-host launcher discovery and authentication preflight."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "project-owning parent",
+            "action": "Persist the proposed incident in the nearest authoritative project."
+          }
+        },
+        "parent_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-013",
+          "child_receipt_id": "worker-lc-eval-013",
+          "ingested": true,
+          "terminal_action": "proposed_artifact",
+          "artifact_ref": null,
+          "no_artifact_reason": null,
+          "proposed_artifact": {
+            "kind": "incident",
+            "content": "Open an incident for sandbox-versus-host launcher discovery and authentication preflight."
+          },
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "project-owning coordinator",
+            "action": "Persist the complete incident candidate and return the canonical artifact id."
+          },
+          "forwarded_receipt": {
+            "receipt_schema": 1,
+            "receipt_id": "worker-lc-eval-013",
+            "signature": "Launcher availability evaluated inside a sandbox differs from the host execution context.",
+            "dedupe_key": "launcher-discovery|sandbox-host-context-mismatch",
+            "classification": "incident",
+            "evidence": [
+              "The sandbox search path omits a verified user-local launcher.",
+              "Host-backed authentication is not observable from the sandbox."
+            ],
+            "task_outcome": "blocked",
+            "mechanism_health": "broken",
+            "containment": {
+              "used": true,
+              "summary": "Use a verified launcher and the required host execution context for this run.",
+              "verification_gate": "Run the installed resolver without ad hoc launcher or authentication hints."
+            },
+            "terminal_outcome": "proposed_artifact",
+            "artifact_ref": null,
+            "no_artifact_reason": null,
+            "proposed_artifact": {
+              "kind": "incident",
+              "content": "Open an incident for sandbox-versus-host launcher discovery and authentication preflight."
+            },
+            "escalation": {
+              "requires": [
+                "repository_write"
+              ],
+              "target": "project-owning parent",
+              "action": "Persist the proposed incident in the nearest authoritative project."
+            }
+          }
+        }
+      },
+      "expected": {
+        "consulted": true,
+        "host_enforced": true,
+        "classification": "incident",
+        "false_trigger": false,
+        "stale_rejected": false,
+        "repeated_failure_reduced": false,
+        "blind_retry": false,
+        "terminal_outcome": "proposed_artifact",
+        "terminal_receipt_required": true,
+        "parent_terminal_action": "proposed_artifact"
       }
     }
   ]

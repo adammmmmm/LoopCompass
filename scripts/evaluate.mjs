@@ -2,6 +2,10 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  validateParentReceipt,
+  validateTerminalReceipt,
+} from "./lib/receipt.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -48,6 +52,16 @@ function ratio(numerator, denominator) {
 
 function countMatches(cases, field) {
   return cases.filter((c) => c.receipt?.[field] === c.expected?.[field]).length;
+}
+
+function observedTerminalOutcome(c) {
+  return c.receipt?.terminal_receipt?.terminal_outcome
+    ?? c.receipt?.terminal_outcome
+    ?? "missing";
+}
+
+function terminalOutcomeMatches(c) {
+  return observedTerminalOutcome(c) === c.expected?.terminal_outcome;
 }
 
 function countMatchesWhenConsulted(cases, field) {
@@ -132,11 +146,27 @@ function skillDecisionPass(c) {
   }
   const classification =
     c.receipt?.classification === c.expected?.classification;
-  const terminal =
-    c.receipt?.terminal_outcome === c.expected?.terminal_outcome;
+  const terminal = terminalOutcomeMatches(c);
   const stale =
     (c.receipt?.stale_rejected === true) === (c.expected?.stale_rejected === true);
   return classification && terminal && stale;
+}
+
+function receiptCompleteness(cases) {
+  const required = cases.filter((c) => c.expected?.terminal_receipt_required === true);
+  const complete = required.filter(
+    (c) => c.receipt?.terminal_receipt !== null
+      && typeof c.receipt?.terminal_receipt === "object",
+  );
+  return [complete.length, required.length];
+}
+
+function parentClosure(cases) {
+  const required = cases.filter((c) => hasField(c.expected ?? {}, "parent_terminal_action"));
+  const matched = required.filter(
+    (c) => c.receipt?.parent_receipt?.terminal_action === c.expected.parent_terminal_action,
+  );
+  return [matched.length, required.length];
 }
 
 function skillDecisionQuality(cases) {
@@ -272,6 +302,36 @@ function validateFixture(doc) {
     requireNonnegativeIntegerOrNull(receipt, "steps_to_verified_normal_path", `${label}.receipt`);
     requireBoolean(receipt, "blind_retry", `${label}.receipt`);
     requireEnum(receipt, "terminal_outcome", `${label}.receipt`, receiptTerminalOutcomes);
+    if (hasField(receipt, "terminal_receipt")) {
+      if (receipt.terminal_receipt !== null) {
+        validateTerminalReceipt(receipt.terminal_receipt, `${label}.receipt.terminal_receipt`);
+        if (receipt.terminal_receipt.classification !== receipt.classification) {
+          throw new Error(
+            `${label}.receipt.terminal_receipt.classification must match ${label}.receipt.classification`,
+          );
+        }
+        if (receipt.terminal_receipt.terminal_outcome !== receipt.terminal_outcome) {
+          throw new Error(
+            `${label}.receipt.terminal_receipt.terminal_outcome must match ${label}.receipt.terminal_outcome`,
+          );
+        }
+      }
+    }
+    if (hasField(receipt, "parent_receipt") && receipt.parent_receipt !== null) {
+      if (!receipt.terminal_receipt) {
+        throw new Error(`${label}.receipt.parent_receipt requires terminal_receipt`);
+      }
+      if (receipt.terminal_receipt.terminal_outcome !== "proposed_artifact") {
+        throw new Error(
+          `${label}.receipt.parent_receipt requires a proposed_artifact terminal_receipt`,
+        );
+      }
+      validateParentReceipt(
+        receipt.parent_receipt,
+        receipt.terminal_receipt,
+        `${label}.receipt.parent_receipt`,
+      );
+    }
 
     const expected = requireField(c, "expected", label);
     requireObject(expected, `${label}.expected`);
@@ -286,6 +346,17 @@ function validateFixture(doc) {
     }
     requireBoolean(expected, "blind_retry", `${label}.expected`);
     requireEnum(expected, "terminal_outcome", `${label}.expected`, expectedTerminalOutcomes);
+    if (hasField(expected, "terminal_receipt_required")) {
+      requireBoolean(expected, "terminal_receipt_required", `${label}.expected`);
+    }
+    if (hasField(expected, "parent_terminal_action")) {
+      requireEnum(
+        expected,
+        "parent_terminal_action",
+        `${label}.expected`,
+        expectedTerminalOutcomes,
+      );
+    }
   });
 }
 
@@ -299,8 +370,10 @@ function renderReport(doc) {
   const [reduced, reductionExpected] = repeatedFailureReduction(cases);
   const [blindRetries, totalCases] = blindRetryRate(cases);
   const [normalPath, normalPathExpected] = timeToVerifiedNormalPath(cases);
-  const terminalMatches = countMatches(cases, "terminal_outcome");
+  const terminalMatches = cases.filter(terminalOutcomeMatches).length;
   const [skillMatched, skillTotal] = skillDecisionQuality(cases);
+  const [completeReceipts, requiredReceipts] = receiptCompleteness(cases);
+  const [closedParentReceipts, requiredParentReceipts] = parentClosure(cases);
 
   return [
     "# LoopCompass benchmark report",
@@ -326,6 +399,8 @@ function renderReport(doc) {
     metricRow("Blind retry rate", blindRetries, totalCases),
     metricRow("Time to verified normal path", normalPath, normalPathExpected),
     metricRow("Terminal outcome compliance", terminalMatches, cases.length),
+    metricRow("Terminal receipt completeness", completeReceipts, requiredReceipts),
+    metricRow("Worker-to-parent closure", closedParentReceipts, requiredParentReceipts),
     "",
     "## Host versus skill breakdown",
     "",
@@ -335,19 +410,29 @@ function renderReport(doc) {
     "",
     "## Case outcomes",
     "",
-    "| Case | Host | Host enforced | Skill decision | Classification | Terminal outcome | Consulted | Blind retry |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| Case | Host | Host enforced | Skill decision | Classification | Terminal outcome | Receipt | Parent closure | Consulted | Blind retry |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...cases.map((c) => {
       const hostEnforced =
         c.receipt?.host_enforced === c.expected?.host_enforced ? "pass" : "fail";
       const skillDecision = skillDecisionPass(c);
       const skill = skillDecision === null ? "n/a" : skillDecision ? "pass" : "fail";
       const classification = classificationPass(c);
-      const terminal =
-        c.receipt?.terminal_outcome === c.expected?.terminal_outcome ? "pass" : "fail";
+      const terminal = terminalOutcomeMatches(c) ? "pass" : "fail";
+      const receipt = c.expected?.terminal_receipt_required === true
+        ? c.receipt?.terminal_receipt !== null
+          && typeof c.receipt?.terminal_receipt === "object"
+          ? "pass"
+          : "fail"
+        : "n/a";
+      const parent = hasField(c.expected ?? {}, "parent_terminal_action")
+        ? c.receipt?.parent_receipt?.terminal_action === c.expected.parent_terminal_action
+          ? "pass"
+          : "fail"
+        : "n/a";
       const consulted = c.receipt?.consulted === c.expected?.consulted ? "pass" : "fail";
       const blindRetry = c.receipt?.blind_retry === c.expected?.blind_retry ? "pass" : "fail";
-      return `| ${c.id} | ${hostName(c)} | ${hostEnforced} | ${skill} | ${classification} | ${terminal} | ${consulted} | ${blindRetry} |`;
+      return `| ${c.id} | ${hostName(c)} | ${hostEnforced} | ${skill} | ${classification} | ${terminal} | ${receipt} | ${parent} | ${consulted} | ${blindRetry} |`;
     }),
     "",
   ].join("\n");

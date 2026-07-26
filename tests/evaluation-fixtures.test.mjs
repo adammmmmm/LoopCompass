@@ -16,7 +16,7 @@ describe("evaluation benchmark fixtures", () => {
     assert.equal(doc.baseline.commit, "d7879fec762322ae658603104c7c334ade6ba43f");
     assert.equal(doc.live_integration_required, false);
     assert.ok(Array.isArray(doc.cases));
-    assert.ok(doc.cases.length >= 10);
+    assert.ok(doc.cases.length >= 13);
   });
 
   it("covers host, parent, subagent, missing-skill, and missing-instruction dimensions", () => {
@@ -34,5 +34,26 @@ describe("evaluation benchmark fixtures", () => {
     assert.ok(projectInstructions.has("present"));
     assert.ok(projectInstructions.has("inherited"));
     assert.ok(projectInstructions.has("missing"));
+  });
+
+  it("pairs workaround failure with containment and closes read-only handoffs", () => {
+    const doc = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const byId = new Map(doc.cases.map((c) => [c.id, c]));
+    const missed = byId.get("lc-eval-011-workaround-erases-classification");
+    const contained = byId.get("lc-eval-012-workaround-is-containment");
+    const closed = byId.get("lc-eval-008-subagent-readonly-handoff");
+    const propagated = byId.get("lc-eval-013-parent-without-store-propagates");
+
+    assert.equal(missed.receipt.terminal_receipt, null);
+    assert.equal(missed.expected.terminal_receipt_required, true);
+    assert.equal(contained.receipt.terminal_receipt.task_outcome, "completed");
+    assert.equal(contained.receipt.terminal_receipt.mechanism_health, "broken");
+    assert.equal(contained.receipt.terminal_receipt.containment.used, true);
+    assert.equal(closed.receipt.parent_receipt.terminal_action, "persisted_artifact");
+    assert.equal(propagated.receipt.parent_receipt.terminal_action, "proposed_artifact");
+    assert.deepEqual(
+      propagated.receipt.parent_receipt.forwarded_receipt,
+      propagated.receipt.terminal_receipt,
+    );
   });
 });

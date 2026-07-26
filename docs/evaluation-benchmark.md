@@ -39,6 +39,8 @@ and budget are explicit.
 | Blind retry rate | Recorded blind retries across all cases. Lower is better. |
 | Time to verified normal path | Actually consulted cases that reached the expected normal-path step budget. |
 | Terminal outcome compliance | Final state is persisted artifact, no artifact, or proposed artifact as expected. |
+| Terminal receipt completeness | Cases requiring a structured handoff that include a complete, valid receipt. |
+| Worker-to-parent closure | Required parent handoffs with a linked ingestion receipt and expected terminal action. |
 
 ## Fixture contract
 
@@ -55,6 +57,21 @@ Attempt counts, step counts, and step budgets must be nonnegative integers (with
 only for `receipt.steps_to_verified_normal_path`). Invalid values stop evaluation before scoring.
 Each `receipt.host` must exactly match its declared `scope.host`; schema 1 has no mismatch override
 or justification field, so mismatches fail closed before the report is generated.
+
+Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and optionally
+`receipt.parent_receipt`, following the shipped
+[terminal receipt contract](../skills/loop-compass/references/terminal-receipts.md). A deliberate
+`terminal_receipt: null` represents an observed missed receipt and scores as incomplete when
+`expected.terminal_receipt_required` is true. A present receipt is validated strictly: missing,
+blank, malformed, or outcome-inconsistent fields stop evaluation rather than being scored as
+partial success. `expected.parent_terminal_action` requires a linked parent receipt with that
+action.
+
+The paired validator-workaround cases distinguish task completion from mechanism health. Passing
+validation in an unrelated runtime is containment while the documented runtime remains broken;
+success without consultation and terminal classification fails. The read-only-worker cases cover
+both authoritative parent persistence and full-payload propagation by a parent that also lacks a
+project store.
 
 The fixture includes synthetic Codex, Claude, and Grok CLI host rows, plus parent, read-only
 subagent, missing-skill fallback, and missing-project-instruction scenarios. These are measurement

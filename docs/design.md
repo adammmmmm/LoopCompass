@@ -87,6 +87,15 @@ Delegated agents with shared repository write authority follow the same rule. Br
 read-only workers return the normalized signature, classification, evidence, proposed artifact,
 and exact escalation to the parent, which must close the classification in the same turn.
 
+Cross-actor handoffs use a small
+[terminal receipt](../skills/loop-compass/references/terminal-receipts.md) that is distinct from
+capsule schema. It records normalized identity, classification, sanitized evidence, task outcome,
+mechanism health, containment, terminal outcome, proposed content, and exact escalation. The
+receiving parent links its own ingestion receipt to the worker receipt and records persistence,
+`no_artifact`, or further full-payload escalation. Core validates this contract but stays
+storage-neutral; host integrations own ingestion, deduplication, sanitation, durable queueing, and
+closure.
+
 ## Artifact identity and concurrency
 
 Normalize signatures by removing volatile paths, IDs, timestamps, and secret-bearing values. Derive
@@ -259,8 +268,9 @@ cannot write safely.
 13. Two agents handling the same signature converge on one deterministic artifact path.
 14. Every triggered signature ends as `persisted_artifact`, `no_artifact`, or
     `proposed_artifact`, even if a later retry, runtime switch, or workaround succeeds.
-15. A delegated read-only worker returns the full classification payload to a parent that closes
-    the outcome in the same turn.
+15. A delegated read-only worker returns a complete proposed-artifact receipt to a parent whose
+    linked receipt proves ingestion and persistence, `no_artifact`, or complete further escalation
+    in the same turn.
 16. A successful task or validation result does not mark a still-broken mechanism healthy.
 17. Acknowledgment or requested-action completion does not close an incident without normal-path
     verification.
