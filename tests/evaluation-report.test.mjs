@@ -47,21 +47,21 @@ describe("evaluation benchmark report", () => {
       /Receipt types: synthetic\. Not live-host evidence absent an explicit live-run protocol\./,
     );
     assert.match(result.stdout, /Baseline commit \| d7879fec762322ae658603104c7c334ade6ba43f/);
-    assert.match(result.stdout, /Cases \| 13/);
-    assert.match(result.stdout, /Consultation recall \| 9\/12 \| 75\.0%/);
-    assert.match(result.stdout, /Host enforcement quality \| 10\/13 \| 76\.9%/);
-    assert.match(result.stdout, /Skill decision quality \| 9\/9 \| 100\.0%/);
-    assert.match(result.stdout, /Classification accuracy when consulted \| 9\/9 \| 100\.0%/);
+    assert.match(result.stdout, /Cases \| 15/);
+    assert.match(result.stdout, /Consultation recall \| 11\/14 \| 78\.6%/);
+    assert.match(result.stdout, /Host enforcement quality \| 12\/15 \| 80\.0%/);
+    assert.match(result.stdout, /Skill decision quality \| 10\/11 \| 90\.9%/);
+    assert.match(result.stdout, /Classification accuracy when consulted \| 11\/11 \| 100\.0%/);
     assert.match(result.stdout, /Repeated-failure reduction \| 7\/10 \| 70\.0%/);
-    assert.match(result.stdout, /Blind retry rate \| 3\/13 \| 23\.1%/);
+    assert.match(result.stdout, /Blind retry rate \| 3\/15 \| 20\.0%/);
     assert.match(result.stdout, /Time to verified normal path \| 7\/10 \| 70\.0%/);
-    assert.match(result.stdout, /Terminal outcome compliance \| 10\/13 \| 76\.9%/);
-    assert.match(result.stdout, /Terminal receipt completeness \| 3\/4 \| 75\.0%/);
-    assert.match(result.stdout, /Terminal receipt semantic accuracy \| 3\/4 \| 75\.0%/);
-    assert.match(result.stdout, /Worker-to-parent closure \| 2\/2 \| 100\.0%/);
+    assert.match(result.stdout, /Terminal outcome compliance \| 12\/15 \| 80\.0%/);
+    assert.match(result.stdout, /Terminal receipt completeness \| 5\/6 \| 83\.3%/);
+    assert.match(result.stdout, /Terminal receipt semantic accuracy \| 5\/6 \| 83\.3%/);
+    assert.match(result.stdout, /Worker-to-parent closure \| 3\/4 \| 75\.0%/);
     assert.match(result.stdout, /Live integration required \| false/);
     assert.match(result.stdout, /## Host versus skill breakdown/);
-    assert.match(result.stdout, /codex-synthetic \| 6 \| 4\/6 \(66\.7%\) \| 4\/4 \(100\.0%\)/);
+    assert.match(result.stdout, /codex-synthetic \| 7 \| 5\/7 \(71\.4%\) \| 4\/5 \(80\.0%\)/);
     assert.match(result.stdout, /lc-eval-008-subagent-readonly-handoff/);
     assert.match(result.stdout, /lc-eval-009-missing-skill-fallback/);
     assert.match(result.stdout, /lc-eval-010-missing-project-instructions/);
@@ -76,6 +76,14 @@ describe("evaluation benchmark report", () => {
     assert.match(
       result.stdout,
       /lc-eval-013-parent-without-store-propagates .* pass \| pass \| pass \| pass/,
+    );
+    assert.match(
+      result.stdout,
+      /lc-eval-014-parent-no-artifact .* pass \| pass \| pass \| pass/,
+    );
+    assert.match(
+      result.stdout,
+      /lc-eval-015-missing-parent-receipt .* pass \| pass \| fail \| pass/,
     );
   });
 
@@ -194,8 +202,8 @@ describe("evaluation benchmark report", () => {
     const result = runEvaluateWithDoc(doc);
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /Skill decision quality \| 8\/9 \| 88\.9%/);
-    assert.match(result.stdout, /Classification accuracy when consulted \| 8\/9 \| 88\.9%/);
+    assert.match(result.stdout, /Skill decision quality \| 9\/11 \| 81\.8%/);
+    assert.match(result.stdout, /Classification accuracy when consulted \| 10\/11 \| 90\.9%/);
     assert.match(
       result.stdout,
       /lc-eval-001-known-recovery \| codex-synthetic \| pass \| fail \| fail/,
@@ -257,6 +265,80 @@ describe("evaluation benchmark report", () => {
     );
   });
 
+  it("rejects incomplete, unknown, or classification-inconsistent semantic expectations", () => {
+    const mutations = [
+      (semantics) => {
+        delete semantics.no_artifact_reason;
+      },
+      (semantics) => {
+        semantics.raw_log = "unmodeled expectation";
+      },
+      (semantics) => {
+        semantics.proposed_artifact.kind = "recovery";
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      const receiptCase = doc.cases.find(
+        (c) => c.id === "lc-eval-015-missing-parent-receipt",
+      );
+      mutate(receiptCase.expected.terminal_receipt_semantics);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1);
+    }
+  });
+
+  it("does not allow a present receipt to opt out of semantic scoring", () => {
+    const doc = readFixture();
+    const receiptCase = doc.cases.find(
+      (c) => c.id === "lc-eval-012-workaround-is-containment",
+    );
+    receiptCase.expected.terminal_receipt_required = false;
+    delete receiptCase.expected.terminal_receipt_semantics;
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /terminal_receipt_required must be true when terminal_receipt is present/,
+    );
+  });
+
+  it("requires parent semantic expectations whenever a parent receipt is present", () => {
+    const doc = readFixture();
+    const receiptCase = doc.cases.find(
+      (c) => c.id === "lc-eval-014-parent-no-artifact",
+    );
+    delete receiptCase.expected.parent_receipt_semantics;
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /parent_receipt_semantics is required when parent_receipt is present/,
+    );
+  });
+
+  it("rejects receipt-id reuse across cases", () => {
+    const doc = readFixture();
+    const first = doc.cases.find(
+      (c) => c.id === "lc-eval-008-subagent-readonly-handoff",
+    );
+    const second = doc.cases.find(
+      (c) => c.id === "lc-eval-014-parent-no-artifact",
+    );
+    second.receipt.terminal_receipt.receipt_id =
+      first.receipt.terminal_receipt.receipt_id;
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /receipt_id duplicates cases\[7\]/);
+  });
+
   it("rejects a parent receipt that does not preserve a propagated payload", () => {
     const doc = readFixture();
     const receiptCase = doc.cases.find(
@@ -302,13 +384,80 @@ describe("evaluation benchmark report", () => {
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(
         result.stdout,
-        /Terminal receipt semantic accuracy \| 2\/4 \| 50\.0%/,
+        /Terminal receipt semantic accuracy \| 4\/6 \| 66\.7%/,
       );
-      assert.match(result.stdout, /Skill decision quality \| 8\/9 \| 88\.9%/);
+      assert.match(result.stdout, /Skill decision quality \| 9\/11 \| 81\.8%/);
       assert.match(
         result.stdout,
         /lc-eval-012-workaround-is-containment \| codex-synthetic \| pass \| fail \| pass \| pass \| pass \| fail \| n\/a/,
       );
+    }
+  });
+
+  it("scores every nested terminal semantic value, not only shape", () => {
+    const mutations = [
+      (terminal) => {
+        terminal.containment.summary = "Use a different bounded containment.";
+      },
+      (terminal) => {
+        terminal.containment.verification_gate = "Use a different verification gate.";
+      },
+      (terminal) => {
+        terminal.artifact_ref = "different-artifact-reference";
+      },
+      (terminal) => {
+        terminal.escalation.requires = ["process_control"];
+      },
+      (terminal) => {
+        terminal.escalation.target = "different repair owner";
+      },
+      (terminal) => {
+        terminal.escalation.action = "Perform a different exact action.";
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      const receiptCase = doc.cases.find(
+        (c) => c.id === "lc-eval-012-workaround-is-containment",
+      );
+      mutate(receiptCase.receipt.terminal_receipt);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /Terminal receipt semantic accuracy \| 4\/6 \| 66\.7%/);
+    }
+
+    const proposedDoc = readFixture();
+    const proposedCase = proposedDoc.cases.find(
+      (c) => c.id === "lc-eval-015-missing-parent-receipt",
+    );
+    proposedCase.receipt.terminal_receipt.proposed_artifact.content =
+      "Open a different sanitized incident candidate.";
+    const proposedResult = runEvaluateWithDoc(proposedDoc);
+    assert.equal(proposedResult.status, 0, proposedResult.stderr || proposedResult.stdout);
+    assert.match(proposedResult.stdout, /Terminal receipt semantic accuracy \| 4\/6 \| 66\.7%/);
+  });
+
+  it("scores exact authoritative parent payloads and no-artifact reasons", () => {
+    const mutations = [
+      ["lc-eval-008-subagent-readonly-handoff", (parent) => {
+        parent.artifact_ref = "different-artifact-reference";
+      }],
+      ["lc-eval-008-subagent-readonly-handoff", (parent) => {
+        parent.escalation.action = "Perform a different repair action.";
+      }],
+      ["lc-eval-014-parent-no-artifact", (parent) => {
+        parent.no_artifact_reason = "A different sanitized no-artifact reason.";
+      }],
+    ];
+
+    for (const [id, mutate] of mutations) {
+      const doc = readFixture();
+      const receiptCase = doc.cases.find((c) => c.id === id);
+      mutate(receiptCase.receipt.parent_receipt);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /Worker-to-parent closure \| 2\/4 \| 50\.0%/);
     }
   });
 });

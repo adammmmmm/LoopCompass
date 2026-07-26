@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { normalizeSignature } from "./signature.mjs";
 
 const classifications = new Set(["recovery", "incident", "external", "none"]);
 const terminalOutcomes = new Set([
@@ -8,6 +10,39 @@ const terminalOutcomes = new Set([
 ]);
 const taskOutcomes = new Set(["completed", "incomplete", "blocked", "unknown"]);
 const mechanismHealthStates = new Set(["healthy", "broken", "external", "unknown"]);
+const terminalReceiptFields = new Set([
+  "receipt_schema",
+  "receipt_id",
+  "signature",
+  "dedupe_key",
+  "classification",
+  "evidence",
+  "task_outcome",
+  "mechanism_health",
+  "containment",
+  "terminal_outcome",
+  "artifact_ref",
+  "no_artifact_reason",
+  "proposed_artifact",
+  "escalation",
+]);
+const parentReceiptFields = new Set([
+  "receipt_schema",
+  "receipt_id",
+  "child_receipt_id",
+  "child_payload_sha256",
+  "ingested",
+  "terminal_action",
+  "artifact_ref",
+  "no_artifact_reason",
+  "proposed_artifact",
+  "escalation",
+  "forwarded_receipt",
+]);
+const containmentFields = new Set(["used", "summary", "verification_gate"]);
+const proposedArtifactFields = new Set(["kind", "content"]);
+const escalationFields = new Set(["requires", "target", "action"]);
+const safeIdentifier = /^[a-z0-9][a-z0-9._:|-]*$/;
 
 function hasField(value, field) {
   return Object.prototype.hasOwnProperty.call(value, field);
@@ -15,6 +50,14 @@ function hasField(value, field) {
 
 function fail(label, message) {
   throw new Error(`${label}${message}`);
+}
+
+function requireExactFields(value, label, allowed) {
+  for (const field of Object.keys(value)) {
+    if (!allowed.has(field)) {
+      fail(label, `.${field} is not allowed`);
+    }
+  }
 }
 
 function requireObject(value, label) {
@@ -39,10 +82,42 @@ function requireString(value, field, label) {
   return result;
 }
 
+function requireSafeString(value, field, label) {
+  const result = requireString(value, field, label);
+  if (normalizeSignature(result) !== result) {
+    fail(label, `.${field} must be sanitized and normalized before receipt construction`);
+  }
+  return result;
+}
+
+function requireSafeIdentifier(value, field, label) {
+  const result = requireSafeString(value, field, label);
+  if (!safeIdentifier.test(result)) {
+    fail(label, `.${field} must be a lowercase host-neutral identifier`);
+  }
+  return result;
+}
+
 function requireNullableString(value, field, label) {
   const result = requireField(value, field, label);
   if (result !== null && (typeof result !== "string" || result.trim().length === 0)) {
     fail(label, `.${field} must be null or a non-empty string`);
+  }
+  return result;
+}
+
+function requireNullableSafeString(value, field, label) {
+  const result = requireNullableString(value, field, label);
+  if (result !== null && normalizeSignature(result) !== result) {
+    fail(label, `.${field} must be sanitized and normalized before receipt construction`);
+  }
+  return result;
+}
+
+function requireNullableSafeIdentifier(value, field, label) {
+  const result = requireNullableSafeString(value, field, label);
+  if (result !== null && !safeIdentifier.test(result)) {
+    fail(label, `.${field} must be null or a lowercase host-neutral identifier`);
   }
   return result;
 }
@@ -75,6 +150,14 @@ function requireStringArray(value, field, label) {
   return result;
 }
 
+function requireSafeStringArray(value, field, label) {
+  const result = requireStringArray(value, field, label);
+  if (result.some((item) => normalizeSignature(item) !== item)) {
+    fail(label, `.${field} must contain only sanitized normalized values`);
+  }
+  return result;
+}
+
 function requireNullableObject(value, field, label) {
   const result = requireField(value, field, label);
   if (result === null) {
@@ -87,16 +170,18 @@ function validateEscalation(escalation, label) {
   if (escalation === null) {
     return;
   }
-  requireStringArray(escalation, "requires", label);
-  requireString(escalation, "target", label);
-  requireString(escalation, "action", label);
+  requireExactFields(escalation, label, escalationFields);
+  requireSafeStringArray(escalation, "requires", label);
+  requireSafeString(escalation, "target", label);
+  requireSafeString(escalation, "action", label);
 }
 
 function validateContainment(containment, label) {
   requireObject(containment, label);
+  requireExactFields(containment, label, containmentFields);
   const used = requireBoolean(containment, "used", label);
-  const summary = requireNullableString(containment, "summary", label);
-  const verificationGate = requireNullableString(
+  const summary = requireNullableSafeString(containment, "summary", label);
+  const verificationGate = requireNullableSafeString(
     containment,
     "verification_gate",
     label,
@@ -113,13 +198,14 @@ function validateProposedArtifact(artifact, label) {
   if (artifact === null) {
     return;
   }
+  requireExactFields(artifact, label, proposedArtifactFields);
   requireEnum(artifact, "kind", label, new Set(["recovery", "incident"]));
-  requireString(artifact, "content", label);
+  requireSafeString(artifact, "content", label);
 }
 
 function validateTerminalActionFields(receipt, label, outcome, childReceipt = null) {
-  const artifactRef = requireNullableString(receipt, "artifact_ref", label);
-  const noArtifactReason = requireNullableString(receipt, "no_artifact_reason", label);
+  const artifactRef = requireNullableSafeIdentifier(receipt, "artifact_ref", label);
+  const noArtifactReason = requireNullableSafeString(receipt, "no_artifact_reason", label);
   const proposedArtifact = requireNullableObject(receipt, "proposed_artifact", label);
   validateProposedArtifact(proposedArtifact, `${label}.proposed_artifact`);
   const escalation = requireNullableObject(receipt, "escalation", label);
@@ -159,16 +245,34 @@ function validateTerminalActionFields(receipt, label, outcome, childReceipt = nu
   }
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function receiptPayloadDigest(receipt) {
+  return createHash("sha256").update(canonicalJson(receipt)).digest("hex");
+}
+
 export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
   requireObject(receipt, label);
+  requireExactFields(receipt, label, terminalReceiptFields);
   if (requireField(receipt, "receipt_schema", label) !== 1) {
     fail(label, ".receipt_schema must be 1");
   }
-  requireString(receipt, "receipt_id", label);
-  requireString(receipt, "signature", label);
-  requireString(receipt, "dedupe_key", label);
+  requireSafeIdentifier(receipt, "receipt_id", label);
+  requireSafeString(receipt, "signature", label);
+  requireSafeIdentifier(receipt, "dedupe_key", label);
   const classification = requireEnum(receipt, "classification", label, classifications);
-  requireStringArray(receipt, "evidence", label);
+  requireSafeStringArray(receipt, "evidence", label);
   requireEnum(receipt, "task_outcome", label, taskOutcomes);
   requireEnum(receipt, "mechanism_health", label, mechanismHealthStates);
   validateContainment(
@@ -183,19 +287,42 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
   ) {
     fail(label, `.escalation is required for ${classification} classification`);
   }
+  if (classification === "none" && outcome !== "no_artifact") {
+    fail(label, ".classification none requires terminal_outcome no_artifact");
+  }
+  if (outcome === "no_artifact" && classification !== "none") {
+    fail(label, ".terminal_outcome no_artifact requires classification none");
+  }
+  if (receipt.proposed_artifact !== null) {
+    const expectedKind = classification === "recovery" ? "recovery" : "incident";
+    if (receipt.proposed_artifact.kind !== expectedKind) {
+      fail(label, `.proposed_artifact.kind must be ${expectedKind} for ${classification}`);
+    }
+  }
   return receipt;
 }
 
 export function validateParentReceipt(parent, childReceipt, label = "parent_receipt") {
   requireObject(parent, label);
   validateTerminalReceipt(childReceipt, `${label}.child_receipt`);
+  requireExactFields(parent, label, parentReceiptFields);
   if (requireField(parent, "receipt_schema", label) !== 1) {
     fail(label, ".receipt_schema must be 1");
   }
-  requireString(parent, "receipt_id", label);
-  const childReceiptId = requireString(parent, "child_receipt_id", label);
+  const parentReceiptId = requireSafeIdentifier(parent, "receipt_id", label);
+  const childReceiptId = requireSafeIdentifier(parent, "child_receipt_id", label);
   if (childReceiptId !== childReceipt.receipt_id) {
     fail(label, ".child_receipt_id must match terminal_receipt.receipt_id");
+  }
+  if (parentReceiptId === childReceiptId) {
+    fail(label, ".receipt_id must differ from child_receipt_id");
+  }
+  const childPayloadDigest = requireString(parent, "child_payload_sha256", label);
+  if (!/^[0-9a-f]{64}$/.test(childPayloadDigest)) {
+    fail(label, ".child_payload_sha256 must be a lowercase SHA-256 digest");
+  }
+  if (childPayloadDigest !== receiptPayloadDigest(childReceipt)) {
+    fail(label, ".child_payload_sha256 must bind the complete child receipt");
   }
   if (requireBoolean(parent, "ingested", label) !== true) {
     fail(label, ".ingested must be true");
@@ -208,12 +335,12 @@ export function validateParentReceipt(parent, childReceipt, label = "parent_rece
     }
   }
   validateTerminalActionFields(parent, label, outcome, childReceipt);
+  if (
+    outcome === "persisted_artifact"
+    && (childReceipt.classification === "incident" || childReceipt.classification === "external")
+    && parent.escalation === null
+  ) {
+    fail(label, ".escalation is required when persisting an incident or external incident");
+  }
   return parent;
 }
-
-export const receiptEnums = Object.freeze({
-  classifications,
-  terminalOutcomes,
-  taskOutcomes,
-  mechanismHealthStates,
-});

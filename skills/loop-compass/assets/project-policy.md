@@ -50,7 +50,8 @@ parent must persist, record `no artifact`, or escalate in the same turn.
 For a cross-actor handoff, use the skill's terminal receipt contract: keep task outcome separate
 from mechanism health, record containment, and require a linked parent receipt proving ingestion
 and its terminal action. A parent that still lacks authority must propagate the complete payload,
-not only a receipt id or narrative summary.
+not only a receipt id or narrative summary. Bind the parent receipt to the exact sanitized child
+payload with a distinct receipt id and canonical payload digest.
 
 When a verified recovery changes the intended path, note `consulted: [<recovery-id>]` on any new
 incident for the same signature family, or record the recovery id in the task or PR closeout so

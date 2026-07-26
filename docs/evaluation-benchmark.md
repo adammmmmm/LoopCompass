@@ -31,7 +31,7 @@ and budget are explicit.
 | --- | --- |
 | Consultation recall | Expected consultations that actually happened before retry or classification. |
 | Host enforcement quality | Whether the host triggered or skipped consultation as expected. |
-| Skill decision quality | Classification, stale rejection, and terminal outcome quality only for consulted cases. |
+| Skill decision quality | Classification, stale rejection, terminal outcome, structured receipt semantics, and required parent closure for consulted cases. |
 | Classification accuracy when consulted | Recorded lane matches expected lane only for rows where consultation actually happened. |
 | False trigger rate | Cases that should not consult but did. Lower is better. |
 | Stale rejection rate | Expected stale artifacts rejected by current evidence. |
@@ -40,8 +40,8 @@ and budget are explicit.
 | Time to verified normal path | Actually consulted cases that reached the expected normal-path step budget. |
 | Terminal outcome compliance | Final state is persisted artifact, no artifact, or proposed artifact as expected. |
 | Terminal receipt completeness | Cases requiring a structured handoff that include a complete, valid receipt. |
-| Terminal receipt semantic accuracy | Expected task outcome, mechanism health, and containment use all match the receipt. |
-| Worker-to-parent closure | Required parent handoffs with a linked ingestion receipt and expected terminal action. |
+| Terminal receipt semantic accuracy | Every expected modeled semantic value exactly matches the terminal receipt. |
+| Worker-to-parent closure | Required parent handoffs have an exact linked ingestion and authoritative payload. |
 
 ## Fixture contract
 
@@ -65,17 +65,25 @@ Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and 
 `terminal_receipt: null` represents an observed missed receipt and scores as incomplete when
 `expected.terminal_receipt_required` is true. A present receipt is validated strictly: missing,
 blank, malformed, or outcome-inconsistent fields stop evaluation rather than being scored as
-partial success. `expected.parent_terminal_action` requires a linked parent receipt with that
-action. `expected.terminal_receipt_semantics` separately scores `task_outcome`,
-`mechanism_health`, and `containment.used`; it is required whenever
+partial success. `expected.terminal_receipt_semantics` separately scores `task_outcome`,
+`mechanism_health`, the complete containment values, artifact/no-artifact payload, proposed
+artifact, and exact escalation; it is required whenever
 `expected.terminal_receipt_required` is true, so a fixture cannot opt out of semantic scoring.
-Structural validity alone does not earn semantic credit.
+If a receipt is present, `terminal_receipt_required` must be true. Structural validity alone does
+not earn semantic credit.
+
+`expected.parent_receipt_semantics` scores the complete authoritative action: terminal action,
+artifact reference or no-artifact reason, proposed content, escalation, and whether the complete
+child receipt is forwarded. A present parent receipt cannot omit those expectations. A required
+parent receipt may be deliberately absent in a negative fixture, where it scores as failed closure.
+Receipt ids must be unique across a fixture, and every parent links both the child id and canonical
+child-payload SHA-256 digest.
 
 The paired validator-workaround cases distinguish task completion from mechanism health. Passing
 validation in an unrelated runtime is containment while the documented runtime remains broken;
 success without consultation and terminal classification fails. The read-only-worker cases cover
 both authoritative parent persistence and full-payload propagation by a parent that also lacks a
-project store.
+project store. Additional cases cover authoritative `no_artifact` and a missing parent receipt.
 
 The fixture includes synthetic Codex, Claude, and Grok CLI host rows, plus parent, read-only
 subagent, missing-skill fallback, and missing-project-instruction scenarios. These are measurement

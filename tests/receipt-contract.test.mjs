@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  receiptPayloadDigest,
   validateParentReceipt,
   validateTerminalReceipt,
 } from "../scripts/lib/receipt.mjs";
@@ -21,6 +22,9 @@ const persisted = fixture.cases.find(
 ).receipt.terminal_receipt;
 const propagatedCase = fixture.cases.find(
   (c) => c.id === "lc-eval-013-parent-without-store-propagates",
+).receipt;
+const parentNoArtifactCase = fixture.cases.find(
+  (c) => c.id === "lc-eval-014-parent-no-artifact",
 ).receipt;
 
 describe("terminal receipt contract", () => {
@@ -139,6 +143,165 @@ describe("terminal receipt contract", () => {
     assert.throws(
       () => validateParentReceipt(partial, propagatedCase.terminal_receipt),
       /forwarded_receipt must preserve the complete child receipt unchanged/,
+    );
+  });
+
+  it("binds a parent to the canonical complete child payload and distinct ids", () => {
+    const swappedChild = structuredClone(propagatedCase.terminal_receipt);
+    swappedChild.evidence.push("Different sanitized evidence.");
+    assert.throws(
+      () =>
+        validateParentReceipt(
+          structuredClone(propagatedCase.parent_receipt),
+          swappedChild,
+        ),
+      /child_payload_sha256 must bind the complete child receipt/,
+    );
+
+    const duplicateId = structuredClone(propagatedCase.parent_receipt);
+    duplicateId.receipt_id = duplicateId.child_receipt_id;
+    assert.throws(
+      () => validateParentReceipt(duplicateId, propagatedCase.terminal_receipt),
+      /receipt_id must differ from child_receipt_id/,
+    );
+
+    const reordered = Object.fromEntries(
+      Object.entries(propagatedCase.terminal_receipt).reverse(),
+    );
+    assert.equal(
+      receiptPayloadDigest(reordered),
+      receiptPayloadDigest(propagatedCase.terminal_receipt),
+    );
+  });
+
+  it("requires exact persistence escalation for authoritative incident actions", () => {
+    const authoritativeCase = fixture.cases.find(
+      (c) => c.id === "lc-eval-008-subagent-readonly-handoff",
+    ).receipt;
+    const parent = structuredClone(authoritativeCase.parent_receipt);
+    parent.escalation = null;
+    assert.throws(
+      () => validateParentReceipt(parent, authoritativeCase.terminal_receipt),
+      /escalation is required when persisting an incident/,
+    );
+  });
+
+  it("accepts a linked parent no-artifact action with an exact reason", () => {
+    assert.doesNotThrow(() =>
+      validateParentReceipt(
+        structuredClone(parentNoArtifactCase.parent_receipt),
+        structuredClone(parentNoArtifactCase.terminal_receipt),
+      ),
+    );
+    assert.equal(parentNoArtifactCase.parent_receipt.terminal_action, "no_artifact");
+    assert.ok(parentNoArtifactCase.parent_receipt.no_artifact_reason);
+  });
+
+  it("rejects unknown fields at every receipt layer", () => {
+    const terminal = structuredClone(persisted);
+    terminal.raw_log = "unmodeled content";
+    assert.throws(
+      () => validateTerminalReceipt(terminal),
+      /terminal_receipt\.raw_log is not allowed/,
+    );
+
+    const nested = structuredClone(persisted);
+    nested.containment.transcript = "unmodeled content";
+    assert.throws(
+      () => validateTerminalReceipt(nested),
+      /terminal_receipt\.containment\.transcript is not allowed/,
+    );
+
+    const parent = structuredClone(parentNoArtifactCase.parent_receipt);
+    parent.raw_output = "unmodeled content";
+    assert.throws(
+      () => validateParentReceipt(parent, parentNoArtifactCase.terminal_receipt),
+      /parent_receipt\.raw_output is not allowed/,
+    );
+  });
+
+  it("distinguishes a missing required key from deliberate null", () => {
+    const missingTerminalKey = structuredClone(propagatedCase.terminal_receipt);
+    delete missingTerminalKey.artifact_ref;
+    assert.throws(
+      () => validateTerminalReceipt(missingTerminalKey),
+      /terminal_receipt\.artifact_ref is required/,
+    );
+    assert.equal(propagatedCase.terminal_receipt.artifact_ref, null);
+    assert.doesNotThrow(() =>
+      validateTerminalReceipt(structuredClone(propagatedCase.terminal_receipt)),
+    );
+
+    const missingParentKey = structuredClone(parentNoArtifactCase.parent_receipt);
+    delete missingParentKey.artifact_ref;
+    assert.throws(
+      () => validateParentReceipt(missingParentKey, parentNoArtifactCase.terminal_receipt),
+      /parent_receipt\.artifact_ref is required/,
+    );
+    assert.equal(parentNoArtifactCase.parent_receipt.artifact_ref, null);
+
+    const missingDigest = structuredClone(parentNoArtifactCase.parent_receipt);
+    delete missingDigest.child_payload_sha256;
+    assert.throws(
+      () => validateParentReceipt(missingDigest, parentNoArtifactCase.terminal_receipt),
+      /parent_receipt\.child_payload_sha256 is required/,
+    );
+  });
+
+  it("enforces classification and proposed-artifact consistency", () => {
+    const wrongKind = structuredClone(propagatedCase.terminal_receipt);
+    wrongKind.proposed_artifact.kind = "recovery";
+    assert.throws(
+      () => validateTerminalReceipt(wrongKind),
+      /proposed_artifact\.kind must be incident for incident/,
+    );
+
+    const incidentNoArtifact = structuredClone(propagatedCase.terminal_receipt);
+    incidentNoArtifact.terminal_outcome = "no_artifact";
+    incidentNoArtifact.no_artifact_reason = "No durable artifact is justified.";
+    incidentNoArtifact.proposed_artifact = null;
+    assert.throws(
+      () => validateTerminalReceipt(incidentNoArtifact),
+      /terminal_outcome no_artifact requires classification none/,
+    );
+
+    const nonePersisted = structuredClone(persisted);
+    nonePersisted.classification = "none";
+    assert.throws(
+      () => validateTerminalReceipt(nonePersisted),
+      /classification none requires terminal_outcome no_artifact/,
+    );
+  });
+
+  it("rejects clearly unnormalized or identity-unsafe receipt values", () => {
+    const unsafeSignature = structuredClone(persisted);
+    unsafeSignature.signature =
+      "Validator fails under /Users/PersonalName/private-project.";
+    assert.throws(
+      () => validateTerminalReceipt(unsafeSignature),
+      /signature must be sanitized and normalized before receipt construction/,
+    );
+
+    const unsafeEvidence = structuredClone(persisted);
+    unsafeEvidence.evidence = ["Contact person@example.com for access."];
+    assert.throws(
+      () => validateTerminalReceipt(unsafeEvidence),
+      /evidence must contain only sanitized normalized values/,
+    );
+
+    const unsafeId = structuredClone(persisted);
+    unsafeId.receipt_id = "Worker@PrivateOrg";
+    assert.throws(
+      () => validateTerminalReceipt(unsafeId),
+      /receipt_id must be a lowercase host-neutral identifier/,
+    );
+
+    const unsafeProposed = structuredClone(propagatedCase.terminal_receipt);
+    unsafeProposed.proposed_artifact.content =
+      "Use ghp_abcdefghijklmnopqrstuvwxyz for the repair.";
+    assert.throws(
+      () => validateTerminalReceipt(unsafeProposed),
+      /content must be sanitized and normalized before receipt construction/,
     );
   });
 

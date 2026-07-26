@@ -49,16 +49,32 @@ describe("evaluation benchmark fixtures", () => {
     assert.equal(contained.receipt.terminal_receipt.task_outcome, "completed");
     assert.equal(contained.receipt.terminal_receipt.mechanism_health, "broken");
     assert.equal(contained.receipt.terminal_receipt.containment.used, true);
-    assert.deepEqual(contained.expected.terminal_receipt_semantics, {
-      task_outcome: "completed",
-      mechanism_health: "broken",
-      containment_used: true,
-    });
+    assert.deepEqual(
+      contained.expected.terminal_receipt_semantics,
+      {
+        task_outcome: contained.receipt.terminal_receipt.task_outcome,
+        mechanism_health: contained.receipt.terminal_receipt.mechanism_health,
+        containment: contained.receipt.terminal_receipt.containment,
+        artifact_ref: contained.receipt.terminal_receipt.artifact_ref,
+        no_artifact_reason: contained.receipt.terminal_receipt.no_artifact_reason,
+        proposed_artifact: contained.receipt.terminal_receipt.proposed_artifact,
+        escalation: contained.receipt.terminal_receipt.escalation,
+      },
+    );
     assert.equal(closed.receipt.parent_receipt.terminal_action, "persisted_artifact");
     assert.equal(propagated.receipt.parent_receipt.terminal_action, "proposed_artifact");
     assert.deepEqual(
       propagated.receipt.parent_receipt.forwarded_receipt,
       propagated.receipt.terminal_receipt,
+    );
+    const parentNoArtifact = byId.get("lc-eval-014-parent-no-artifact");
+    const missingParent = byId.get("lc-eval-015-missing-parent-receipt");
+    assert.equal(parentNoArtifact.receipt.parent_receipt.terminal_action, "no_artifact");
+    assert.ok(parentNoArtifact.receipt.parent_receipt.no_artifact_reason);
+    assert.equal(missingParent.receipt.parent_receipt, null);
+    assert.equal(
+      missingParent.expected.parent_receipt_semantics.terminal_action,
+      "persisted_artifact",
     );
   });
 });

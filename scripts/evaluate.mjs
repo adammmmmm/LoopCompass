@@ -2,8 +2,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import {
-  receiptEnums,
+  receiptPayloadDigest,
   validateParentReceipt,
   validateTerminalReceipt,
 } from "./lib/receipt.mjs";
@@ -21,6 +22,23 @@ const agentRoles = new Set(["parent", "subagent-readonly"]);
 const skillStates = new Set(["present", "missing"]);
 const projectInstructionStates = new Set(["present", "inherited", "missing"]);
 const receiptTypes = new Set(["synthetic", "recorded"]);
+const terminalSemanticsFields = new Set([
+  "task_outcome",
+  "mechanism_health",
+  "containment",
+  "artifact_ref",
+  "no_artifact_reason",
+  "proposed_artifact",
+  "escalation",
+]);
+const parentSemanticsFields = new Set([
+  "terminal_action",
+  "artifact_ref",
+  "no_artifact_reason",
+  "proposed_artifact",
+  "escalation",
+  "forwards_child_receipt",
+]);
 
 function usage() {
   return [
@@ -151,7 +169,24 @@ function skillDecisionPass(c) {
   const stale =
     (c.receipt?.stale_rejected === true) === (c.expected?.stale_rejected === true);
   const receiptSemantics = terminalReceiptSemanticsPass(c);
-  return classification && terminal && stale && receiptSemantics !== false;
+  const parentSemantics = parentReceiptSemanticsPass(c);
+  return classification
+    && terminal
+    && stale
+    && receiptSemantics !== false
+    && parentSemantics !== false;
+}
+
+function terminalSemanticProjection(receipt) {
+  return {
+    task_outcome: receipt.task_outcome,
+    mechanism_health: receipt.mechanism_health,
+    containment: receipt.containment,
+    artifact_ref: receipt.artifact_ref,
+    no_artifact_reason: receipt.no_artifact_reason,
+    proposed_artifact: receipt.proposed_artifact,
+    escalation: receipt.escalation,
+  };
 }
 
 function terminalReceiptSemanticsPass(c) {
@@ -163,9 +198,30 @@ function terminalReceiptSemanticsPass(c) {
   if (!actual) {
     return false;
   }
-  return actual.task_outcome === expected.task_outcome
-    && actual.mechanism_health === expected.mechanism_health
-    && actual.containment.used === expected.containment_used;
+  return isDeepStrictEqual(terminalSemanticProjection(actual), expected);
+}
+
+function parentSemanticProjection(receipt) {
+  return {
+    terminal_action: receipt.terminal_action,
+    artifact_ref: receipt.artifact_ref,
+    no_artifact_reason: receipt.no_artifact_reason,
+    proposed_artifact: receipt.proposed_artifact,
+    escalation: receipt.escalation,
+    forwards_child_receipt: receipt.forwarded_receipt !== null,
+  };
+}
+
+function parentReceiptSemanticsPass(c) {
+  const expected = c.expected?.parent_receipt_semantics;
+  if (!expected) {
+    return null;
+  }
+  const actual = c.receipt?.parent_receipt;
+  if (!actual) {
+    return false;
+  }
+  return isDeepStrictEqual(parentSemanticProjection(actual), expected);
 }
 
 function receiptCompleteness(cases) {
@@ -184,10 +240,8 @@ function receiptSemantics(cases) {
 }
 
 function parentClosure(cases) {
-  const required = cases.filter((c) => hasField(c.expected ?? {}, "parent_terminal_action"));
-  const matched = required.filter(
-    (c) => c.receipt?.parent_receipt?.terminal_action === c.expected.parent_terminal_action,
-  );
+  const required = cases.filter((c) => c.expected?.parent_receipt_semantics);
+  const matched = required.filter((c) => parentReceiptSemanticsPass(c) === true);
   return [matched.length, required.length];
 }
 
@@ -231,6 +285,14 @@ function hasField(obj, field) {
 function requireObject(value, label) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
+  }
+}
+
+function requireExactFields(value, label, allowed) {
+  for (const field of Object.keys(value)) {
+    if (!allowed.has(field)) {
+      throw new Error(`${label}.${field} is not allowed`);
+    }
   }
 }
 
@@ -282,6 +344,47 @@ function requireEnum(obj, field, label, allowed) {
   }
 }
 
+function expectedTerminalReceipt(c, semantics) {
+  return {
+    receipt_schema: 1,
+    receipt_id: "expected-terminal-receipt",
+    signature: "Expected sanitized benchmark signature.",
+    dedupe_key: "expected|benchmark|signature",
+    classification: c.expected.classification,
+    evidence: ["Expected sanitized benchmark evidence."],
+    ...structuredClone(semantics),
+    terminal_outcome: c.expected.terminal_outcome,
+  };
+}
+
+function validateExpectedTerminalSemantics(c, semantics, label) {
+  requireExactFields(semantics, label, terminalSemanticsFields);
+  validateTerminalReceipt(expectedTerminalReceipt(c, semantics), label);
+}
+
+function validateExpectedParentSemantics(c, semantics, label) {
+  requireExactFields(semantics, label, parentSemanticsFields);
+  const child = expectedTerminalReceipt(c, c.expected.terminal_receipt_semantics);
+  if (child.terminal_outcome !== "proposed_artifact") {
+    throw new Error(`${label} requires expected terminal_outcome proposed_artifact`);
+  }
+  requireBoolean(semantics, "forwards_child_receipt", label);
+  const parent = {
+    receipt_schema: 1,
+    receipt_id: "expected-parent-receipt",
+    child_receipt_id: child.receipt_id,
+    child_payload_sha256: receiptPayloadDigest(child),
+    ingested: true,
+    terminal_action: semantics.terminal_action,
+    artifact_ref: semantics.artifact_ref,
+    no_artifact_reason: semantics.no_artifact_reason,
+    proposed_artifact: structuredClone(semantics.proposed_artifact),
+    escalation: structuredClone(semantics.escalation),
+    forwarded_receipt: semantics.forwards_child_receipt ? structuredClone(child) : null,
+  };
+  validateParentReceipt(parent, child, label);
+}
+
 function validateFixture(doc) {
   requireObject(doc, "fixture");
   if (doc.schema !== 1) {
@@ -293,6 +396,7 @@ function validateFixture(doc) {
   requireString(doc.baseline, "commit", "fixture.baseline");
   requireBoolean(doc, "live_integration_required", "fixture");
   requireArray(requireField(doc, "cases", "fixture"), "fixture.cases");
+  const receiptIds = new Map();
 
   doc.cases.forEach((c, index) => {
     const label = `cases[${index}]`;
@@ -337,6 +441,13 @@ function validateFixture(doc) {
             `${label}.receipt.terminal_receipt.terminal_outcome must match ${label}.receipt.terminal_outcome`,
           );
         }
+        const childId = receipt.terminal_receipt.receipt_id;
+        if (receiptIds.has(childId)) {
+          throw new Error(
+            `${label}.receipt.terminal_receipt.receipt_id duplicates ${receiptIds.get(childId)}`,
+          );
+        }
+        receiptIds.set(childId, `${label}.receipt.terminal_receipt.receipt_id`);
       }
     }
     if (hasField(receipt, "parent_receipt") && receipt.parent_receipt !== null) {
@@ -353,6 +464,13 @@ function validateFixture(doc) {
         receipt.terminal_receipt,
         `${label}.receipt.parent_receipt`,
       );
+      const parentId = receipt.parent_receipt.receipt_id;
+      if (receiptIds.has(parentId)) {
+        throw new Error(
+          `${label}.receipt.parent_receipt.receipt_id duplicates ${receiptIds.get(parentId)}`,
+        );
+      }
+      receiptIds.set(parentId, `${label}.receipt.parent_receipt.receipt_id`);
     }
 
     const expected = requireField(c, "expected", label);
@@ -372,6 +490,15 @@ function validateFixture(doc) {
       requireBoolean(expected, "terminal_receipt_required", `${label}.expected`);
     }
     if (
+      receipt.terminal_receipt !== null
+      && typeof receipt.terminal_receipt === "object"
+      && expected.terminal_receipt_required !== true
+    ) {
+      throw new Error(
+        `${label}.expected.terminal_receipt_required must be true when terminal_receipt is present`,
+      );
+    }
+    if (
       expected.terminal_receipt_required === true
       && !hasField(expected, "terminal_receipt_semantics")
     ) {
@@ -382,21 +509,9 @@ function validateFixture(doc) {
     if (hasField(expected, "terminal_receipt_semantics")) {
       const semantics = expected.terminal_receipt_semantics;
       requireObject(semantics, `${label}.expected.terminal_receipt_semantics`);
-      requireEnum(
+      validateExpectedTerminalSemantics(
+        c,
         semantics,
-        "task_outcome",
-        `${label}.expected.terminal_receipt_semantics`,
-        receiptEnums.taskOutcomes,
-      );
-      requireEnum(
-        semantics,
-        "mechanism_health",
-        `${label}.expected.terminal_receipt_semantics`,
-        receiptEnums.mechanismHealthStates,
-      );
-      requireBoolean(
-        semantics,
-        "containment_used",
         `${label}.expected.terminal_receipt_semantics`,
       );
       if (expected.terminal_receipt_required !== true) {
@@ -405,12 +520,22 @@ function validateFixture(doc) {
         );
       }
     }
-    if (hasField(expected, "parent_terminal_action")) {
-      requireEnum(
-        expected,
-        "parent_terminal_action",
-        `${label}.expected`,
-        expectedTerminalOutcomes,
+    if (
+      receipt.parent_receipt !== null
+      && typeof receipt.parent_receipt === "object"
+      && !hasField(expected, "parent_receipt_semantics")
+    ) {
+      throw new Error(
+        `${label}.expected.parent_receipt_semantics is required when parent_receipt is present`,
+      );
+    }
+    if (hasField(expected, "parent_receipt_semantics")) {
+      const parentSemantics = expected.parent_receipt_semantics;
+      requireObject(parentSemantics, `${label}.expected.parent_receipt_semantics`);
+      validateExpectedParentSemantics(
+        c,
+        parentSemantics,
+        `${label}.expected.parent_receipt_semantics`,
       );
     }
   });
@@ -489,11 +614,8 @@ function renderReport(doc) {
         : "n/a";
       const semantics = terminalReceiptSemanticsPass(c);
       const receiptSemantics = semantics === null ? "n/a" : semantics ? "pass" : "fail";
-      const parent = hasField(c.expected ?? {}, "parent_terminal_action")
-        ? c.receipt?.parent_receipt?.terminal_action === c.expected.parent_terminal_action
-          ? "pass"
-          : "fail"
-        : "n/a";
+      const parentSemantics = parentReceiptSemanticsPass(c);
+      const parent = parentSemantics === null ? "n/a" : parentSemantics ? "pass" : "fail";
       const consulted = c.receipt?.consulted === c.expected?.consulted ? "pass" : "fail";
       const blindRetry = c.receipt?.blind_retry === c.expected?.blind_retry ? "pass" : "fail";
       return `| ${c.id} | ${hostName(c)} | ${hostEnforced} | ${skill} | ${classification} | ${terminal} | ${receipt} | ${receiptSemantics} | ${parent} | ${consulted} | ${blindRetry} |`;

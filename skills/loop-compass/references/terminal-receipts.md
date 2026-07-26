@@ -19,7 +19,7 @@ Use this shape for the actor that finishes classification:
 
 ```yaml
 receipt_schema: 1
-receipt_id: <opaque-id-unique-within-the-handoff>
+receipt_id: <lowercase-host-neutral-id-unique-within-the-handoff>
 signature: <normalized-failure-signature>
 dedupe_key: <stable-mechanism-and-signature-key>
 classification: <recovery|incident|external|none>
@@ -46,6 +46,11 @@ All keys are required; fields marked `null` stay present. `evidence` and `requir
 lists when used. `containment.summary` and `containment.verification_gate` are non-empty only when
 `containment.used` is true.
 
+The schema is closed: do not add raw-log, transcript, private-payload, or host-specific fields.
+Sanitize and summarize necessary evidence into the modeled fields. `signature` must already equal
+its normalized form. Receipt ids, dedupe keys, and artifact references use lowercase
+host-neutral identifiers; receipt ids are unique within the handoff chain.
+
 Outcome-specific rules:
 
 - `persisted_artifact` requires `artifact_ref`; `proposed_artifact` and `no_artifact_reason` are
@@ -55,6 +60,9 @@ Outcome-specific rules:
   terminal fields are null.
 - `incident` and `external` classifications require exact `escalation` even when the incident was
   already persisted.
+- `classification: none` and `terminal_outcome: no_artifact` occur together.
+- A proposed recovery has `proposed_artifact.kind: recovery`; proposed incident and external
+  classifications use `kind: incident`.
 
 `task_outcome` and `mechanism_health` are independent. For example, containment can produce
 `task_outcome: completed` while the documented launcher remains `mechanism_health: broken`.
@@ -69,8 +77,9 @@ The receiving parent returns a linked receipt:
 
 ```yaml
 receipt_schema: 1
-receipt_id: <opaque-parent-receipt-id>
+receipt_id: <distinct-lowercase-parent-receipt-id>
 child_receipt_id: <classification-receipt-id>
+child_payload_sha256: <canonical-complete-child-receipt-digest>
 ingested: true
 terminal_action: <persisted_artifact|no_artifact|proposed_artifact>
 artifact_ref: <canonical-artifact-id-or-null>
@@ -88,8 +97,11 @@ The parent must perform one terminal action in the same turn:
   escalation.
 
 `ingested: true` means the parent actually received and evaluated the linked payload. A receipt id
-alone is not proof of complete propagation. An authoritative action leaves `forwarded_receipt`
-null; further escalation includes the complete unchanged child receipt.
+alone is not proof of complete propagation. `child_payload_sha256` binds the parent action to the
+canonical complete child payload; the parent and child ids must be distinct and must not be reused
+for different receipts. An authoritative action leaves `forwarded_receipt` null; further escalation
+includes the complete unchanged child receipt. A parent that persists an incident or external
+incident retains the exact repair escalation rather than dropping it after persistence.
 
 ## Boundaries
 

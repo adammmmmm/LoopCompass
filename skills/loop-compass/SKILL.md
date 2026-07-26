@@ -184,7 +184,8 @@ read-only, missing-store, and other cross-actor handoffs. The receipt keeps `tas
 from `mechanism_health` and records containment explicitly. A receiving parent returns a linked
 receipt proving ingestion and one terminal action. A parent that still lacks authority propagates
 the complete payload unchanged with a new exact escalation; a receipt id or narrative summary
-alone is insufficient.
+alone is insufficient. The linked parent receipt uses a distinct id and canonical child-payload
+digest so acknowledgment cannot be detached from the exact sanitized child content.
 
 ## Verification contract
 

@@ -96,6 +96,8 @@ receiving parent links its own ingestion receipt to the worker receipt and recor
 storage-neutral. The emitting actor sanitizes before the first handoff and before deriving receipt
 identity. Host integrations own mechanical ingestion, deduplication, durable queueing, and closure;
 their sanitation checks are defense in depth rather than a substitute for worker-side sanitation.
+Parent receipts bind a distinct parent id to both the child id and a canonical digest of the full
+child payload, so an id cannot be reused to acknowledge swapped content.
 
 ## Artifact identity and concurrency
 
