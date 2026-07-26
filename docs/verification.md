@@ -28,6 +28,7 @@ Runs:
 | Project-scope stage, dual-host install, update check | `release.mjs stage-install`, dry-run tests |
 | Consumer integration kit | `scripts/verify-consumer.mjs`, `docs/consumer-verification.md` |
 | Optional human-attention lifecycle, crash repair, fail-closed marker history, and projection reconciliation | `fixtures/human-attention/cases.json`, `tests/human-attention-profile.test.mjs` |
+| Schema-1 ownership evidence, explicit authority/order gaps, and consumer-state byte identity | `fixtures/ownership-probe/cases.json`, `scripts/ownership-probe.mjs`, `tests/ownership-probe.test.mjs` |
 | Example redaction denylist | `scripts/redact-check.mjs`, `examples/capsules/` |
 | Manifest digests and policy marker integrity | `scripts/release.mjs`, `tests/release-tooling.test.mjs` |
 | Persist, no-artifact, or exact-escalation policy contract | `tests/release-tooling.test.mjs` |

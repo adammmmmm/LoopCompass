@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "probe": "schema-1-ownership-evidence",
+  "expected_consumer_state_sha256": "034b5154a77659cfe69542d70f7a0701eaa7333217e8a4d18596be8560b52f0d",
+  "cases": [
+    {
+      "id": "utc-mapping-incident",
+      "incident_path": "examples/capsules/incidents/exchange-ticker-utc-hhmm-misread-as-local.md"
+    },
+    {
+      "id": "identity-refresh-incident",
+      "incident_path": "examples/capsules/incidents/null-identity-replay-state-stops-periodic-refresh.md"
+    },
+    {
+      "id": "global-worktree-incident",
+      "incident_path": "examples/capsules/incidents/worktree-spawn-from-non-git-cwd.md"
+    }
+  ]
+}
