@@ -4,7 +4,7 @@ name: loop-compass
 version: 0.3.0
 source: https://github.com/adammmmmm/LoopCompass
 release: https://github.com/adammmmmm/LoopCompass/releases/tag/v0.3.0
-commit: 5b3d6b94501a78dd685d0e1342b1341bf58f42d2
+commit: 9784683a5073b5504698f133ed86da5efa9cd545
 skill_schema: 1
 policy_version: 2
 state_schema: 1

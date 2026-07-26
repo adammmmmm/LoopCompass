@@ -374,7 +374,7 @@ describe("evaluation benchmark report", () => {
     }
 
     const safe = readFixture();
-    safe.cases[0].scenario = "AT&T and R&D launcher behavior.";
+    safe.cases[0].scenario = "AT&T, R&D2;, and A&Bogus; launcher behavior.";
     const safeResult = runEvaluateWithDoc(safe);
     assert.equal(safeResult.status, 0, safeResult.stderr || safeResult.stdout);
   });

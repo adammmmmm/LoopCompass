@@ -9,6 +9,10 @@ import {
   validateTerminalReceipt,
 } from "../scripts/lib/receipt.mjs";
 import { parseFrontmatter } from "../scripts/lib/frontmatter.mjs";
+import {
+  htmlNamedCharacterReferenceNames,
+  legacyHtmlNoSemicolonNames,
+} from "../scripts/lib/html-character-references.mjs";
 import { slugFromSignature } from "../scripts/lib/signature.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,16 +29,6 @@ const recoveryTemplate = readFileSync(
   "utf8",
 );
 const prohibitedLineSeparators = ["\r", "\n", "\u0085", "\u2028", "\u2029"];
-const legacyHtmlNoSemicolonNames = `
-AElig AMP Aacute Acirc Agrave Aring Atilde Auml COPY Ccedil ETH Eacute Ecirc
-Egrave Euml GT Iacute Icirc Igrave Iuml LT Ntilde Oacute Ocirc Ograve Oslash
-Otilde Ouml QUOT REG THORN Uacute Ucirc Ugrave Uuml Yacute aacute acirc acute
-aelig agrave amp aring atilde auml brvbar ccedil cedil cent copy curren deg
-divide eacute ecirc egrave eth euml frac12 frac14 frac34 gt iacute icirc iexcl
-igrave iquest iuml laquo lt macr micro middot nbsp not ntilde oacute ocirc
-ograve ordf ordm oslash otilde ouml para plusmn pound quot raquo reg sect shy
-sup1 sup2 sup3 szlig thorn times uacute ucirc ugrave uml uuml yacute yen yuml
-`.trim().split(/\s+/u);
 
 function rawTemplateMarkers(template) {
   const prose = template.replace(/<!--[\s\S]*?-->/g, "");
@@ -1549,7 +1543,7 @@ describe("terminal receipt contract", () => {
   });
 
   it("rejects the complete legacy HTML no-semicolon name set", () => {
-    assert.equal(legacyHtmlNoSemicolonNames.length, 106);
+    assert.equal(legacyHtmlNoSemicolonNames.size, 106);
     for (const name of legacyHtmlNoSemicolonNames) {
       const receipt = structuredClone(persisted);
       receipt.evidence = [`Encoded marker &${name} remains unsafe.`];
@@ -1564,6 +1558,38 @@ describe("terminal receipt contract", () => {
       const receipt = structuredClone(persisted);
       receipt.evidence = [literal];
       assert.doesNotThrow(() => validateTerminalReceipt(receipt), literal);
+    }
+  });
+
+  it("rejects only actual case-sensitive terminated HTML names", () => {
+    assert.equal(htmlNamedCharacterReferenceNames.size, 2125);
+    for (const name of [
+      "CounterClockwiseContourIntegral",
+      "NotEqualTilde",
+      "colon",
+      "AElig",
+    ]) {
+      assert.equal(htmlNamedCharacterReferenceNames.has(name), true, name);
+      const receipt = structuredClone(persisted);
+      receipt.evidence = [`Known reference &${name}; is unsafe.`];
+      assert.throws(
+        () => validateTerminalReceipt(receipt),
+        /contains character-reference syntax/,
+      );
+    }
+
+    for (const literal of ["R&D2;", "A&Bogus;"]) {
+      const receipt = structuredClone(persisted);
+      receipt.evidence = [`Literal ${literal} remains unchanged.`];
+      assert.doesNotThrow(() => validateTerminalReceipt(receipt), literal);
+
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.proposed_artifact.content =
+        proposed.proposed_artifact.content.replace(
+          "Make launcher discovery and authentication preflight host-aware.",
+          `Keep literal ${literal} in the repair explanation.`,
+        );
+      assert.doesNotThrow(() => validateTerminalReceipt(proposed), literal);
     }
   });
 
