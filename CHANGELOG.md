@@ -7,6 +7,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-26
+
 ### Added
 
 - Community health policies, structured issue forms, and a pull request template.
@@ -21,6 +23,9 @@ uses [Semantic Versioning](https://semver.org/).
 - Read-only schema-1 ownership evidence probe with consumer byte-identity proof and explicit gaps
   for receipt provenance, reassignment order, and current-actor authority.
 - Safe presentation-only conversational incident aliases that never replace canonical slugs.
+- Cross-feature release conformance evidence, including live-host results, a byte-preserving
+  consumer update, and restricted-network credential diagnosis that keeps network reachability,
+  credential validity, and Git commit identity separate.
 - A current-HEAD delivery gate for three independent model reviews, finding dispositions, and
   conditional human review, plus a scheduled remote-branch lifecycle audit.
 
@@ -119,7 +124,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 - Duplicate line in design acceptance section.
 
-[Unreleased]: https://github.com/adammmmmm/LoopCompass/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/adammmmmm/LoopCompass/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.1.0...v0.2.0

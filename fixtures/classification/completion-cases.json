@@ -78,6 +78,28 @@
       "acknowledged": true,
       "directional_resolution": true,
       "expected_result": "pass"
+    },
+    {
+      "id": "restricted-network-credential-diagnosis",
+      "scenario": "A restricted-network gh auth status reports an invalid credential. No credential mutation is recommended; a supported-network read-only authenticated API probe succeeds, while Git commit identity is recorded as a separate configured fact.",
+      "triggered": true,
+      "task_outcome": "succeeded",
+      "mechanism_health": "healthy",
+      "classification": "recovery",
+      "terminal_outcome": "persisted_artifact",
+      "containment": "none",
+      "normal_path_authority_updated": false,
+      "containment_removed": true,
+      "normal_path_verified": true,
+      "acknowledged": true,
+      "network_reachability": {
+        "restricted_probe": "unavailable",
+        "supported_probe": "reachable"
+      },
+      "credential_validity": "valid",
+      "git_commit_identity": "configured_separately",
+      "credential_mutation_recommended": false,
+      "expected_result": "pass"
     }
   ]
 }
