@@ -38,15 +38,18 @@ enabled declaration reports only configuration errors, suppresses repair/recover
 preserves every existing record unchanged, and never causes a runtime exception. Report the
 configuration failure through the host's normal project-policy path.
 
-A repository-file locator is a normalized relative path confined to the project root. Validate
-that it is neither absolute nor `..`-traversing and resolve it without following a symlink outside
-the project before granting write authority. An external locator is a stable project-scoped
+A repository-file locator is a normalized relative path confined to the project root. Reject `.`,
+control characters, backslashes, Windows drive paths, absolute paths, and `..` traversal, then
+resolve it without following a symlink outside the project before granting write authority. An
+external locator is a stable project-scoped
 identifier, not a display name or URL discovered from prose; the adapter must independently verify
 that the declared integration authority controls that project queue. Reject an untyped locator,
 an unverified external authority, and every root or symlink escape.
 The typed descriptor uses `kind: repository_file` with `locator`, or `kind: external` with
 `locator` and `project_scope`. Root confinement, symlink safety, and external authority are
-adapter-verified preflight facts; configuration text cannot attest to its own authority.
+adapter-observed preflight facts supplied separately from the declaration; configuration text
+cannot attest to its own authority. For an external surface, the observed current project identity
+must exactly equal the declared `project_scope`.
 
 State schema 1 needs no new incident fields. `owner` remains the lifecycle coordinator; it does not
 identify the action actor and does not imply a human. An open incident needs human action when
@@ -184,12 +187,13 @@ incident, marker, projection, and closure evidence together. Outside the revisio
 case, a known slug with an absent marker is a deletion failure and must not be reconstructed by
 guessing.
 
-Bind the registry metadata to the typed designated-surface locator. While any known-obligation
-record remains retained, changing that locator is prohibited: fail closed and preserve both the
-old and newly configured surfaces unchanged. This small immutability rule avoids a migration
-protocol that could duplicate or lose obligations after restart. A project may change the surface
-only after its declared retention process has lawfully purged every registry record, or under a
-future separately specified migration protocol.
+Persist the typed designated-surface locator binding in registry metadata. A retained
+known-obligation record with no persisted binding is invalid; never infer or synthesize it from the
+current declaration. While any known-obligation record remains retained, changing that locator is
+prohibited: fail closed and preserve both the old and newly configured surfaces unchanged. This
+small immutability rule avoids a migration protocol that could duplicate or lose obligations after
+restart. A project may change the surface only after its declared retention process has lawfully
+purged every registry record, or under a future separately specified migration protocol.
 
 Closure evidence is a referenced authority, not a writable collection on the designated attention
 surface. Parse it defensively: a missing, scalar, or malformed evidence collection, and malformed
@@ -319,6 +323,9 @@ nonempty requested action and surface, exact canonical incident path, active sta
 integer obligation revision. Standalone closure evidence never authorizes deletion. Closure
 evidence must never be used to delete a malformed projection. Quarantine or repair its
 representation first; until then, it blocks reconciliation for the whole surface.
+The same intrinsic check applies when the selected release marker is otherwise valid: a
+`verified_closed` or `reassigned_nonhuman` marker never silently omits a malformed stale
+projection.
 
 A projection for an incident that is still open is never an orphan. Retain it and fail
 reconciliation when its marker or registry is missing, even if stale slug-matching closure evidence

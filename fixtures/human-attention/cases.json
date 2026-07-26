@@ -2,6 +2,20 @@
   "schema": 1,
   "profile": "loopcompass-human-attention-v1",
   "description": "Host-neutral conformance cases for the optional human-attention projection contract.",
+  "adapter_observations": {
+    "handoff": {
+      "kind": "repository_file",
+      "locator": "HANDOFF.md",
+      "root_confined": true,
+      "symlink_checked": true
+    },
+    "operator_queue": {
+      "kind": "repository_file",
+      "locator": "OPERATOR_QUEUE.md",
+      "root_confined": true,
+      "symlink_checked": true
+    }
+  },
   "profiles": {
     "disabled": {
       "enabled": false
@@ -10,9 +24,7 @@
       "enabled": true,
       "surface": {
         "kind": "repository_file",
-        "locator": "HANDOFF.md",
-        "root_confined": true,
-        "symlink_checked": true
+        "locator": "HANDOFF.md"
       },
       "authority": "incident-coordinator",
       "history_retention": "project-audit-policy",
@@ -23,9 +35,7 @@
       "enabled": true,
       "surface": {
         "kind": "repository_file",
-        "locator": "OPERATOR_QUEUE.md",
-        "root_confined": true,
-        "symlink_checked": true
+        "locator": "OPERATOR_QUEUE.md"
       },
       "authority": "incident-coordinator",
       "history_retention": "project-audit-policy",
@@ -36,9 +46,7 @@
       "enabled": true,
       "surface": {
         "kind": "repository_file",
-        "locator": "HANDOFF.md",
-        "root_confined": true,
-        "symlink_checked": true
+        "locator": "HANDOFF.md"
       },
       "authority": "incident-coordinator",
       "history_retention": "project-audit-policy",
@@ -49,9 +57,7 @@
       "enabled": true,
       "surface": {
         "kind": "repository_file",
-        "locator": "",
-        "root_confined": false,
-        "symlink_checked": false
+        "locator": ""
       },
       "authority": "",
       "history_retention": "",
@@ -82,6 +88,8 @@
     {
       "id": "enabled-exactly-one-human-capability",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -123,6 +131,8 @@
     {
       "id": "schema1-underscore-capability-is-conformant",
       "profile_config": "schema1_underscore",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "repository-write-required",
@@ -164,6 +174,8 @@
     {
       "id": "mixed-capability-list-creates-human-obligation",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "mixed-action-required",
@@ -205,6 +217,8 @@
     {
       "id": "enabled-needs-persisted-obligation",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -224,6 +238,8 @@
     {
       "id": "first-marker-write-crash-is-recoverable",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -250,6 +266,8 @@
     {
       "id": "total-deletion-remains-detectable",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [
         {
@@ -268,6 +286,8 @@
     {
       "id": "enabled-missing-human-projection",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -308,6 +328,8 @@
     {
       "id": "enabled-divergent-duplicates-recompute",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -365,6 +387,8 @@
     {
       "id": "duplicate-across-surfaces-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -414,6 +438,8 @@
     {
       "id": "human-decision-awaits-verification",
       "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": "OPERATOR_QUEUE.md",
       "incidents": [
         {
           "slug": "release-approval-required",
@@ -455,6 +481,8 @@
     {
       "id": "human-token-removed-after-action-retains-projection",
       "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": "OPERATOR_QUEUE.md",
       "incidents": [
         {
           "slug": "release-approval-required",
@@ -496,6 +524,8 @@
     {
       "id": "true-non-human-reassignment-releases-projection",
       "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": "OPERATOR_QUEUE.md",
       "incidents": [
         {
           "slug": "release-approval-required",
@@ -527,6 +557,8 @@
     {
       "id": "reassignment-with-stale-projection-fails",
       "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": "OPERATOR_QUEUE.md",
       "incidents": [
         {
           "slug": "release-approval-required",
@@ -567,6 +599,8 @@
     {
       "id": "verified-closure-permits-cleanup",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [
         {
@@ -600,6 +634,8 @@
     {
       "id": "cleanup-without-closure-evidence-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [
         {
@@ -625,6 +661,8 @@
     {
       "id": "verified-closed-stale-projection-must-be-cleaned",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [
         {
@@ -667,6 +705,8 @@
     {
       "id": "invalid-marker-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -698,6 +738,8 @@
     {
       "id": "same-max-revision-conflict-forward",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -737,6 +779,8 @@
     {
       "id": "same-max-revision-conflict-reverse",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -776,6 +820,8 @@
     {
       "id": "unregistered-marker-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -812,6 +858,8 @@
     {
       "id": "release-marker-conflicts-with-current-human-requires",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -846,6 +894,8 @@
     {
       "id": "projection-state-mismatch-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -887,6 +937,8 @@
     {
       "id": "projection-revision-mismatch-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -928,6 +980,8 @@
     {
       "id": "active-obligation-missing-canonical-incident",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [
         {
@@ -963,6 +1017,8 @@
     {
       "id": "true-orphan-with-verified-closure-is-cleaned",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [],
       "obligations": [],
@@ -993,6 +1049,8 @@
     {
       "id": "verified-closed-while-incident-open-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1032,6 +1090,8 @@
     {
       "id": "stale-human-action-after-token-removal-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1073,6 +1133,8 @@
     {
       "id": "off-surface-projection-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1114,6 +1176,8 @@
     {
       "id": "projection-missing-required-fields-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1156,6 +1220,8 @@
     {
       "id": "failed-verification-renews-human-action",
       "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": "OPERATOR_QUEUE.md",
       "incidents": [
         {
           "slug": "release-approval-required",
@@ -1212,6 +1278,8 @@
     {
       "id": "failed-verification-renewal-without-human-token-fails",
       "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": "OPERATOR_QUEUE.md",
       "incidents": [
         {
           "slug": "release-approval-required",
@@ -1262,6 +1330,8 @@
     {
       "id": "registry-lag-repairable",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1311,6 +1381,8 @@
     {
       "id": "human-action-missing-canonical-incident",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [
         {
@@ -1346,6 +1418,8 @@
     {
       "id": "reassignment-missing-canonical-incident",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [
         {
@@ -1371,6 +1445,8 @@
     {
       "id": "projection-requested-action-mismatch-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1412,6 +1488,8 @@
     {
       "id": "projection-incident-path-mismatch-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1453,6 +1531,8 @@
     {
       "id": "non-human-action-has-no-human-projection",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "ci-verification-required",
@@ -1472,6 +1552,8 @@
     {
       "id": "wrong-canonical-slug-is-missing-plus-orphan",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1516,6 +1598,7 @@
     {
       "id": "enabled-profile-needs-one-authority-surface",
       "profile_config": "invalid",
+      "adapter_observation": "handoff",
       "incidents": [],
       "known_obligations": [],
       "obligations": [],
@@ -1533,6 +1616,8 @@
     {
       "id": "first-marker-registry-lag-is-recoverable",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1577,6 +1662,8 @@
     {
       "id": "invalid-first-write-metadata-does-not-reconstruct",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "mixed-action-required",
@@ -1603,6 +1690,8 @@
     {
       "id": "registry-ahead-of-marker-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1644,6 +1733,8 @@
     {
       "id": "mixed-valid-invalid-markers-fail-closed",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1692,6 +1783,8 @@
     {
       "id": "same-revision-unknown-field-conflict-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1733,6 +1826,8 @@
     {
       "id": "revision-zero-to-two-verification-lag-is-recoverable",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1783,6 +1878,8 @@
     {
       "id": "revision-zero-to-three-verification-lag-is-recoverable",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1841,6 +1938,8 @@
     {
       "id": "revision-zero-mismatched-initial-history-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1891,6 +1990,8 @@
     {
       "id": "unrepairable-canonical-state-registry-lag",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1942,6 +2043,8 @@
     {
       "id": "later-marker-missing-revision-one-live-match-is-repairable",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -1987,6 +2090,8 @@
     {
       "id": "later-marker-missing-revision-one-without-live-match-fails",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -2030,6 +2135,8 @@
     {
       "id": "revision-zero-deleted-incident-is-missing-history",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [],
       "known_obligations": [
         {
@@ -2050,6 +2157,8 @@
     {
       "id": "first-marker-gap-with-existing-projection-is-repairable",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -2085,6 +2194,8 @@
     {
       "id": "stale-closure-cannot-clean-open-incident-projection",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -2121,6 +2232,8 @@
     {
       "id": "invalid-historical-marker-blocks-repair",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -2169,6 +2282,8 @@
     {
       "id": "multi-slug-repair-is-isolated",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -2251,6 +2366,8 @@
     {
       "id": "synthetic-revision-one-is-atomic-with-invalid-closed-marker",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -2296,6 +2413,8 @@
     {
       "id": "synthetic-revision-one-is-atomic-with-invalid-reassignment",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -2332,6 +2451,8 @@
     {
       "id": "stale-projection-does-not-block-registry-lag-repair",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",
@@ -2385,6 +2506,8 @@
     {
       "id": "divergent-projections-do-not-block-first-marker-gap-repair",
       "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": "HANDOFF.md",
       "incidents": [
         {
           "slug": "console-action-required",

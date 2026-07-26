@@ -176,32 +176,42 @@ function surfaceIdentifier(surface) {
   return isPlainRecord(surface) ? surface.locator : surface;
 }
 
-function validateSurface(surface) {
+function validateSurface(surface, observation) {
   if (!isPlainRecord(surface)) return false;
   if (surface.kind === "repository_file") {
     return Boolean(
       typeof surface.locator === "string" &&
         surface.locator &&
+        surface.locator !== "." &&
+        !/[\u0000-\u001f\u007f\\]/u.test(surface.locator) &&
+        !/^[a-z]:/iu.test(surface.locator) &&
         !path.posix.isAbsolute(surface.locator) &&
         path.posix.normalize(surface.locator) === surface.locator &&
         !surface.locator.split("/").includes("..") &&
-        surface.root_confined === true &&
-        surface.symlink_checked === true
+        isPlainRecord(observation) &&
+        observation.kind === "repository_file" &&
+        observation.locator === surface.locator &&
+        observation.root_confined === true &&
+        observation.symlink_checked === true
     );
   }
   if (surface.kind === "external") {
     return Boolean(
       typeof surface.locator === "string" &&
         EXTERNAL_SURFACE_ID.test(surface.locator) &&
-        typeof surface.project_scope === "string" &&
+      typeof surface.project_scope === "string" &&
         isStableIdentifier(surface.project_scope) &&
-        surface.authority_verified === true
+        isPlainRecord(observation) &&
+        observation.kind === "external" &&
+        observation.locator === surface.locator &&
+        observation.project_identity === surface.project_scope &&
+        observation.authority_verified === true
     );
   }
   return false;
 }
 
-function parseProfileDeclaration(value) {
+function parseProfileDeclaration(value, observation) {
   const errors = [];
   if (value === null || value === undefined) {
     return { config: null, enabled: false, errors };
@@ -228,7 +238,9 @@ function parseProfileDeclaration(value) {
       errors.push(`invalid_profile:${field}`);
     }
   }
-  if (!validateSurface(value.surface)) errors.push("invalid_profile:surface");
+  if (!validateSurface(value.surface, observation)) {
+    errors.push("invalid_profile:surface");
+  }
   for (const field of [
     "human_only_capabilities",
     "human_only_decisions",
@@ -250,7 +262,12 @@ function parseProfileDeclaration(value) {
 function surfaceBindingError(testCase, config, registry) {
   if (
     registry.size > 0 &&
-    typeof testCase.registry_surface === "string" &&
+    typeof testCase.registry_surface !== "string"
+  ) {
+    return "missing_registry_surface_binding";
+  }
+  if (
+    registry.size > 0 &&
     testCase.registry_surface !== surfaceIdentifier(config.surface)
   ) {
     return "surface_change_with_retained_obligations";
@@ -310,11 +327,8 @@ function resolveCase(fixture, testCase) {
   return {
     ...testCase,
     profile_config: profileConfig,
-    registry_surface:
-      testCase.registry_surface ??
-      (testCase.known_obligations?.length
-        ? surfaceIdentifier(profileConfig.surface)
-        : undefined),
+    adapter_observation:
+      fixture.adapter_observations[testCase.adapter_observation],
   };
 }
 
@@ -750,7 +764,10 @@ function openIncidentObligationErrors(
 }
 
 function assessConformance(testCase) {
-  const profile = parseProfileDeclaration(testCase.profile_config);
+  const profile = parseProfileDeclaration(
+    testCase.profile_config,
+    testCase.adapter_observation,
+  );
   if (profile.errors.length > 0) return profile.errors.sort();
   if (!profile.enabled) return [];
   const config = profile.config;
@@ -876,7 +893,13 @@ function assessConformance(testCase) {
       }
     } else {
       if (projections.length > 0) {
-        errors.push(`unexpected_projection:${slug}`);
+        errors.push(
+          projections.some(
+            (projection) => !intrinsicProjectionIsValid(projection),
+          )
+            ? `invalid_released_projection:${slug}`
+            : `unexpected_projection:${slug}`,
+        );
       }
     }
   }
@@ -906,7 +929,10 @@ function assessConformance(testCase) {
 }
 
 function reconcileProjections(testCase) {
-  const profile = parseProfileDeclaration(testCase.profile_config);
+  const profile = parseProfileDeclaration(
+    testCase.profile_config,
+    testCase.adapter_observation,
+  );
   if (!profile.enabled || profile.errors.length > 0) {
     return testCase.projections;
   }
@@ -976,6 +1002,16 @@ function reconcileProjections(testCase) {
       failedIncidents,
     ),
   );
+  for (const [slug, obligation] of obligations) {
+    if (!RELEASED_OBLIGATIONS.has(obligation.state)) continue;
+    if (
+      (projectionRecords.get(slug) ?? []).some(
+        (projection) => !intrinsicProjectionIsValid(projection),
+      )
+    ) {
+      obligationErrors.push(`invalid_released_projection:${slug}`);
+    }
+  }
   for (const [slug] of projectionRecords) {
     if (
       obligations.has(slug) ||
@@ -1044,7 +1080,10 @@ function reconcileSurfaceWithCas(store, beforeFirstCommit = () => {}) {
 }
 
 function repairRegistryCrash(testCase) {
-  const profile = parseProfileDeclaration(testCase.profile_config);
+  const profile = parseProfileDeclaration(
+    testCase.profile_config,
+    testCase.adapter_observation,
+  );
   const config = profile.config;
   const errors = [];
   if (!profile.enabled || profile.errors.length > 0) {
@@ -1519,14 +1558,19 @@ describe("optional human-attention profile", () => {
         surface: {
           kind: "repository_file",
           locator: "HANDOFF.md",
-          root_confined: true,
-          symlink_checked: true,
         },
         authority: "incident-coordinator",
         history_retention: "project-audit-policy",
         human_only_capabilities: [identifier],
         human_only_decisions: [],
       },
+      adapter_observation: {
+        kind: "repository_file",
+        locator: "HANDOFF.md",
+        root_confined: true,
+        symlink_checked: true,
+      },
+      registry_surface: "HANDOFF.md",
       incidents: [
         {
           slug: "long-capability-required",
@@ -2567,6 +2611,32 @@ describe("optional human-attention profile", () => {
     assert.deepEqual(reconcileProjections(testCase), []);
   });
 
+  it("preserves a malformed projection despite an otherwise valid released marker", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const testCase = resolveCase(
+      fixture,
+      structuredClone(
+        fixture.cases.find(
+          (entry) =>
+            entry.id === "verified-closed-stale-projection-must-be-cleaned",
+        ),
+      ),
+    );
+    testCase.projections[0].incident_path =
+      ".loopcompass/incidents/wrong-slug.md";
+    const original = structuredClone(testCase);
+    assert.ok(
+      assessConformance(testCase).includes(
+        "invalid_released_projection:console-action-required",
+      ),
+    );
+    assert.throws(
+      () => reconcileProjections(testCase),
+      /obligation conflict blocks reconciliation/,
+    );
+    assert.deepEqual(testCase, original);
+  });
+
   it("rejects unsafe repository locators and accepts an authority-bound external queue", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     const base = resolveCase(
@@ -2575,13 +2645,21 @@ describe("optional human-attention profile", () => {
         (testCase) => testCase.id === "enabled-exactly-one-human-capability",
       ),
     );
-    for (const locator of ["../HANDOFF.md", "/tmp/HANDOFF.md"]) {
+    for (const locator of [
+      "../HANDOFF.md",
+      "/tmp/HANDOFF.md",
+      "..\\HANDOFF.md",
+      "C:\\HANDOFF.md",
+      ".",
+      "HANDOFF.md\u0000suffix",
+    ]) {
       const testCase = structuredClone(base);
       testCase.profile_config.surface.locator = locator;
+      testCase.adapter_observation.locator = locator;
       assert.deepEqual(assessConformance(testCase), ["invalid_profile:surface"]);
     }
     const symlinkEscape = structuredClone(base);
-    symlinkEscape.profile_config.surface.symlink_checked = false;
+    symlinkEscape.adapter_observation.symlink_checked = false;
     assert.deepEqual(assessConformance(symlinkEscape), [
       "invalid_profile:surface",
     ]);
@@ -2591,11 +2669,22 @@ describe("optional human-attention profile", () => {
       kind: "external",
       locator: "queue:loopcompass-operator",
       project_scope: "loopcompass",
+    };
+    external.adapter_observation = {
+      kind: "external",
+      locator: "queue:loopcompass-operator",
+      project_identity: "loopcompass",
       authority_verified: true,
     };
     external.registry_surface = "queue:loopcompass-operator";
     external.projections[0].surface = "queue:loopcompass-operator";
     assert.deepEqual(assessConformance(external), []);
+
+    const wrongProject = structuredClone(external);
+    wrongProject.adapter_observation.project_identity = "other-project";
+    assert.deepEqual(assessConformance(wrongProject), [
+      "invalid_profile:surface",
+    ]);
   });
 
   it("prohibits designated-surface changes while obligation registry records remain", () => {
@@ -2608,6 +2697,7 @@ describe("optional human-attention profile", () => {
     );
     testCase.registry_surface = "HANDOFF.md";
     testCase.profile_config.surface.locator = "OPERATOR_QUEUE.md";
+    testCase.adapter_observation.locator = "OPERATOR_QUEUE.md";
     const original = structuredClone(testCase);
     assert.ok(
       assessConformance(testCase).includes(
@@ -2619,6 +2709,23 @@ describe("optional human-attention profile", () => {
       /obligation conflict blocks reconciliation/,
     );
     assert.deepEqual(testCase, original);
+
+    const missingBinding = resolveCase(
+      fixture,
+      fixture.cases.find(
+        (entry) => entry.id === "enabled-exactly-one-human-capability",
+      ),
+    );
+    delete missingBinding.registry_surface;
+    assert.ok(
+      assessConformance(missingBinding).includes(
+        "missing_registry_surface_binding",
+      ),
+    );
+    assert.throws(
+      () => reconcileProjections(missingBinding),
+      /obligation conflict blocks reconciliation/,
+    );
   });
 
   it("retries a full-surface CAS conflict and never overwrites newer marker history", () => {
