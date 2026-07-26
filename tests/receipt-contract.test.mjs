@@ -14,6 +14,14 @@ const receiptReference = readFileSync(
   path.join(root, "skills", "loop-compass", "references", "terminal-receipts.md"),
   "utf8",
 );
+const incidentTemplate = readFileSync(
+  path.join(root, "skills", "loop-compass", "assets", "incident-template.md"),
+  "utf8",
+);
+const recoveryTemplate = readFileSync(
+  path.join(root, "skills", "loop-compass", "assets", "recovery-template.md"),
+  "utf8",
+);
 const fixture = JSON.parse(
   readFileSync(path.join(root, "fixtures", "evaluation", "cases.json"), "utf8"),
 );
@@ -186,6 +194,21 @@ describe("terminal receipt contract", () => {
     );
   });
 
+  it("requires escalation for authoritative persisted external incidents", () => {
+    const authoritativeCase = fixture.cases.find(
+      (c) => c.id === "lc-eval-008-subagent-readonly-handoff",
+    ).receipt;
+    const child = structuredClone(authoritativeCase.terminal_receipt);
+    child.classification = "external";
+    const parent = structuredClone(authoritativeCase.parent_receipt);
+    parent.child_payload_sha256 = receiptPayloadDigest(child);
+    parent.escalation = null;
+    assert.throws(
+      () => validateParentReceipt(parent, child),
+      /escalation is required when persisting an incident or external incident/,
+    );
+  });
+
   it("accepts a linked parent no-artifact action with an exact reason", () => {
     assert.doesNotThrow(() =>
       validateParentReceipt(
@@ -195,6 +218,31 @@ describe("terminal receipt contract", () => {
     );
     assert.equal(parentNoArtifactCase.parent_receipt.terminal_action, "no_artifact");
     assert.ok(parentNoArtifactCase.parent_receipt.no_artifact_reason);
+
+    const continuingEscalation = structuredClone(parentNoArtifactCase.parent_receipt);
+    continuingEscalation.escalation =
+      structuredClone(parentNoArtifactCase.terminal_receipt.escalation);
+    assert.throws(
+      () =>
+        validateParentReceipt(
+          continuingEscalation,
+          parentNoArtifactCase.terminal_receipt,
+        ),
+      /no_artifact requires escalation null/,
+    );
+  });
+
+  it("requires a propagating parent to preserve the child proposed artifact", () => {
+    const changed = structuredClone(propagatedCase.parent_receipt);
+    changed.proposed_artifact.content =
+      changed.proposed_artifact.content.replace(
+        "Make launcher discovery and authentication preflight host-aware.",
+        "Make launcher discovery host-aware and authentication preflight deterministic.",
+      );
+    assert.throws(
+      () => validateParentReceipt(changed, propagatedCase.terminal_receipt),
+      /proposed_artifact must preserve the complete child proposed artifact/,
+    );
   });
 
   it("rejects unknown fields at every receipt layer", () => {
@@ -250,16 +298,17 @@ describe("terminal receipt contract", () => {
 
   it("enforces classification and proposed-artifact consistency", () => {
     const wrongKind = structuredClone(propagatedCase.terminal_receipt);
-    wrongKind.proposed_artifact.kind = "recovery";
+    wrongKind.classification = "recovery";
     assert.throws(
       () => validateTerminalReceipt(wrongKind),
-      /proposed_artifact\.kind must be incident for incident/,
+      /proposed_artifact\.kind must be recovery for recovery/,
     );
 
     const incidentNoArtifact = structuredClone(propagatedCase.terminal_receipt);
     incidentNoArtifact.terminal_outcome = "no_artifact";
     incidentNoArtifact.no_artifact_reason = "No durable artifact is justified.";
     incidentNoArtifact.proposed_artifact = null;
+    incidentNoArtifact.escalation = null;
     assert.throws(
       () => validateTerminalReceipt(incidentNoArtifact),
       /terminal_outcome no_artifact requires classification none/,
@@ -273,20 +322,79 @@ describe("terminal receipt contract", () => {
     );
   });
 
-  it("rejects clearly unnormalized or identity-unsafe receipt values", () => {
+  it("accepts a complete filled multiline incident artifact with a safe date", () => {
+    const proposed = structuredClone(propagatedCase.terminal_receipt);
+    assert.ok(incidentTemplate.includes("## Failure"));
+    assert.ok(proposed.proposed_artifact.content.includes("opened: 2026-07-26"));
+    assert.ok(proposed.proposed_artifact.content.includes("\n## Verification\n"));
+    assert.doesNotThrow(() => validateTerminalReceipt(proposed));
+
+    const summaryOnly = structuredClone(proposed);
+    summaryOnly.proposed_artifact.content =
+      "Open an incident for the launcher discovery failure.";
+    assert.throws(
+      () => validateTerminalReceipt(summaryOnly),
+      /content must be a complete filled sanitized incident artifact/,
+    );
+  });
+
+  it("accepts a complete filled multiline recovery artifact", () => {
+    const proposed = structuredClone(propagatedCase.terminal_receipt);
+    proposed.classification = "recovery";
+    proposed.proposed_artifact = {
+      kind: "recovery",
+      content: `---
+id: documented-validator-launcher-works-with-managed-runtime
+schema: 1
+signature: "Documented validator launcher works with managed runtime."
+scope:
+  os: any
+  shell: any
+  tool: validator
+  versions: managed
+status: candidate
+first_seen: 2026-07-26
+last_verified: null
+expires_after_days: 30
+supersedes: null
+---
+# Run the managed validator launcher
+
+## Symptom
+
+The default runtime lacks the declared validator dependency.
+
+## Recovery
+
+Use the documented managed launcher.
+
+## Verification
+
+Run from clean preconditions and observe successful validation.
+
+## Limits
+
+Applies only to the documented managed runtime.
+`,
+    };
+    assert.ok(recoveryTemplate.includes("## Recovery"));
+    assert.doesNotThrow(() => validateTerminalReceipt(proposed));
+  });
+
+  it("rejects high-confidence sensitive values without claiming comprehensive identity proof", () => {
     const unsafeSignature = structuredClone(persisted);
     unsafeSignature.signature =
       "Validator fails under /Users/PersonalName/private-project.";
     assert.throws(
       () => validateTerminalReceipt(unsafeSignature),
-      /signature must be sanitized and normalized before receipt construction/,
+      /signature contains a high-confidence sensitive value/,
     );
 
     const unsafeEvidence = structuredClone(persisted);
     unsafeEvidence.evidence = ["Contact person@example.com for access."];
     assert.throws(
       () => validateTerminalReceipt(unsafeEvidence),
-      /evidence must contain only sanitized normalized values/,
+      /evidence contains a high-confidence sensitive value/,
     );
 
     const unsafeId = structuredClone(persisted);
@@ -297,12 +405,32 @@ describe("terminal receipt contract", () => {
     );
 
     const unsafeProposed = structuredClone(propagatedCase.terminal_receipt);
-    unsafeProposed.proposed_artifact.content =
-      "Use ghp_abcdefghijklmnopqrstuvwxyz for the repair.";
-    assert.throws(
-      () => validateTerminalReceipt(unsafeProposed),
-      /content must be sanitized and normalized before receipt construction/,
-    );
+    const unsafeBodies = [
+      unsafeProposed.proposed_artifact.content.replace(
+        "Make launcher discovery and authentication preflight host-aware.",
+        "Contact person@example.com before repair.",
+      ),
+      unsafeProposed.proposed_artifact.content.replace(
+        "Make launcher discovery and authentication preflight host-aware.",
+        "Use ghp_abcdefghijklmnopqrstuvwxyz for the repair.",
+      ),
+      unsafeProposed.proposed_artifact.content.replace(
+        "Make launcher discovery and authentication preflight host-aware.",
+        "Inspect /Users/PrivateUser/private-project before repair.",
+      ),
+      unsafeProposed.proposed_artifact.content.replace(
+        "Make launcher discovery and authentication preflight host-aware.",
+        "Inspect C:\\Users\\PrivateUser\\private-project before repair.",
+      ),
+    ];
+    for (const content of unsafeBodies) {
+      const receipt = structuredClone(unsafeProposed);
+      receipt.proposed_artifact.content = content;
+      assert.throws(
+        () => validateTerminalReceipt(receipt),
+        /content contains a high-confidence sensitive value/,
+      );
+    }
   });
 
   it("independently rejects a malformed child passed to the parent validator", () => {

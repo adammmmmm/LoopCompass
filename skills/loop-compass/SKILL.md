@@ -176,14 +176,15 @@ primary task without cancelling classification.
 
 A delegated agent with shared repository write authority follows the same contract directly. A
 brief-only or read-only worker returns the normalized signature, classification, minimal evidence,
-proposed artifact content when applicable, and exact escalation to its parent. The parent must
+the complete filled incident or recovery artifact when applicable, and exact escalation to its
+parent. The parent must
 persist, record `no artifact`, or escalate in the same turn.
 
 Use the machine-detectable [terminal receipt contract](references/terminal-receipts.md) for
 read-only, missing-store, and other cross-actor handoffs. The receipt keeps `task_outcome` separate
 from `mechanism_health` and records containment explicitly. A receiving parent returns a linked
 receipt proving ingestion and one terminal action. A parent that still lacks authority propagates
-the complete payload unchanged with a new exact escalation; a receipt id or narrative summary
+the complete payload and proposed artifact unchanged with a new exact escalation; a receipt id or narrative summary
 alone is insufficient. The linked parent receipt uses a distinct id and canonical child-payload
 digest so acknowledgment cannot be detached from the exact sanitized child content.
 

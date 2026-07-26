@@ -45,6 +45,8 @@ const REQUIRED_TOP_LEVEL = [
   "assets/incident-template.md",
   "references/classification.md",
   "references/integration.md",
+  "references/pii-sanitation.md",
+  "references/terminal-receipts.md",
 ];
 
 function die(message) {

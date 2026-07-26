@@ -47,15 +47,22 @@ lists when used. `containment.summary` and `containment.verification_gate` are n
 `containment.used` is true.
 
 The schema is closed: do not add raw-log, transcript, private-payload, or host-specific fields.
-Sanitize and summarize necessary evidence into the modeled fields. `signature` must already equal
-its normalized form. Receipt ids, dedupe keys, and artifact references use lowercase
-host-neutral identifiers; receipt ids are unique within the handoff chain.
+Sanitize and summarize necessary evidence into the modeled fields. `signature` is a normalized
+one-line identity. Evidence, containment, escalation, reasons, and artifact bodies retain useful
+prose and safe dates; they are sanitized but are not signature-normalized or whitespace-collapsed.
+Receipt ids, dedupe keys, and artifact references use lowercase host-neutral identifiers; receipt
+ids are unique within the handoff chain.
+
+`proposed_artifact.content` is the complete filled recovery or incident Markdown artifact,
+including frontmatter and every required template section. It is not a one-line instruction,
+summary, patch fragment, or artifact id.
 
 Outcome-specific rules:
 
 - `persisted_artifact` requires `artifact_ref`; `proposed_artifact` and `no_artifact_reason` are
   null.
-- `no_artifact` requires `no_artifact_reason`; artifact fields are null.
+- `no_artifact` requires `no_artifact_reason`; artifact fields and `escalation` are null because
+  classification has ended without a durable artifact.
 - `proposed_artifact` requires the complete `proposed_artifact` and exact `escalation`; the other
   terminal fields are null.
 - `incident` and `external` classifications require exact `escalation` even when the incident was
@@ -101,7 +108,9 @@ alone is not proof of complete propagation. `child_payload_sha256` binds the par
 canonical complete child payload; the parent and child ids must be distinct and must not be reused
 for different receipts. An authoritative action leaves `forwarded_receipt` null; further escalation
 includes the complete unchanged child receipt. A parent that persists an incident or external
-incident retains the exact repair escalation rather than dropping it after persistence.
+incident retains the exact repair escalation rather than dropping it after persistence. A parent
+that propagates also repeats the child's complete proposed artifact unchanged; changing the
+candidate requires a new child classification receipt.
 
 ## Boundaries
 
@@ -110,4 +119,7 @@ record. Core LoopCompass does not create a receipt directory, queue, daemon, dat
 or network service. A receipt never replaces the canonical `.loopcompass` artifact. Host
 integrations decide how to ingest, deduplicate, queue, persist, and close receipts. Host sanitation
 checks are defense in depth only; they do not defer or replace the emitting actor's sanitation
-before first handoff or write, and passing a check is not proof that no PII remains.
+before first handoff or write. Receipt validation blocks known high-confidence email, secret, and
+personal-home-path shapes without echoing matched content. It cannot prove that personal names,
+private organizations, project-specific identifiers, or all PII are absent; the emitting actor
+must still substitute functional roles, and project-supplied patterns belong to host tooling.

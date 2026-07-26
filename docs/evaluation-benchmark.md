@@ -57,7 +57,13 @@ and budget are explicit.
 Attempt counts, step counts, and step budgets must be nonnegative integers (with `null` allowed
 only for `receipt.steps_to_verified_normal_path`). Invalid values stop evaluation before scoring.
 Each `receipt.host` must exactly match its declared `scope.host`; schema 1 has no mismatch override
-or justification field, so mismatches fail closed before the report is generated.
+or justification field, so mismatches fail closed before the report is generated. The fixture,
+baseline, case, scope, receipt, and expected-result objects are closed schemas; unknown fields fail
+validation rather than silently changing a metric denominator.
+
+`fixture.metrics` must exactly match the evaluator's single ordered metric registry. Missing,
+duplicate, unknown, or reordered entries fail validation. The same registry drives report
+rendering, including `skill_decision_quality`, so inventory and output cannot drift independently.
 
 Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and optionally
 `receipt.parent_receipt`, following the shipped
@@ -65,16 +71,19 @@ Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and 
 `terminal_receipt: null` represents an observed missed receipt and scores as incomplete when
 `expected.terminal_receipt_required` is true. A present receipt is validated strictly: missing,
 blank, malformed, or outcome-inconsistent fields stop evaluation rather than being scored as
-partial success. `expected.terminal_receipt_semantics` separately scores `task_outcome`,
-`mechanism_health`, the complete containment values, artifact/no-artifact payload, proposed
-artifact, and exact escalation; it is required whenever
+partial success. `expected.terminal_receipt_semantics` separately scores exact signature, dedupe
+key, minimal evidence, `task_outcome`, `mechanism_health`, the complete containment values,
+artifact/no-artifact payload, proposed artifact, and exact escalation; it is required whenever
 `expected.terminal_receipt_required` is true, so a fixture cannot opt out of semantic scoring.
 If a receipt is present, `terminal_receipt_required` must be true. Structural validity alone does
 not earn semantic credit.
 
+`expected.parent_receipt_required` independently defines the worker-to-parent denominator, and
 `expected.parent_receipt_semantics` scores the complete authoritative action: terminal action,
 artifact reference or no-artifact reason, proposed content, escalation, and whether the complete
-child receipt is forwarded. A present parent receipt cannot omit those expectations. A required
+child receipt is forwarded. Every expected `proposed_artifact` outcome requires both a complete
+terminal receipt and parent closure expectation. A present parent receipt cannot omit those
+expectations. A required
 parent receipt may be deliberately absent in a negative fixture, where it scores as failed closure.
 Receipt ids must be unique across a fixture, and every parent links both the child id and canonical
 child-payload SHA-256 digest.

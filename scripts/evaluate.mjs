@@ -22,7 +22,60 @@ const agentRoles = new Set(["parent", "subagent-readonly"]);
 const skillStates = new Set(["present", "missing"]);
 const projectInstructionStates = new Set(["present", "inherited", "missing"]);
 const receiptTypes = new Set(["synthetic", "recorded"]);
+const fixtureFields = new Set([
+  "schema",
+  "benchmark",
+  "baseline",
+  "live_integration_required",
+  "description",
+  "metrics",
+  "cases",
+]);
+const baselineFields = new Set(["repository", "commit"]);
+const caseFields = new Set(["id", "scenario", "scope", "receipt", "expected"]);
+const scopeFields = new Set([
+  "host",
+  "agent_role",
+  "skill_state",
+  "project_instructions",
+  "receipt_type",
+]);
+const receiptFields = new Set([
+  "host",
+  "consulted",
+  "host_enforced",
+  "failure",
+  "classification",
+  "applied_existing_artifact",
+  "candidate_artifact_status",
+  "stale_rejected",
+  "repeated_failure_attempts_before",
+  "repeated_failure_attempts_after",
+  "steps_to_verified_normal_path",
+  "blind_retry",
+  "terminal_outcome",
+  "terminal_receipt",
+  "parent_receipt",
+]);
+const expectedFields = new Set([
+  "consulted",
+  "host_enforced",
+  "classification",
+  "false_trigger",
+  "stale_rejected",
+  "repeated_failure_reduced",
+  "time_to_verified_normal_path_max_steps",
+  "blind_retry",
+  "terminal_outcome",
+  "terminal_receipt_required",
+  "terminal_receipt_semantics",
+  "parent_receipt_required",
+  "parent_receipt_semantics",
+]);
 const terminalSemanticsFields = new Set([
+  "signature",
+  "dedupe_key",
+  "evidence",
   "task_outcome",
   "mechanism_health",
   "containment",
@@ -179,6 +232,9 @@ function skillDecisionPass(c) {
 
 function terminalSemanticProjection(receipt) {
   return {
+    signature: receipt.signature,
+    dedupe_key: receipt.dedupe_key,
+    evidence: receipt.evidence,
     task_outcome: receipt.task_outcome,
     mechanism_health: receipt.mechanism_health,
     containment: receipt.containment,
@@ -240,7 +296,7 @@ function receiptSemantics(cases) {
 }
 
 function parentClosure(cases) {
-  const required = cases.filter((c) => c.expected?.parent_receipt_semantics);
+  const required = cases.filter((c) => c.expected?.parent_receipt_required === true);
   const matched = required.filter((c) => parentReceiptSemanticsPass(c) === true);
   return [matched.length, required.length];
 }
@@ -250,6 +306,38 @@ function skillDecisionQuality(cases) {
   const matched = decisions.filter(Boolean);
   return [matched.length, decisions.length];
 }
+
+function terminalOutcomeCompliance(cases) {
+  return [cases.filter(terminalOutcomeMatches).length, cases.length];
+}
+
+const metricRegistry = Object.freeze([
+  ["consultation_recall", "Consultation recall", consultationRecall],
+  ["host_enforcement_quality", "Host enforcement quality", hostEnforcementQuality],
+  ["skill_decision_quality", "Skill decision quality", skillDecisionQuality],
+  [
+    "classification_accuracy_when_consulted",
+    "Classification accuracy when consulted",
+    (cases) => countMatchesWhenConsulted(cases, "classification"),
+  ],
+  ["false_trigger_rate", "False trigger rate", falseTriggerRate],
+  ["stale_rejection_rate", "Stale rejection rate", staleRejectionRate],
+  ["repeated_failure_reduction", "Repeated-failure reduction", repeatedFailureReduction],
+  ["blind_retry_rate", "Blind retry rate", blindRetryRate],
+  ["time_to_verified_normal_path", "Time to verified normal path", timeToVerifiedNormalPath],
+  [
+    "terminal_outcome_compliance",
+    "Terminal outcome compliance",
+    terminalOutcomeCompliance,
+  ],
+  ["terminal_receipt_completeness", "Terminal receipt completeness", receiptCompleteness],
+  [
+    "terminal_receipt_semantic_accuracy",
+    "Terminal receipt semantic accuracy",
+    receiptSemantics,
+  ],
+  ["worker_to_parent_closure", "Worker-to-parent closure", parentClosure],
+]);
 
 function metricRow(name, numerator, denominator) {
   return `| ${name} | ${ratio(numerator, denominator)} | ${percent(numerator, denominator)} |`;
@@ -348,10 +436,10 @@ function expectedTerminalReceipt(c, semantics) {
   return {
     receipt_schema: 1,
     receipt_id: "expected-terminal-receipt",
-    signature: "Expected sanitized benchmark signature.",
-    dedupe_key: "expected|benchmark|signature",
+    signature: semantics.signature,
+    dedupe_key: semantics.dedupe_key,
     classification: c.expected.classification,
-    evidence: ["Expected sanitized benchmark evidence."],
+    evidence: structuredClone(semantics.evidence),
     ...structuredClone(semantics),
     terminal_outcome: c.expected.terminal_outcome,
   };
@@ -387,25 +475,41 @@ function validateExpectedParentSemantics(c, semantics, label) {
 
 function validateFixture(doc) {
   requireObject(doc, "fixture");
+  requireExactFields(doc, "fixture", fixtureFields);
   if (doc.schema !== 1) {
     throw new Error("fixture.schema must be 1");
   }
   requireString(doc, "benchmark", "fixture");
   requireObject(requireField(doc, "baseline", "fixture"), "fixture.baseline");
+  requireExactFields(doc.baseline, "fixture.baseline", baselineFields);
   requireString(doc.baseline, "repository", "fixture.baseline");
   requireString(doc.baseline, "commit", "fixture.baseline");
   requireBoolean(doc, "live_integration_required", "fixture");
+  requireString(doc, "description", "fixture");
+  const metrics = requireField(doc, "metrics", "fixture");
+  requireArray(metrics, "fixture.metrics");
+  const expectedMetricIds = metricRegistry.map(([id]) => id);
+  if (
+    metrics.length !== expectedMetricIds.length
+    || metrics.some((metric, index) => metric !== expectedMetricIds[index])
+  ) {
+    throw new Error(
+      `fixture.metrics must exactly match the ordered metric registry: ${expectedMetricIds.join(", ")}`,
+    );
+  }
   requireArray(requireField(doc, "cases", "fixture"), "fixture.cases");
   const receiptIds = new Map();
 
   doc.cases.forEach((c, index) => {
     const label = `cases[${index}]`;
     requireObject(c, label);
+    requireExactFields(c, label, caseFields);
     requireString(c, "id", label);
     requireString(c, "scenario", label);
 
     const scope = requireField(c, "scope", label);
     requireObject(scope, `${label}.scope`);
+    requireExactFields(scope, `${label}.scope`, scopeFields);
     requireString(scope, "host", `${label}.scope`);
     requireEnum(scope, "agent_role", `${label}.scope`, agentRoles);
     requireEnum(scope, "skill_state", `${label}.scope`, skillStates);
@@ -414,6 +518,7 @@ function validateFixture(doc) {
 
     const receipt = requireField(c, "receipt", label);
     requireObject(receipt, `${label}.receipt`);
+    requireExactFields(receipt, `${label}.receipt`, receiptFields);
     requireString(receipt, "host", `${label}.receipt`);
     if (receipt.host !== scope.host) {
       throw new Error(`${label}.receipt.host must match ${label}.scope.host`);
@@ -475,6 +580,7 @@ function validateFixture(doc) {
 
     const expected = requireField(c, "expected", label);
     requireObject(expected, `${label}.expected`);
+    requireExactFields(expected, `${label}.expected`, expectedFields);
     requireBoolean(expected, "consulted", `${label}.expected`);
     requireBoolean(expected, "host_enforced", `${label}.expected`);
     requireEnum(expected, "classification", `${label}.expected`, classifications);
@@ -486,9 +592,8 @@ function validateFixture(doc) {
     }
     requireBoolean(expected, "blind_retry", `${label}.expected`);
     requireEnum(expected, "terminal_outcome", `${label}.expected`, expectedTerminalOutcomes);
-    if (hasField(expected, "terminal_receipt_required")) {
-      requireBoolean(expected, "terminal_receipt_required", `${label}.expected`);
-    }
+    requireBoolean(expected, "terminal_receipt_required", `${label}.expected`);
+    requireBoolean(expected, "parent_receipt_required", `${label}.expected`);
     if (
       receipt.terminal_receipt !== null
       && typeof receipt.terminal_receipt === "object"
@@ -537,25 +642,44 @@ function validateFixture(doc) {
         parentSemantics,
         `${label}.expected.parent_receipt_semantics`,
       );
+      if (expected.parent_receipt_required !== true) {
+        throw new Error(
+          `${label}.expected.parent_receipt_semantics requires parent_receipt_required: true`,
+        );
+      }
+    }
+    if (
+      expected.parent_receipt_required === true
+      && !hasField(expected, "parent_receipt_semantics")
+    ) {
+      throw new Error(
+        `${label}.expected.parent_receipt_semantics is required when parent_receipt_required is true`,
+      );
+    }
+    if (
+      receipt.parent_receipt !== null
+      && typeof receipt.parent_receipt === "object"
+      && expected.parent_receipt_required !== true
+    ) {
+      throw new Error(
+        `${label}.expected.parent_receipt_required must be true when parent_receipt is present`,
+      );
+    }
+    if (expected.terminal_outcome === "proposed_artifact") {
+      if (
+        expected.terminal_receipt_required !== true
+        || expected.parent_receipt_required !== true
+      ) {
+        throw new Error(
+          `${label}.expected proposed_artifact requires terminal_receipt_required and parent_receipt_required`,
+        );
+      }
     }
   });
 }
 
 function renderReport(doc) {
   const cases = doc.cases ?? [];
-  const [consulted, expectedConsulted] = consultationRecall(cases);
-  const [hostMatched, hostTotal] = hostEnforcementQuality(cases);
-  const [classificationMatches, classificationTotal] = countMatchesWhenConsulted(cases, "classification");
-  const [falseTriggers, expectedNoConsult] = falseTriggerRate(cases);
-  const [staleRejected, staleExpected] = staleRejectionRate(cases);
-  const [reduced, reductionExpected] = repeatedFailureReduction(cases);
-  const [blindRetries, totalCases] = blindRetryRate(cases);
-  const [normalPath, normalPathExpected] = timeToVerifiedNormalPath(cases);
-  const terminalMatches = cases.filter(terminalOutcomeMatches).length;
-  const [skillMatched, skillTotal] = skillDecisionQuality(cases);
-  const [completeReceipts, requiredReceipts] = receiptCompleteness(cases);
-  const [correctReceiptSemantics, expectedReceiptSemantics] = receiptSemantics(cases);
-  const [closedParentReceipts, requiredParentReceipts] = parentClosure(cases);
 
   return [
     "# LoopCompass benchmark report",
@@ -571,23 +695,10 @@ function renderReport(doc) {
     "",
     "| Metric | Result | Percent |",
     "| --- | --- | --- |",
-    metricRow("Consultation recall", consulted, expectedConsulted),
-    metricRow("Host enforcement quality", hostMatched, hostTotal),
-    metricRow("Skill decision quality", skillMatched, skillTotal),
-    metricRow("Classification accuracy when consulted", classificationMatches, classificationTotal),
-    metricRow("False trigger rate", falseTriggers, expectedNoConsult),
-    metricRow("Stale rejection rate", staleRejected, staleExpected),
-    metricRow("Repeated-failure reduction", reduced, reductionExpected),
-    metricRow("Blind retry rate", blindRetries, totalCases),
-    metricRow("Time to verified normal path", normalPath, normalPathExpected),
-    metricRow("Terminal outcome compliance", terminalMatches, cases.length),
-    metricRow("Terminal receipt completeness", completeReceipts, requiredReceipts),
-    metricRow(
-      "Terminal receipt semantic accuracy",
-      correctReceiptSemantics,
-      expectedReceiptSemantics,
-    ),
-    metricRow("Worker-to-parent closure", closedParentReceipts, requiredParentReceipts),
+    ...metricRegistry.map(([, label, measure]) => {
+      const [numerator, denominator] = measure(cases);
+      return metricRow(label, numerator, denominator);
+    }),
     "",
     "## Host versus skill breakdown",
     "",

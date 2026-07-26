@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { validateCapsuleText } from "./capsule.mjs";
+import { parseFrontmatter } from "./frontmatter.mjs";
 import { normalizeSignature } from "./signature.mjs";
 
 const classifications = new Set(["recovery", "incident", "external", "none"]);
@@ -43,6 +45,42 @@ const containmentFields = new Set(["used", "summary", "verification_gate"]);
 const proposedArtifactFields = new Set(["kind", "content"]);
 const escalationFields = new Set(["requires", "target", "action"]);
 const safeIdentifier = /^[a-z0-9][a-z0-9._:|-]*$/;
+const highConfidenceSensitivePatterns = [
+  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
+  /(?:^|[\s"'`(=])\/(?:Users|home)\/[^/\s"'`]+(?:\/[^\s"'`]*)?/,
+  /\b[A-Za-z]:\\Users\\[^\\\s"'`]+(?:\\[^\s"'`]*)?/,
+  /\b(?:sk-[A-Za-z0-9_-]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{10,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/i,
+];
+const requiredArtifactFields = Object.freeze({
+  incident: [
+    "id",
+    "schema",
+    "signature",
+    "status",
+    "requires",
+    "owner",
+    "opened",
+    "containment_expires",
+    "consulted",
+  ],
+  recovery: [
+    "id",
+    "schema",
+    "signature",
+    "scope",
+    "status",
+    "first_seen",
+    "last_verified",
+    "expires_after_days",
+    "supersedes",
+  ],
+});
+const requiredArtifactSections = Object.freeze({
+  incident: ["Failure", "Repair", "Containment", "Verification"],
+  recovery: ["Symptom", "Recovery", "Verification", "Limits"],
+});
+const unfilledTemplateMarker =
+  /<(?:slug-from-normalized-signature|normalized symptom or error|capability|incident-coordinator|YYYY-MM-DD|any-or-specific|tool-name|version-range-or-unknown|integer|Correct path in one line|Repair the broken mechanism)>/i;
 
 function hasField(value, field) {
   return Object.prototype.hasOwnProperty.call(value, field);
@@ -82,16 +120,31 @@ function requireString(value, field, label) {
   return result;
 }
 
-function requireSafeString(value, field, label) {
+function hasHighConfidenceSensitiveValue(value) {
+  return highConfidenceSensitivePatterns.some((pattern) => pattern.test(value));
+}
+
+function requireSanitizedString(value, field, label) {
   const result = requireString(value, field, label);
-  if (normalizeSignature(result) !== result) {
-    fail(label, `.${field} must be sanitized and normalized before receipt construction`);
+  if (hasHighConfidenceSensitiveValue(result)) {
+    fail(
+      label,
+      `.${field} contains a high-confidence sensitive value; sanitize it before receipt construction`,
+    );
+  }
+  return result;
+}
+
+function requireNormalizedSignature(value, field, label) {
+  const result = requireSanitizedString(value, field, label);
+  if (normalizeSignature(result) !== result || /[\r\n]/.test(result)) {
+    fail(label, `.${field} must be a normalized one-line signature`);
   }
   return result;
 }
 
 function requireSafeIdentifier(value, field, label) {
-  const result = requireSafeString(value, field, label);
+  const result = requireSanitizedString(value, field, label);
   if (!safeIdentifier.test(result)) {
     fail(label, `.${field} must be a lowercase host-neutral identifier`);
   }
@@ -106,16 +159,19 @@ function requireNullableString(value, field, label) {
   return result;
 }
 
-function requireNullableSafeString(value, field, label) {
+function requireNullableSanitizedString(value, field, label) {
   const result = requireNullableString(value, field, label);
-  if (result !== null && normalizeSignature(result) !== result) {
-    fail(label, `.${field} must be sanitized and normalized before receipt construction`);
+  if (result !== null && hasHighConfidenceSensitiveValue(result)) {
+    fail(
+      label,
+      `.${field} contains a high-confidence sensitive value; sanitize it before receipt construction`,
+    );
   }
   return result;
 }
 
 function requireNullableSafeIdentifier(value, field, label) {
-  const result = requireNullableSafeString(value, field, label);
+  const result = requireNullableSanitizedString(value, field, label);
   if (result !== null && !safeIdentifier.test(result)) {
     fail(label, `.${field} must be null or a lowercase host-neutral identifier`);
   }
@@ -150,10 +206,13 @@ function requireStringArray(value, field, label) {
   return result;
 }
 
-function requireSafeStringArray(value, field, label) {
+function requireSanitizedStringArray(value, field, label) {
   const result = requireStringArray(value, field, label);
-  if (result.some((item) => normalizeSignature(item) !== item)) {
-    fail(label, `.${field} must contain only sanitized normalized values`);
+  if (result.some(hasHighConfidenceSensitiveValue)) {
+    fail(
+      label,
+      `.${field} contains a high-confidence sensitive value; sanitize it before receipt construction`,
+    );
   }
   return result;
 }
@@ -171,17 +230,17 @@ function validateEscalation(escalation, label) {
     return;
   }
   requireExactFields(escalation, label, escalationFields);
-  requireSafeStringArray(escalation, "requires", label);
-  requireSafeString(escalation, "target", label);
-  requireSafeString(escalation, "action", label);
+  requireSanitizedStringArray(escalation, "requires", label);
+  requireSanitizedString(escalation, "target", label);
+  requireSanitizedString(escalation, "action", label);
 }
 
 function validateContainment(containment, label) {
   requireObject(containment, label);
   requireExactFields(containment, label, containmentFields);
   const used = requireBoolean(containment, "used", label);
-  const summary = requireNullableSafeString(containment, "summary", label);
-  const verificationGate = requireNullableSafeString(
+  const summary = requireNullableSanitizedString(containment, "summary", label);
+  const verificationGate = requireNullableSanitizedString(
     containment,
     "verification_gate",
     label,
@@ -199,13 +258,41 @@ function validateProposedArtifact(artifact, label) {
     return;
   }
   requireExactFields(artifact, label, proposedArtifactFields);
-  requireEnum(artifact, "kind", label, new Set(["recovery", "incident"]));
-  requireSafeString(artifact, "content", label);
+  const kind = requireEnum(artifact, "kind", label, new Set(["recovery", "incident"]));
+  const content = requireSanitizedString(artifact, "content", label);
+  const { fields, body } = parseFrontmatter(content);
+  const completeFields = requiredArtifactFields[kind].every((field) =>
+    hasField(fields, field),
+  );
+  const completeSections = requiredArtifactSections[kind].every((section) =>
+    new RegExp(`^##\\s+${section}\\b`, "m").test(body),
+  );
+  const filename = fields.id ? `${fields.id}.md` : "proposed-artifact.md";
+  const validation = validateCapsuleText(content, {
+    kind,
+    filename,
+    // Receipt validation must be deterministic; lifecycle expiry is checked
+    // again when the authoritative actor persists the capsule.
+    today: new Date("1970-01-01T00:00:00.000Z"),
+  });
+  if (
+    !content.includes("\n")
+    || unfilledTemplateMarker.test(content)
+    || !completeFields
+    || !completeSections
+    || validation.errors.length > 0
+  ) {
+    fail(label, `.content must be a complete filled sanitized ${kind} artifact`);
+  }
 }
 
 function validateTerminalActionFields(receipt, label, outcome, childReceipt = null) {
   const artifactRef = requireNullableSafeIdentifier(receipt, "artifact_ref", label);
-  const noArtifactReason = requireNullableSafeString(receipt, "no_artifact_reason", label);
+  const noArtifactReason = requireNullableSanitizedString(
+    receipt,
+    "no_artifact_reason",
+    label,
+  );
   const proposedArtifact = requireNullableObject(receipt, "proposed_artifact", label);
   validateProposedArtifact(proposedArtifact, `${label}.proposed_artifact`);
   const escalation = requireNullableObject(receipt, "escalation", label);
@@ -224,6 +311,9 @@ function validateTerminalActionFields(receipt, label, outcome, childReceipt = nu
     }
     if (artifactRef !== null || proposedArtifact !== null) {
       fail(label, " no_artifact cannot include artifact_ref or proposed_artifact");
+    }
+    if (escalation !== null) {
+      fail(label, " no_artifact requires escalation null");
     }
   } else {
     if (proposedArtifact === null || escalation === null) {
@@ -269,10 +359,10 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
     fail(label, ".receipt_schema must be 1");
   }
   requireSafeIdentifier(receipt, "receipt_id", label);
-  requireSafeString(receipt, "signature", label);
+  requireNormalizedSignature(receipt, "signature", label);
   requireSafeIdentifier(receipt, "dedupe_key", label);
   const classification = requireEnum(receipt, "classification", label, classifications);
-  requireSafeStringArray(receipt, "evidence", label);
+  requireSanitizedStringArray(receipt, "evidence", label);
   requireEnum(receipt, "task_outcome", label, taskOutcomes);
   requireEnum(receipt, "mechanism_health", label, mechanismHealthStates);
   validateContainment(
@@ -281,17 +371,17 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
   );
   const outcome = requireEnum(receipt, "terminal_outcome", label, terminalOutcomes);
   validateTerminalActionFields(receipt, label, outcome);
-  if (
-    (classification === "incident" || classification === "external")
-    && receipt.escalation === null
-  ) {
-    fail(label, `.escalation is required for ${classification} classification`);
-  }
   if (classification === "none" && outcome !== "no_artifact") {
     fail(label, ".classification none requires terminal_outcome no_artifact");
   }
   if (outcome === "no_artifact" && classification !== "none") {
     fail(label, ".terminal_outcome no_artifact requires classification none");
+  }
+  if (
+    (classification === "incident" || classification === "external")
+    && receipt.escalation === null
+  ) {
+    fail(label, `.escalation is required for ${classification} classification`);
   }
   if (receipt.proposed_artifact !== null) {
     const expectedKind = classification === "recovery" ? "recovery" : "incident";
@@ -335,6 +425,12 @@ export function validateParentReceipt(parent, childReceipt, label = "parent_rece
     }
   }
   validateTerminalActionFields(parent, label, outcome, childReceipt);
+  if (
+    outcome === "proposed_artifact"
+    && !isDeepStrictEqual(parent.proposed_artifact, childReceipt.proposed_artifact)
+  ) {
+    fail(label, ".proposed_artifact must preserve the complete child proposed artifact");
+  }
   if (
     outcome === "persisted_artifact"
     && (childReceipt.classification === "incident" || childReceipt.classification === "external")

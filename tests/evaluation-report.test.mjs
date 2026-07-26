@@ -56,8 +56,8 @@ describe("evaluation benchmark report", () => {
     assert.match(result.stdout, /Blind retry rate \| 3\/15 \| 20\.0%/);
     assert.match(result.stdout, /Time to verified normal path \| 7\/10 \| 70\.0%/);
     assert.match(result.stdout, /Terminal outcome compliance \| 12\/15 \| 80\.0%/);
-    assert.match(result.stdout, /Terminal receipt completeness \| 5\/6 \| 83\.3%/);
-    assert.match(result.stdout, /Terminal receipt semantic accuracy \| 5\/6 \| 83\.3%/);
+    assert.match(result.stdout, /Terminal receipt completeness \| 6\/7 \| 85\.7%/);
+    assert.match(result.stdout, /Terminal receipt semantic accuracy \| 6\/7 \| 85\.7%/);
     assert.match(result.stdout, /Worker-to-parent closure \| 3\/4 \| 75\.0%/);
     assert.match(result.stdout, /Live integration required \| false/);
     assert.match(result.stdout, /## Host versus skill breakdown/);
@@ -126,6 +126,62 @@ describe("evaluation benchmark report", () => {
       result.stderr,
       /cases\[0\]\.receipt\.classification is required/,
     );
+  });
+
+  it("rejects missing, duplicate, unknown, or reordered metric inventory entries", () => {
+    const mutations = [
+      (doc) => {
+        doc.metrics.splice(2, 1);
+      },
+      (doc) => {
+        doc.metrics[2] = doc.metrics[1];
+      },
+      (doc) => {
+        doc.metrics[2] = "unknown_metric";
+      },
+      (doc) => {
+        [doc.metrics[1], doc.metrics[2]] = [doc.metrics[2], doc.metrics[1]];
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      mutate(doc);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /must exactly match the ordered metric registry/);
+    }
+  });
+
+  it("rejects unknown fields in every fixture object layer", () => {
+    const mutations = [
+      (doc) => {
+        doc.typo = true;
+      },
+      (doc) => {
+        doc.baseline.typo = true;
+      },
+      (doc) => {
+        doc.cases[0].typo = true;
+      },
+      (doc) => {
+        doc.cases[0].scope.typo = true;
+      },
+      (doc) => {
+        doc.cases[0].receipt.typo = true;
+      },
+      (doc) => {
+        doc.cases[0].expected.typo = true;
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      mutate(doc);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /\.typo is not allowed/);
+    }
   });
 
   it("rejects a receipt whose host does not match its declared scope", () => {
@@ -306,6 +362,27 @@ describe("evaluation benchmark report", () => {
     );
   });
 
+  it("does not allow proposed-artifact cases to shrink receipt or parent denominators", () => {
+    const doc = readFixture();
+    const receiptCase = doc.cases.find(
+      (c) => c.id === "lc-eval-013-parent-without-store-propagates",
+    );
+    receiptCase.receipt.terminal_receipt = null;
+    receiptCase.receipt.parent_receipt = null;
+    receiptCase.expected.terminal_receipt_required = false;
+    receiptCase.expected.parent_receipt_required = false;
+    delete receiptCase.expected.terminal_receipt_semantics;
+    delete receiptCase.expected.parent_receipt_semantics;
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /proposed_artifact requires terminal_receipt_required and parent_receipt_required/,
+    );
+  });
+
   it("requires parent semantic expectations whenever a parent receipt is present", () => {
     const doc = readFixture();
     const receiptCase = doc.cases.find(
@@ -384,7 +461,7 @@ describe("evaluation benchmark report", () => {
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(
         result.stdout,
-        /Terminal receipt semantic accuracy \| 4\/6 \| 66\.7%/,
+        /Terminal receipt semantic accuracy \| 5\/7 \| 71\.4%/,
       );
       assert.match(result.stdout, /Skill decision quality \| 9\/11 \| 81\.8%/);
       assert.match(
@@ -424,7 +501,7 @@ describe("evaluation benchmark report", () => {
       mutate(receiptCase.receipt.terminal_receipt);
       const result = runEvaluateWithDoc(doc);
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.match(result.stdout, /Terminal receipt semantic accuracy \| 4\/6 \| 66\.7%/);
+      assert.match(result.stdout, /Terminal receipt semantic accuracy \| 5\/7 \| 71\.4%/);
     }
 
     const proposedDoc = readFixture();
@@ -432,10 +509,39 @@ describe("evaluation benchmark report", () => {
       (c) => c.id === "lc-eval-015-missing-parent-receipt",
     );
     proposedCase.receipt.terminal_receipt.proposed_artifact.content =
-      "Open a different sanitized incident candidate.";
+      proposedCase.receipt.terminal_receipt.proposed_artifact.content.replace(
+        "Correct the wrapper configuration contract and its authoritative tests.",
+        "Correct the documented wrapper configuration and its authoritative tests.",
+      );
     const proposedResult = runEvaluateWithDoc(proposedDoc);
     assert.equal(proposedResult.status, 0, proposedResult.stderr || proposedResult.stdout);
-    assert.match(proposedResult.stdout, /Terminal receipt semantic accuracy \| 4\/6 \| 66\.7%/);
+    assert.match(proposedResult.stdout, /Terminal receipt semantic accuracy \| 5\/7 \| 71\.4%/);
+  });
+
+  it("scores exact signature, dedupe key, and minimal evidence semantics", () => {
+    const mutations = [
+      (terminal) => {
+        terminal.signature = "A different normalized validator signature.";
+      },
+      (terminal) => {
+        terminal.dedupe_key = "different|validator|identity";
+      },
+      (terminal) => {
+        terminal.evidence = ["Different but structurally valid sanitized evidence."];
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      const receiptCase = doc.cases.find(
+        (c) => c.id === "lc-eval-012-workaround-is-containment",
+      );
+      mutate(receiptCase.receipt.terminal_receipt);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /Terminal receipt semantic accuracy \| 5\/7 \| 71\.4%/);
+      assert.match(result.stdout, /Skill decision quality \| 9\/11 \| 81\.8%/);
+    }
   });
 
   it("scores exact authoritative parent payloads and no-artifact reasons", () => {
