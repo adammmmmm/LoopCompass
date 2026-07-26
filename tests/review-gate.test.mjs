@@ -10,6 +10,7 @@ import {
   evaluateSnapshot,
   matchesSensitivePath,
   normalizeGitHubSnapshot,
+  renderHumanAuthorization,
   renderVisibleReview,
   resolvePullRequestNumber,
   runPolicyEvaluation,
@@ -121,6 +122,26 @@ function apiComment(value = comment(metadata())) {
   };
 }
 
+function authorizationComment({
+  id = 50,
+  headSha = sha,
+  author = "maintainer",
+  authorType = "User",
+  app = null,
+  createdAt = "2025-12-31T23:59:00Z",
+  updatedAt = createdAt,
+} = {}) {
+  return {
+    id,
+    body: renderHumanAuthorization(headSha),
+    author,
+    author_type: authorType,
+    performed_via_github_app: app,
+    created_at: createdAt,
+    updated_at: updatedAt,
+  };
+}
+
 function rawSnapshot({
   headSha = sha,
   files = [{ filename: "README.md" }],
@@ -130,6 +151,7 @@ function rawSnapshot({
 } = {}) {
   return {
     pull: {
+      number: 1,
       head: { sha: headSha },
       user: { login: "maintainer" },
       changed_files: changedFiles,
@@ -145,15 +167,19 @@ function evaluate({
   author = "maintainer",
   changedFiles = ["README.md"],
   commentAuthor = "maintainer",
+  reviewComment,
   nativeApprovals = [],
+  authorizationComments = [],
 } = {}) {
   return validateReviewRecord({
-    comment: comment(data, commentAuthor),
+    comment: reviewComment ?? comment(data, commentAuthor),
     headSha: sha,
     author,
     changedFiles,
     config,
     repository,
+    pullNumber: 1,
+    authorizationComments,
     nativeApprovals,
   });
 }
@@ -229,7 +255,7 @@ test("external and sensitive changes require current human maintainer review", (
       head_sha: sha,
       verdict: "approved",
       kind: "operator_authorization",
-      authorization_reference: "https://github.com/example/project/issues/1#issuecomment-2",
+      authorization_reference: "https://github.com/example/project/pull/1#issuecomment-50",
     },
   });
   const maintainerReviewed = metadata({
@@ -243,7 +269,11 @@ test("external and sensitive changes require current human maintainer review", (
   });
   assert.equal(evaluate({ data: maintainerReviewed, author: "external" }).ok, true);
   assert.equal(
-    evaluate({ data: selfAuthorized, changedFiles: [".github/workflows/verify.yml"] }).ok,
+    evaluate({
+      data: selfAuthorized,
+      changedFiles: [".github/workflows/verify.yml"],
+      authorizationComments: [authorizationComment()],
+    }).ok,
     true,
   );
 });
@@ -333,13 +363,88 @@ test("attestation authorization must reference the current repository", () => {
       head_sha: sha,
       verdict: "approved",
       kind: "operator_authorization",
-      authorization_reference: "https://github.com/another/project/issues/1",
+      authorization_reference: "https://github.com/another/project/pull/1#issuecomment-50",
     },
   });
   assert.equal(
     evaluate({ data, changedFiles: [".github/workflows/verify.yml"] }).deliveryOk,
     false,
   );
+});
+
+test("operator authorization resolves to an immutable same-PR human comment", () => {
+  const data = metadata({
+    human_approval: {
+      reviewer: "maintainer",
+      head_sha: sha,
+      verdict: "approved",
+      kind: "operator_authorization",
+      authorization_reference: "https://github.com/example/project/pull/1#issuecomment-50",
+    },
+  });
+  const base = authorizationComment();
+  assert.equal(
+    evaluate({
+      data,
+      changedFiles: [".github/workflows/verify.yml"],
+      authorizationComments: [base],
+    }).deliveryOk,
+    true,
+  );
+  const invalid = [
+    [],
+    [{ ...base, id: 51 }],
+    [authorizationComment({ headSha: "b".repeat(40) })],
+    [authorizationComment({ author: "other" })],
+    [authorizationComment({ authorType: "Bot" })],
+    [authorizationComment({ app: { id: 1 } })],
+    [authorizationComment({ updatedAt: "2026-01-01T00:00:01Z" })],
+    [authorizationComment({ createdAt: "2026-01-01T00:01:00Z" })],
+  ];
+  for (const authorizationComments of invalid) {
+    assert.equal(
+      evaluate({
+        data,
+        changedFiles: [".github/workflows/verify.yml"],
+        authorizationComments,
+      }).deliveryOk,
+      false,
+    );
+  }
+  for (const [authorizationCreated, reviewCreated] of [
+    ["not-a-date", "2026-01-01T00:00:00Z"],
+    ["2025-12-31T23:59:00Z", "not-a-date"],
+  ]) {
+    const authorization = authorizationComment({
+      createdAt: authorizationCreated,
+    });
+    const review = comment(data);
+    review.created_at = reviewCreated;
+    review.updated_at = reviewCreated;
+    const result = evaluate({
+      data,
+      changedFiles: [".github/workflows/verify.yml"],
+      reviewComment: review,
+      authorizationComments: [authorization],
+    });
+    assert.equal(result.deliveryOk, false);
+  }
+});
+
+test("human_approval is structurally validated even when delivery review is not required", () => {
+  const data = metadata({
+    human_approval: {
+      reviewer: 7,
+      head_sha: "not-a-sha",
+      verdict: "maybe",
+      kind: "unknown",
+      authorization_reference: 9,
+    },
+  });
+  const result = evaluate({ data });
+  assert.equal(result.deliveryOk, true);
+  assert.equal(result.modelOk, false);
+  assert.match(result.modelReasons.join(" "), /human_approval/);
 });
 
 test("native human approval must target the current SHA", () => {
@@ -434,7 +539,7 @@ test("Bot and App records cannot satisfy human review", () => {
       head_sha: sha,
       verdict: "approved",
       kind: "operator_authorization",
-      authorization_reference: "https://github.com/example/project/issues/1",
+      authorization_reference: "https://github.com/example/project/pull/1#issuecomment-50",
     },
   });
   const botComment = comment(data);
@@ -666,6 +771,17 @@ test("history rejects malformed markers, edited records, broken chains, and dele
     analyzeReviewHistory([second, current], current, config, repository).historyErrors.join(" "),
     /preceding immutable review comment/,
   );
+  const malformedCurrent = { ...current, body: "<!-- loopcompass-review:v1\n{" };
+  const malformedResult = validateReviewRecord({
+    comment: malformedCurrent,
+    headSha: sha,
+    author: "maintainer",
+    changedFiles: ["README.md"],
+    config,
+    repository,
+    historyErrors: ["historical chain failure"],
+  });
+  assert.match(malformedResult.modelReasons.join(" "), /historical chain failure/);
 });
 
 test("historical records receive full fail-closed model validation", () => {
@@ -739,6 +855,46 @@ test("historical ordering uses created_at then numeric comment ID", () => {
   );
 });
 
+test("every intermediate history record carries earlier finding IDs", () => {
+  const firstData = metadata({ head_sha: "1".repeat(40) });
+  firstData.reviews[0].findings = [finding({ id: "R1-EARLY" })];
+  const first = { ...comment(firstData), id: 1 };
+  const second = {
+    ...comment(metadata({ head_sha: "2".repeat(40), previous_comment_id: 1 })),
+    id: 2,
+    created_at: "2026-01-01T00:01:00Z",
+    updated_at: "2026-01-01T00:01:00Z",
+  };
+  const thirdData = metadata({ previous_comment_id: 2 });
+  thirdData.reviews[0].findings = [finding({ id: "R1-EARLY" })];
+  const third = {
+    ...comment(thirdData),
+    id: 3,
+    created_at: "2026-01-01T00:02:00Z",
+    updated_at: "2026-01-01T00:02:00Z",
+  };
+  const history = analyzeReviewHistory(
+    [first, second, third],
+    third,
+    config,
+    repository,
+    1,
+  );
+  assert.match(history.historyErrors.join(" "), /comment 2: prior material finding R1-EARLY/);
+  const result = validateReviewRecord({
+    comment: third,
+    headSha: sha,
+    author: "maintainer",
+    changedFiles: ["README.md"],
+    config,
+    repository,
+    pullNumber: 1,
+    authorizationComments: [first, second, third],
+    ...history,
+  });
+  assert.equal(result.modelOk, false);
+});
+
 test("selector fails forward to the latest maintainer marker and ignores foreign comments", () => {
   const older = { ...comment(metadata()), id: 10 };
   const latest = {
@@ -787,6 +943,7 @@ test("real sensitive-path policy is case-insensitive and covers gate boundaries"
     "db/MIGRATIONS/001.sql",
     "src/SECURITY/boundary.mjs",
     "scripts/verify.mjs",
+    "scripts/lib/signature.mjs",
     "tests/repository-health.test.mjs",
     ".github/workflows/review-gate.yml",
   ]) {
@@ -856,8 +1013,14 @@ function ownedStatuses(runUrl) {
   ];
 }
 
-async function runDriver(snapshots, { statuses, failureAt } = {}) {
-  const runUrl = "https://github.com/example/project/actions/runs/7";
+async function runDriver(
+  snapshots,
+  {
+    statuses,
+    failureAt,
+    runUrl = "https://github.com/example/project/actions/runs/7",
+  } = {},
+) {
   const published = [];
   let index = 1;
   const outcomePromise = runPolicyEvaluation({
@@ -866,8 +1029,8 @@ async function runDriver(snapshots, { statuses, failureAt } = {}) {
       if (failureAt === index) throw new Error("synthetic driver failure");
       return snapshots[Math.min(index++, snapshots.length - 1)];
     },
-    publish: async (head, state, result) => {
-      published.push({ head, state, result });
+    publish: async (head, state, result, targetUrl) => {
+      published.push({ head, state, result, targetUrl });
     },
     listStatuses: async () => statuses ?? ownedStatuses(runUrl),
     config,
@@ -932,14 +1095,119 @@ test("driver fence yields to newer runs and never writes terminal status after H
     statuses: newerStatuses,
   });
   assert.equal(superseded.outcome.outcome, "superseded");
-  assert.deepEqual(superseded.published.map((item) => item.state), ["pending"]);
+  assert.deepEqual(superseded.published, []);
 
   const drifted = await runDriver([
     rawSnapshot(),
     rawSnapshot({ headSha: "b".repeat(40) }),
   ]);
   assert.equal(drifted.outcome.outcome, "head_drift");
-  assert.deepEqual(drifted.published, [{ head: sha, state: "pending", result: undefined }]);
+  assert.deepEqual(drifted.published, [
+    {
+      head: sha,
+      state: "pending",
+      result: undefined,
+      targetUrl: "https://github.com/example/project/actions/runs/7",
+    },
+  ]);
+});
+
+test("older runs restore higher-run pending contexts after interleaved terminal writes", async () => {
+  const runA = "https://github.com/example/project/actions/runs/100";
+  const runB = "https://github.com/example/project/actions/runs/101";
+  for (const newerState of ["pending", "failure"]) {
+    const published = [];
+    let reads = 0;
+    const result = await runPolicyEvaluation({
+      loadHead: async () => sha,
+      loadSnapshot: async () => rawSnapshot(),
+      publish: async (head, state, value, targetUrl) => {
+        published.push({ head, state, value, targetUrl });
+      },
+      listStatuses: async () => {
+        reads += 1;
+        if (reads <= 3) return ownedStatuses(runA);
+        return [
+          ...ownedStatuses(runA).map((status) => ({ ...status, state: "success" })),
+          ...ownedStatuses(runB).map((status) => ({ ...status, state: newerState })),
+        ];
+      },
+      config,
+      repository,
+      runUrl: runA,
+    });
+    assert.equal(result.outcome, "superseded_after_terminal");
+    assert.deepEqual(published.map((item) => item.state), [
+      "pending",
+      "terminal",
+      "pending",
+    ]);
+    assert.equal(published.at(-1).targetUrl, runB);
+  }
+});
+
+test("older runs do not publish over a higher run discovered before or after pending", async () => {
+  const runA = "https://github.com/example/project/actions/runs/100";
+  const runB = "https://github.com/example/project/actions/runs/101";
+  const before = [];
+  const supersededBefore = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    publish: async (...args) => before.push(args),
+    listStatuses: async () => ownedStatuses(runB),
+    config,
+    repository,
+    runUrl: runA,
+  });
+  assert.equal(supersededBefore.outcome, "superseded");
+  assert.deepEqual(before, []);
+
+  const after = [];
+  let reads = 0;
+  const supersededAfter = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    publish: async (head, state, result, targetUrl) =>
+      after.push({ head, state, result, targetUrl }),
+    listStatuses: async () => {
+      reads += 1;
+      return reads === 1 ? [] : ownedStatuses(runB);
+    },
+    config,
+    repository,
+    runUrl: runA,
+  });
+  assert.equal(supersededAfter.outcome, "superseded_after_pending");
+  assert.deepEqual(
+    after.map((item) => [item.state, item.targetUrl]),
+    [
+      ["pending", runA],
+      ["pending", runB],
+    ],
+  );
+});
+
+test("lower-run and foreign terminal statuses cannot supersede the current run", async () => {
+  const current = "https://github.com/example/project/actions/runs/100";
+  const statuses = [
+    ...ownedStatuses(current),
+    {
+      context: "model-review-gate",
+      state: "success",
+      target_url: "https://github.com/example/project/actions/runs/99",
+    },
+    {
+      context: "delivery-policy",
+      state: "failure",
+      target_url: "https://checks.example.test/run/500",
+    },
+  ];
+  const result = await runDriver([rawSnapshot(), rawSnapshot()], {
+    statuses,
+    runUrl: current,
+  });
+  assert.equal(result.outcome.outcome, "pass");
+  assert.equal(result.published.at(-1).state, "terminal");
 });
 
 test("driver exception path fails only the original owned status contexts", async () => {
@@ -988,6 +1256,11 @@ test("repository policy drift fixtures cover every required live control", () =>
     repository_settings: repositoryConfig.desired_repository_settings,
   };
   const ruleset = {
+    name: desired.name,
+    source_type: desired.source_type,
+    source: desired.source,
+    target: desired.target,
+    conditions: structuredClone(desired.conditions),
     enforcement: "active",
     bypass_actors: [],
     rules: [
@@ -1010,7 +1283,13 @@ test("repository policy drift fixtures cover every required live control", () =>
   const settings = { ...repositoryConfig.desired_repository_settings };
   assert.deepEqual(evaluateRepositoryPolicy({ ruleset, settings, desired }), []);
   const mutations = [
+    (value) => delete value.ruleset.bypass_actors,
     (value) => value.ruleset.bypass_actors.push({ actor_id: 1 }),
+    (value) => (value.ruleset.source = "organization"),
+    (value) => (value.ruleset.source_type = "Organization"),
+    (value) => (value.ruleset.target = "tag"),
+    (value) => (value.ruleset.conditions.ref_name.include = ["refs/heads/develop"]),
+    (value) => (value.ruleset.conditions.ref_name.exclude = ["refs/heads/main"]),
     (value) =>
       (value.ruleset.rules[0].parameters.allowed_merge_methods = ["merge", "squash"]),
     (value) =>
@@ -1028,4 +1307,11 @@ test("repository policy drift fixtures cover every required live control", () =>
       evaluateRepositoryPolicy({ ...value, desired }).length > 0,
     );
   }
+  const hiddenBypass = structuredClone(ruleset);
+  delete hiddenBypass.bypass_actors;
+  assert.ok(
+    evaluateRepositoryPolicy({ ruleset: hiddenBypass, settings, desired }).includes(
+      "ruleset bypass actors are unverifiable",
+    ),
+  );
 });

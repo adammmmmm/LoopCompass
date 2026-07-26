@@ -79,10 +79,27 @@ repository audit logs are the external evidence for destructive administrative c
   `verdict: "approved"`, `kind`, and `authorization_reference`; its reviewer must be the configured
   human maintainer who posted the comment. Bot and App records are rejected. A different maintainer
   uses `kind: "maintainer_review"`. A self-authored sensitive bootstrap uses
-  `kind: "operator_authorization"` and links the public issue or comment containing that explicit
-  authorization in the current repository. Automation validates this attestation but must never
-  create it. An attestation inside syntactically invalid review metadata is not trusted; native
-  current-HEAD approval remains independent and can still satisfy the delivery check.
+  `kind: "operator_authorization"` and links an earlier immutable issue comment on the same pull
+  request. That comment must be authored directly by the configured human maintainer, target the
+  exact HEAD, and contain the canonical `loopcompass-human-authorization:v1` approved record.
+  Automation validates both comments but must never create either authorization. Edited, missing,
+  later, Bot, App, wrong-author, wrong-pull, and stale-SHA authorization records are rejected. An
+  attestation inside syntactically invalid review metadata is not trusted; native current-HEAD
+  approval remains independent and can still satisfy the delivery check.
+
+  The linked authorization comment has this exact shape:
+
+  ```text
+  ### Operator authorization
+
+  **Target:** `<40-character commit SHA>`
+
+  **Verdict:** `Approved`
+
+  <!-- loopcompass-human-authorization:v1
+  {"schema":1,"head_sha":"<40-character commit SHA>","verdict":"approved"}
+  -->
+  ```
 - Native approval clicks do not count as independent model records and cannot replace the structured
   three-review evidence.
 - Auto-merge is armed only after applicable checks and review are green. Squash is the only merge
@@ -95,5 +112,8 @@ The auditable repository policy is `.github/delivery-policy.json`. Changes to th
 enforcement are themselves sensitive. It also records the desired live ruleset: strict required
 `verify`, `model-review-gate`, and `delivery-policy` contexts; squash-only merge; required review
 conversation resolution; and no bypass actors. Each required context is source-bound to the
-GitHub Actions application ID recorded from the repository API. The hourly read-only audit compares
-the live ruleset and repository merge settings with this desired state and fails crisply on drift.
+GitHub Actions application ID recorded from the repository API. The scheduled audit runs even when
+branch hygiene fails and compares the visible live repository-scoped ruleset and merge settings
+with this desired state. Hidden bypass actors or insufficient visibility are `unverifiable`, never
+compliant. Complete closure evidence requires running `node scripts/review-gate.mjs audit` with an
+explicit read-only maintainer or administrator credential. No credential is stored by the workflow.

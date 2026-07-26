@@ -20,7 +20,7 @@
     ".github/PULL_REQUEST_TEMPLATE.md",
     "docs/maintainer-delivery-policy.md",
     "scripts/review-gate.mjs",
-    "scripts/lib/review-gate.mjs",
+    "scripts/lib/**",
     "scripts/release.mjs",
     "scripts/verify.mjs",
     "tests/review-gate.test.mjs",
@@ -38,6 +38,18 @@
     "**/*secret*"
   ],
   "desired_ruleset": {
+    "name": "Protect main",
+    "source_type": "Repository",
+    "source": "adammmmmm/LoopCompass",
+    "target": "branch",
+    "conditions": {
+      "ref_name": {
+        "include": [
+          "refs/heads/main"
+        ],
+        "exclude": []
+      }
+    },
     "strict_required_status_checks": true,
     "required_status_checks": [
       {

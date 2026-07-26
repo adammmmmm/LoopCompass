@@ -47,9 +47,9 @@ async function evaluatePullRequest() {
   const number = resolvePullRequestNumber(event);
   const repo = repository();
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-  const publish = async (sha, state, result) => {
+  const publish = async (sha, state, result, targetUrl = runUrl) => {
     await Promise.all(
-      buildStatusPayloads({ state, result, targetUrl: runUrl }).map((payload) =>
+      buildStatusPayloads({ state, result, targetUrl }).map((payload) =>
         api(`/repos/${repo}/statuses/${sha}`, {
           method: "POST",
           body: JSON.stringify(payload),
@@ -84,15 +84,28 @@ async function evaluatePullRequest() {
 
 async function auditRepositoryPolicy() {
   const repo = repository();
-  const summaries = await api(`/repos/${repo}/rulesets`);
-  const summary = summaries.find(
-    (item) => item.name === "Protect main" && item.target === "branch",
-  );
-  if (!summary) throw new Error("active Protect main ruleset was not found");
-  const [ruleset, settings] = await Promise.all([
-    api(`/repos/${repo}/rulesets/${summary.id}`),
-    api(`/repos/${repo}`),
-  ]);
+  let ruleset;
+  let settings;
+  try {
+    const summaries = await api(`/repos/${repo}/rulesets`);
+    const named = summaries.filter(
+      (item) => item.name === config.desired_ruleset.name,
+    );
+    const summary =
+      named.find(
+        (item) =>
+          item.target === config.desired_ruleset.target &&
+          item.source_type === config.desired_ruleset.source_type &&
+          item.source === config.desired_ruleset.source,
+      ) ?? named[0];
+    if (!summary) throw new Error("configured ruleset is not visible");
+    [ruleset, settings] = await Promise.all([
+      api(`/repos/${repo}/rulesets/${summary.id}`),
+      api(`/repos/${repo}`),
+    ]);
+  } catch (error) {
+    throw new Error(`repository delivery policy is unverifiable: ${error.message}`);
+  }
   const drifts = evaluateRepositoryPolicy({
     ruleset,
     settings,

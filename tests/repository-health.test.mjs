@@ -92,14 +92,23 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.match(reviewWorkflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(reviewWorkflow, /group: delivery-policy-/);
   assert.match(reviewWorkflow, /cancel-in-progress: true/);
+  assert.match(reviewWorkflow, /types: \[opened, reopened, synchronize, ready_for_review, edited\]/);
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs branches/);
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs audit/);
+  assert.match(branchWorkflow, /Audit live repository delivery policy\n\s+if: always\(\)/);
   assert.match(workflows, /timeout-minutes: 10/);
   assert.match(dependabot, /package-ecosystem: github-actions/);
 });
 
 test("delivery policy records the exact desired live ruleset and settings", async () => {
   const policy = JSON.parse(await read(".github/delivery-policy.json"));
+  assert.equal(policy.desired_ruleset.name, "Protect main");
+  assert.equal(policy.desired_ruleset.source_type, "Repository");
+  assert.equal(policy.desired_ruleset.source, "adammmmmm/LoopCompass");
+  assert.equal(policy.desired_ruleset.target, "branch");
+  assert.deepEqual(policy.desired_ruleset.conditions, {
+    ref_name: { include: ["refs/heads/main"], exclude: [] },
+  });
   assert.equal(policy.desired_ruleset.strict_required_status_checks, true);
   assert.deepEqual(policy.desired_ruleset.required_status_checks, [
     { context: "verify", integration_id: 15368 },
