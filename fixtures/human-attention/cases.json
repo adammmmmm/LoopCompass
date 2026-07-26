@@ -1869,6 +1869,315 @@
           "unrepairable_registry_lag:console-action-required"
         ]
       }
+    },
+    {
+      "id": "later-marker-missing-revision-one-live-match-is-repairable",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console",
+          "retention_note": "preserve"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action.",
+          "extension": "preserve"
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_registry_lag:console-action-required"]
+      }
+    },
+    {
+      "id": "later-marker-missing-revision-one-without-live-match-fails",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_obligation_history:console-action-required"]
+      }
+    },
+    {
+      "id": "revision-zero-deleted-incident-is-missing-history",
+      "profile_config": "capability",
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_obligation_history:console-action-required"]
+      }
+    },
+    {
+      "id": "first-marker-gap-with-existing-projection-is-repairable",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_first_marker_gap:console-action-required"]
+      }
+    },
+    {
+      "id": "stale-closure-cannot-clean-open-incident-projection",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [],
+      "obligations": [],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [
+        {
+          "id": "stale-closure-console-v1",
+          "incident_slug": "console-action-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "invalid-historical-marker-blocks-repair",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "ci-runner",
+          "requested_action": "Run the automated job."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["invalid_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "multi-slug-repair-is-isolated",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        },
+        {
+          "slug": "second-console-action",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        },
+        {
+          "incident_slug": "second-console-action",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action."
+        },
+        {
+          "incident_slug": "second-console-action",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "ci-runner",
+          "requested_action": "Run the automated job."
+        },
+        {
+          "incident_slug": "second-console-action",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the second console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        },
+        {
+          "incident_slug": "second-console-action",
+          "requested_action": "Verify the second console action.",
+          "incident_path": ".loopcompass/incidents/second-console-action.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "invalid_obligation:second-console-action",
+          "recoverable_registry_lag:console-action-required"
+        ]
+      }
     }
   ]
 }

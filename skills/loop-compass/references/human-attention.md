@@ -87,6 +87,13 @@ Each marker is keyed by canonical incident slug and carries:
 - for `verified_closed`, a non-sensitive durable reference to the normal-path verification and
   closure evidence.
 
+Every historical co-marker must be a mapping with a canonical nonempty slug, a positive integer
+revision, and one of the supported states. Every active historical marker must carry a nonempty
+action plus a stable requirement declared human-only; every `verified_closed` marker must carry its
+closure-evidence reference. These are intrinsic record checks, separate from validating the
+selected marker against current incident state. A malformed lower revision fails the whole slug;
+a valid later marker cannot mask it or authorize repair.
+
 The surface also maintains a minimal known-obligation registry keyed by canonical incident slug.
 Keep this registry structurally separate from the projection block so deterministic re-rendering
 cannot delete or rewrite it. Each record carries the already-sanitized slug and
@@ -112,6 +119,10 @@ marker against its current canonical-state rule. A `verification_pending` marker
 the original human token to remain in current `requires`; the retained revision-1 marker proves the
 initial match. This historical catch-up rule never authorizes synthesizing a missing revision-1
 marker without the stricter current-incident match above.
+If later valid history exists but revision 1 is absent, the same stricter current-incident match may
+reconstruct revision 1 before advancing the registry; preserve every later marker unchanged. Stable
+revision-0 metadata without either retained revision-1 history or that live exact match is missing
+history, not repair authority.
 Reconciliation must preserve the full marker history, sibling and unknown records, unknown fields,
 pending metadata, and configured retention metadata; mutate only the targeted registry record or
 append the missing revision-1 marker.
@@ -222,6 +233,11 @@ because the human acknowledged, decided, or completed the requested step.
 - **Orphan without verified closure evidence:** do not guess that absence means closure. Retain or
   quarantine it on the designated surface and escalate reconciliation to that surface's declared
   authority.
+
+A projection for an incident that is still open is never an orphan. Retain it and fail
+reconciliation when its marker or registry is missing, even if stale slug-matching closure evidence
+also exists. Closure cleanup applies only after the canonical incident is no longer open and the
+evidence satisfies the terminal lifecycle conditions.
 
 A projection whose slug points at a different incident is an orphan plus a missing projection, not
 an acceptable fuzzy match.
