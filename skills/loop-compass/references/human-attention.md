@@ -98,8 +98,11 @@ Incident records require a canonical slug, Boolean open state, and a requirement
 scalar, array, or malformed sibling records produce explicit non-sensitive conformance errors,
 never a runtime exception. Preserve them for quarantine or authorized repair. An unscoped malformed
 record blocks mutation across the surface and suppresses every `recoverable` diagnostic; report one
-hard unscoped-surface error instead. A malformed record with a trustworthy canonical slug blocks
-only that slug.
+hard unscoped-surface error instead. A malformed record with a trustworthy canonical slug isolates
+marker/registry repair and diagnostics to that slug: it does not suppress safe repair diagnostics
+for other slugs. Deterministic projection reconciliation still fails closed for the whole
+designated surface until every malformed record is quarantined or repaired; it never partially
+rewrites projections around known corrupt state.
 
 The surface also maintains a minimal known-obligation registry keyed by canonical incident slug.
 Keep this registry structurally separate from the projection block so deterministic re-rendering
@@ -149,6 +152,13 @@ This registry is the durable expected-slug source used to detect accidental dele
 incident, marker, projection, and closure evidence together. Outside the revision-0 first-write
 case, a known slug with an absent marker is a deletion failure and must not be reconstructed by
 guessing.
+
+Closure evidence is a referenced authority, not a writable collection on the designated attention
+surface. Parse it defensively: a missing, scalar, or malformed evidence collection, and malformed
+sibling evidence records, never authorize terminal cleanup and never cause a runtime exception.
+They fail closed as missing or unknown closure evidence. They do not by themselves suppress
+marker/registry crash-repair diagnostics; that asymmetry preserves safe attention-surface repair
+without treating unusable external evidence as proof of closure.
 
 Do not remove a known-obligation registry entry as part of projection cleanup, incident deletion,
 reassignment, installation, or ordinary reconciliation. It remains through the explicit

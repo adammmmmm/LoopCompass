@@ -338,6 +338,7 @@ function registryBySlug(testCase, errors) {
   const registry = new Map();
   const failed = new Set();
   const seen = new Set();
+  const duplicateReported = new Set();
   let unscopedInvalid = false;
   if (!Array.isArray(testCase.known_obligations)) {
     errors.push("invalid_registry_collection");
@@ -364,7 +365,10 @@ function registryBySlug(testCase, errors) {
       continue;
     }
     if (seen.has(slug)) {
-      errors.push(`duplicate_registry_record:${slug}`);
+      if (!duplicateReported.has(slug)) {
+        errors.push(`duplicate_registry_record:${slug}`);
+        duplicateReported.add(slug);
+      }
       failed.add(slug);
       registry.delete(slug);
       continue;
@@ -1793,6 +1797,50 @@ describe("optional human-attention profile", () => {
         (record) => record.incident_slug === "second-console-action",
       ),
       duplicateRecords,
+    );
+  });
+
+  it("reports repeated duplicate registry records once per canonical slug", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    const duplicate = {
+      incident_slug: "console-action-required",
+      last_known_revision: 0,
+      duplicate_note: "preserve",
+    };
+    testCase.known_obligations.push(
+      structuredClone(duplicate),
+      { ...duplicate, duplicate_note: "also-preserve" },
+    );
+
+    assert.deepEqual(assessConformance(testCase), [
+      "duplicate_registry_record:console-action-required",
+    ]);
+  });
+
+  it("treats malformed closure evidence as unusable without blocking safe repair diagnostics", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const closedRaw = fixture.cases.find(
+      (testCase) => testCase.id === "verified-closure-permits-cleanup",
+    );
+    const closed = resolveCase(fixture, structuredClone(closedRaw));
+    closed.closure_evidence = { malformed: true };
+    assert.deepEqual(assessConformance(closed), [
+      "missing_closure_evidence:console-action-required",
+    ]);
+
+    const repairRaw = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const repair = resolveCase(fixture, structuredClone(repairRaw));
+    repair.closure_evidence = [null, "malformed"];
+    assert.ok(
+      assessConformance(repair).includes(
+        "recoverable_registry_lag:console-action-required",
+      ),
     );
   });
 

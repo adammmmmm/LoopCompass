@@ -11,6 +11,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 - Community health policies, structured issue forms, and a pull request template.
 - Automated GitHub Actions dependency updates.
+- Optional, disabled-by-default human-attention integration profile with durable obligation
+  markers, fail-closed reconciliation, and deterministic lifecycle fixtures.
 
 ### Changed
 
