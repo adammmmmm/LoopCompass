@@ -93,6 +93,7 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.match(reviewWorkflow, /group: delivery-policy-/);
   assert.match(reviewWorkflow, /cancel-in-progress: true/);
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs branches/);
+  assert.match(branchWorkflow, /scripts\/review-gate\.mjs audit/);
   assert.match(workflows, /timeout-minutes: 10/);
   assert.match(dependabot, /package-ecosystem: github-actions/);
 });
@@ -101,9 +102,9 @@ test("delivery policy records the exact desired live ruleset and settings", asyn
   const policy = JSON.parse(await read(".github/delivery-policy.json"));
   assert.equal(policy.desired_ruleset.strict_required_status_checks, true);
   assert.deepEqual(policy.desired_ruleset.required_status_checks, [
-    "verify",
-    "model-review-gate",
-    "delivery-policy",
+    { context: "verify", integration_id: 15368 },
+    { context: "model-review-gate", integration_id: 15368 },
+    { context: "delivery-policy", integration_id: 15368 },
   ]);
   assert.deepEqual(policy.desired_ruleset.allowed_merge_methods, ["squash"]);
   assert.equal(policy.desired_ruleset.required_review_thread_resolution, true);

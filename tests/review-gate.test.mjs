@@ -6,14 +6,19 @@ import {
   auditBranches,
   buildStatusPayloads,
   classifyDelivery,
+  evaluateRepositoryPolicy,
+  evaluateSnapshot,
   matchesSensitivePath,
+  normalizeGitHubSnapshot,
   renderVisibleReview,
   resolvePullRequestNumber,
+  runPolicyEvaluation,
   selectReviewComment,
   validateReviewRecord,
 } from "../scripts/lib/review-gate.mjs";
 
 const sha = "a".repeat(40);
+const repository = "example/project";
 const config = {
   trusted_contributors: ["maintainer"],
   human_maintainers: ["maintainer"],
@@ -92,6 +97,49 @@ function comment(data = metadata(), author = "maintainer") {
   };
 }
 
+function rawComment(data, overrides = {}) {
+  return {
+    id: 100,
+    author: "maintainer",
+    author_type: "User",
+    performed_via_github_app: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    body: `Invalid visible record\n\n<!-- loopcompass-review:v1\n${JSON.stringify(data)}\n-->`,
+    ...overrides,
+  };
+}
+
+function apiComment(value = comment(metadata())) {
+  return {
+    id: value.id,
+    body: value.body,
+    user: { login: value.author, type: value.author_type },
+    performed_via_github_app: value.performed_via_github_app,
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
+function rawSnapshot({
+  headSha = sha,
+  files = [{ filename: "README.md" }],
+  comments = [apiComment()],
+  reviews = [],
+  changedFiles = files.length,
+} = {}) {
+  return {
+    pull: {
+      head: { sha: headSha },
+      user: { login: "maintainer" },
+      changed_files: changedFiles,
+    },
+    files,
+    comments,
+    reviews,
+  };
+}
+
 function evaluate({
   data = metadata(),
   author = "maintainer",
@@ -105,6 +153,7 @@ function evaluate({
     author,
     changedFiles,
     config,
+    repository,
     nativeApprovals,
   });
 }
@@ -230,6 +279,69 @@ test("delivery policy is independent of missing or malformed model evidence", ()
   assert.equal(sensitive.deliveryOk, true);
 });
 
+test("deep malformed model payloads fail closed without throwing", () => {
+  const valid = metadata();
+  const cases = [
+    null,
+    7,
+    [],
+    { ...valid, reviews: null },
+    { ...valid, reviews: [null, valid.reviews[1], valid.reviews[2]] },
+    { ...valid, reviews: [7, valid.reviews[1], valid.reviews[2]] },
+    {
+      ...valid,
+      reviews: [{ ...valid.reviews[0], findings: [null] }, ...valid.reviews.slice(1)],
+    },
+    {
+      ...valid,
+      reviews: [
+        { ...valid.reviews[0], findings: [finding({ disposition: null })] },
+        ...valid.reviews.slice(1),
+      ],
+    },
+  ];
+  for (const payload of cases) {
+    let result;
+    assert.doesNotThrow(() => {
+      result = validateReviewRecord({
+        comment: rawComment(payload),
+        headSha: sha,
+        author: "maintainer",
+        changedFiles: ["README.md"],
+        config,
+        repository,
+      });
+    });
+    assert.equal(result.modelOk, false);
+    assert.equal(result.deliveryOk, true);
+  }
+  const normalized = normalizeGitHubSnapshot(
+    rawSnapshot({ comments: [apiComment(rawComment(null))] }),
+  );
+  let driverResult;
+  assert.doesNotThrow(() => {
+    driverResult = evaluateSnapshot(normalized, config, repository);
+  });
+  assert.equal(driverResult.modelOk, false);
+  assert.equal(driverResult.deliveryOk, true);
+});
+
+test("attestation authorization must reference the current repository", () => {
+  const data = metadata({
+    human_approval: {
+      reviewer: "maintainer",
+      head_sha: sha,
+      verdict: "approved",
+      kind: "operator_authorization",
+      authorization_reference: "https://github.com/another/project/issues/1",
+    },
+  });
+  assert.equal(
+    evaluate({ data, changedFiles: [".github/workflows/verify.yml"] }).deliveryOk,
+    false,
+  );
+});
+
 test("native human approval must target the current SHA", () => {
   const changedFiles = [".github/workflows/verify.yml"];
   const stale = [{
@@ -334,6 +446,7 @@ test("Bot and App records cannot satisfy human review", () => {
       author: "maintainer",
       changedFiles: [".github/workflows/verify.yml"],
       config,
+      repository,
     }).deliveryOk,
     false,
   );
@@ -448,7 +561,8 @@ test("material findings persist across review comment revisions", () => {
   const history = analyzeReviewHistory(
     [prior, current],
     current,
-    ["maintainer"],
+    config,
+    repository,
   );
   assert.deepEqual(history.priorFindingIds, ["R1-OLD"]);
   const missing = validateReviewRecord({
@@ -499,6 +613,19 @@ test("review evidence is immutable and links to the preceding comment", () => {
     }).modelReasons.join(" "),
     /preceding immutable/,
   );
+  const missingTimestamp = comment(metadata());
+  delete missingTimestamp.created_at;
+  assert.match(
+    validateReviewRecord({
+      comment: missingTimestamp,
+      headSha: sha,
+      author: "maintainer",
+      changedFiles: ["README.md"],
+      config,
+      repository,
+    }).modelReasons.join(" "),
+    /requires created_at and updated_at/,
+  );
 });
 
 test("history rejects malformed markers, edited records, broken chains, and deletion gaps", () => {
@@ -520,21 +647,95 @@ test("history rejects malformed markers, edited records, broken chains, and dele
     created_at: "2026-01-01T00:02:00Z",
     updated_at: "2026-01-01T00:02:00Z",
   };
-  assert.deepEqual(analyzeReviewHistory([first, second, current], current, ["maintainer"]).historyErrors, []);
+  assert.deepEqual(
+    analyzeReviewHistory([first, second, current], current, config, repository).historyErrors,
+    [],
+  );
 
   const edited = { ...first, updated_at: "2026-01-01T00:00:01Z" };
   assert.match(
-    analyzeReviewHistory([edited, second, current], current, ["maintainer"]).historyErrors.join(" "),
-    /was edited/,
+    analyzeReviewHistory([edited, second, current], current, config, repository).historyErrors.join(" "),
+    /immutable/,
   );
   const malformed = { ...first, body: "<!-- loopcompass-review:v1\n{" };
   assert.match(
-    analyzeReviewHistory([malformed, second, current], current, ["maintainer"]).historyErrors.join(" "),
-    /malformed metadata/,
+    analyzeReviewHistory([malformed, second, current], current, config, repository).historyErrors.join(" "),
+    /metadata marker is not closed/,
   );
   assert.match(
-    analyzeReviewHistory([second, current], current, ["maintainer"]).historyErrors.join(" "),
-    /broken predecessor link/,
+    analyzeReviewHistory([second, current], current, config, repository).historyErrors.join(" "),
+    /preceding immutable review comment/,
+  );
+});
+
+test("historical records receive full fail-closed model validation", () => {
+  const current = {
+    ...comment(metadata({ previous_comment_id: 10 })),
+    id: 11,
+    created_at: "2026-01-01T00:01:00Z",
+    updated_at: "2026-01-01T00:01:00Z",
+  };
+  const validPrior = { ...comment(metadata()), id: 10 };
+  const invalidPayloads = [
+    null,
+    { ...metadata(), unexpected: true },
+    { ...metadata(), head_sha: "not-a-sha" },
+    { ...metadata(), reviews: [null, ...metadata().reviews.slice(1)] },
+    (() => {
+      const value = metadata();
+      value.reviews[0].evidence_digest = "short";
+      return value;
+    })(),
+  ];
+  for (const payload of invalidPayloads) {
+    const prior = { ...rawComment(payload), id: 10 };
+    let history;
+    assert.doesNotThrow(() => {
+      history = analyzeReviewHistory([prior, current], current, config, repository);
+    });
+    assert.ok(history.historyErrors.length > 0);
+  }
+  for (const prior of [
+    { ...validPrior, author_type: "Bot" },
+    { ...validPrior, performed_via_github_app: { id: 1 } },
+    { ...validPrior, created_at: undefined },
+    { ...validPrior, updated_at: undefined },
+  ]) {
+    assert.ok(
+      analyzeReviewHistory([prior, current], current, config, repository).historyErrors
+        .length > 0,
+    );
+  }
+});
+
+test("historical changes-requested records remain valid evidence", () => {
+  const priorData = metadata({ overall_verdict: "changes_requested" });
+  priorData.reviews[0].verdict = "changes_requested";
+  const prior = { ...comment(priorData), id: 10 };
+  const current = {
+    ...comment(metadata({ previous_comment_id: 10 })),
+    id: 11,
+    created_at: "2026-01-01T00:01:00Z",
+    updated_at: "2026-01-01T00:01:00Z",
+  };
+  assert.deepEqual(
+    analyzeReviewHistory([prior, current], current, config, repository).historyErrors,
+    [],
+  );
+});
+
+test("historical ordering uses created_at then numeric comment ID", () => {
+  const first = { ...comment(metadata()), id: 9 };
+  const second = { ...comment(metadata({ previous_comment_id: 9 })), id: 10 };
+  const current = {
+    ...comment(metadata({ previous_comment_id: 10 })),
+    id: 11,
+    created_at: "2026-01-01T00:01:00Z",
+    updated_at: "2026-01-01T00:01:00Z",
+  };
+  assert.deepEqual(
+    analyzeReviewHistory([second, first, current], current, config, repository).historyErrors,
+    [],
   );
 });
 
@@ -646,4 +847,185 @@ test("event resolution and layered status payloads are deterministic", () => {
     targetUrl: "https://github.com/example/project/actions/runs/1",
   });
   assert.deepEqual(terminal.map((item) => item.state), ["success", "failure"]);
+});
+
+function ownedStatuses(runUrl) {
+  return [
+    { context: "model-review-gate", state: "pending", target_url: runUrl },
+    { context: "delivery-policy", state: "pending", target_url: runUrl },
+  ];
+}
+
+async function runDriver(snapshots, { statuses, failureAt } = {}) {
+  const runUrl = "https://github.com/example/project/actions/runs/7";
+  const published = [];
+  let index = 0;
+  const outcomePromise = runPolicyEvaluation({
+    loadSnapshot: async () => {
+      if (failureAt === index) throw new Error("synthetic driver failure");
+      return snapshots[Math.min(index++, snapshots.length - 1)];
+    },
+    publish: async (head, state, result) => {
+      published.push({ head, state, result });
+    },
+    listStatuses: async () => statuses ?? ownedStatuses(runUrl),
+    config,
+    repository,
+    runUrl,
+  });
+  return { outcome: await outcomePromise, published };
+}
+
+test("driver revalidates same-SHA comment deletion and edit before terminal status", async () => {
+  const initial = rawSnapshot();
+  const deleted = rawSnapshot({ comments: [] });
+  const deletion = await runDriver([initial, deleted]);
+  assert.equal(deletion.outcome.outcome, "fail");
+  assert.equal(deletion.published.at(-1).result.modelOk, false);
+
+  const editedComment = apiComment();
+  editedComment.updated_at = "2026-01-01T00:01:00Z";
+  const edit = await runDriver([initial, rawSnapshot({ comments: [editedComment] })]);
+  assert.equal(edit.outcome.outcome, "fail");
+  assert.match(edit.published.at(-1).result.modelReasons.join(" "), /immutable/);
+});
+
+test("driver revalidates same-SHA approval dismissal", async () => {
+  const approval = {
+    id: 1,
+    state: "APPROVED",
+    commit_id: sha,
+    submitted_at: "2026-01-01T00:00:00Z",
+    user: { login: "maintainer", type: "User" },
+    performed_via_github_app: null,
+  };
+  const dismissed = { ...approval, state: "DISMISSED" };
+  const files = [{ filename: ".github/workflows/verify.yml" }];
+  const result = await runDriver([
+    rawSnapshot({ files, reviews: [approval] }),
+    rawSnapshot({ files, reviews: [dismissed] }),
+  ]);
+  assert.equal(result.outcome.outcome, "fail");
+  assert.equal(result.published.at(-1).result.modelOk, true);
+  assert.equal(result.published.at(-1).result.deliveryOk, false);
+});
+
+test("driver fence yields to newer runs and never writes terminal status after HEAD drift", async () => {
+  const newerStatuses = ownedStatuses(
+    "https://github.com/example/project/actions/runs/8",
+  ).map((status, index) => ({
+    ...status,
+    id: 20 + index,
+    created_at: "2026-01-01T00:01:00Z",
+  }));
+  newerStatuses.unshift(
+    ...ownedStatuses("https://github.com/example/project/actions/runs/7").map(
+      (status, index) => ({
+        ...status,
+        id: 10 + index,
+        created_at: "2026-01-01T00:00:00Z",
+      }),
+    ),
+  );
+  const superseded = await runDriver([rawSnapshot(), rawSnapshot()], {
+    statuses: newerStatuses,
+  });
+  assert.equal(superseded.outcome.outcome, "superseded");
+  assert.deepEqual(superseded.published.map((item) => item.state), ["pending"]);
+
+  const drifted = await runDriver([
+    rawSnapshot(),
+    rawSnapshot({ headSha: "b".repeat(40) }),
+  ]);
+  assert.equal(drifted.outcome.outcome, "head_drift");
+  assert.deepEqual(drifted.published, [{ head: sha, state: "pending", result: undefined }]);
+});
+
+test("driver exception path fails only the original owned status contexts", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/7";
+  const published = [];
+  let calls = 0;
+  await assert.rejects(
+    runPolicyEvaluation({
+      loadSnapshot: async () => {
+        if (calls++ === 0) return rawSnapshot();
+        throw new Error("synthetic driver failure");
+      },
+      publish: async (head, state, result) => published.push({ head, state, result }),
+      listStatuses: async () => ownedStatuses(runUrl),
+      config,
+      repository,
+      runUrl,
+    }),
+  );
+  assert.deepEqual(published.map((item) => [item.head, item.state]), [
+    [sha, "pending"],
+    [sha, "terminal"],
+  ]);
+  assert.equal(published[1].result.modelOk, false);
+  assert.equal(published[1].result.deliveryOk, false);
+});
+
+test("snapshot normalization includes rename sources and fails closed on truncated file lists", () => {
+  const renamed = normalizeGitHubSnapshot(
+    rawSnapshot({
+      files: [{ filename: "docs/new.md", previous_filename: "AUTH/old-token.md" }],
+    }),
+  );
+  assert.deepEqual(renamed.changedFiles, ["docs/new.md", "AUTH/old-token.md"]);
+  assert.equal(evaluateSnapshot(renamed, repositoryConfig, repository).delivery.sensitive, true);
+
+  const truncated = normalizeGitHubSnapshot(
+    rawSnapshot({ files: [{ filename: "README.md" }], changedFiles: 2 }),
+  );
+  assert.equal(truncated.filesComplete, false);
+  assert.equal(evaluateSnapshot(truncated, config, repository).delivery.sensitive, true);
+});
+
+test("repository policy drift fixtures cover every required live control", () => {
+  const desired = {
+    ...repositoryConfig.desired_ruleset,
+    repository_settings: repositoryConfig.desired_repository_settings,
+  };
+  const ruleset = {
+    enforcement: "active",
+    bypass_actors: [],
+    rules: [
+      {
+        type: "pull_request",
+        parameters: {
+          allowed_merge_methods: ["squash"],
+          required_review_thread_resolution: true,
+        },
+      },
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: true,
+          required_status_checks: desired.required_status_checks,
+        },
+      },
+    ],
+  };
+  const settings = { ...repositoryConfig.desired_repository_settings };
+  assert.deepEqual(evaluateRepositoryPolicy({ ruleset, settings, desired }), []);
+  const mutations = [
+    (value) => value.ruleset.bypass_actors.push({ actor_id: 1 }),
+    (value) =>
+      (value.ruleset.rules[0].parameters.allowed_merge_methods = ["merge", "squash"]),
+    (value) =>
+      (value.ruleset.rules[1].parameters.strict_required_status_checks_policy = false),
+    (value) =>
+      (value.ruleset.rules[1].parameters.required_status_checks[0].integration_id = 1),
+    (value) =>
+      (value.ruleset.rules[0].parameters.required_review_thread_resolution = false),
+    (value) => (value.settings.allow_auto_merge = false),
+  ];
+  for (const mutate of mutations) {
+    const value = structuredClone({ ruleset, settings });
+    mutate(value);
+    assert.ok(
+      evaluateRepositoryPolicy({ ...value, desired }).length > 0,
+    );
+  }
 });

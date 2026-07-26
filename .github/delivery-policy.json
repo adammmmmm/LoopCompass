@@ -40,9 +40,18 @@
   "desired_ruleset": {
     "strict_required_status_checks": true,
     "required_status_checks": [
-      "verify",
-      "model-review-gate",
-      "delivery-policy"
+      {
+        "context": "verify",
+        "integration_id": 15368
+      },
+      {
+        "context": "model-review-gate",
+        "integration_id": 15368
+      },
+      {
+        "context": "delivery-policy",
+        "integration_id": 15368
+      }
     ],
     "allowed_merge_methods": [
       "squash"

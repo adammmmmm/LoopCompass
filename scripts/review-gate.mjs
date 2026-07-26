@@ -2,11 +2,10 @@
 import { readFile } from "node:fs/promises";
 import {
   auditBranches,
-  analyzeReviewHistory,
   buildStatusPayloads,
+  evaluateRepositoryPolicy,
   resolvePullRequestNumber,
-  selectReviewComment,
-  validateReviewRecord,
+  runPolicyEvaluation,
 } from "./lib/review-gate.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -48,9 +47,7 @@ async function evaluatePullRequest() {
   const number = resolvePullRequestNumber(event);
   const repo = repository();
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-  let statusSha = null;
   const publish = async (sha, state, result) => {
-    statusSha = sha;
     await Promise.all(
       buildStatusPayloads({ state, result, targetUrl: runUrl }).map((payload) =>
         api(`/repos/${repo}/statuses/${sha}`, {
@@ -60,7 +57,7 @@ async function evaluatePullRequest() {
       ),
     );
   };
-  const load = async () => {
+  const loadSnapshot = async () => {
     const pull = await api(`/repos/${repo}/pulls/${number}`);
     const [files, comments, reviews] = await Promise.all([
       pages(`/repos/${repo}/pulls/${number}/files`),
@@ -69,75 +66,41 @@ async function evaluatePullRequest() {
     ]);
     return { pull, files, comments, reviews };
   };
+  const listStatuses = async (sha) =>
+    (await api(`/repos/${repo}/commits/${sha}/status`)).statuses;
+  const outcome = await runPolicyEvaluation({
+    loadSnapshot,
+    publish,
+    listStatuses,
+    config,
+    repository: repo,
+    runUrl,
+  });
+  console.log(JSON.stringify({ pull_request: number, ...outcome }, null, 2));
+  if (outcome.outcome === "fail") process.exitCode = 1;
+}
 
-  try {
-    const initialPull = await api(`/repos/${repo}/pulls/${number}`);
-    await publish(initialPull.head.sha, "pending");
-    await load();
-    const snapshot = await load();
-    if (snapshot.pull.head.sha !== initialPull.head.sha) {
-      await publish(snapshot.pull.head.sha, "pending");
-    }
-    const normalizedComments = snapshot.comments.map((item) => ({
-      id: item.id,
-      body: item.body,
-      author: item.user.login,
-      author_type: item.user.type,
-      performed_via_github_app: item.performed_via_github_app,
-      created_at: item.created_at,
-      updated_at: item.updated_at,
-    }));
-    const comment = selectReviewComment(normalizedComments, config.human_maintainers);
-    const history = analyzeReviewHistory(
-      normalizedComments,
-      comment,
-      config.human_maintainers,
-    );
-    const result = validateReviewRecord({
-      comment,
-      headSha: snapshot.pull.head.sha,
-      author: snapshot.pull.user.login,
-      changedFiles: snapshot.files.map((file) => file.filename),
-      config,
-      nativeApprovals: snapshot.reviews,
-      ...history,
-    });
-    const terminalPull = await api(`/repos/${repo}/pulls/${number}`);
-    if (terminalPull.head.sha !== snapshot.pull.head.sha) {
-      await publish(terminalPull.head.sha, "pending");
-      throw new Error("pull request HEAD changed during policy evaluation");
-    }
-    await publish(snapshot.pull.head.sha, "terminal", result);
-    console.log(
-      JSON.stringify(
-        {
-          pull_request: number,
-          head_sha: snapshot.pull.head.sha,
-          result: result.ok ? "pass" : "fail",
-          policy: result.delivery,
-          reasons: result.reasons,
-        },
-        null,
-        2,
-      ),
-    );
-    if (!result.ok) process.exitCode = 1;
-  } catch (error) {
-    if (statusSha) {
-      try {
-        const failure = {
-          modelOk: false,
-          deliveryOk: false,
-          modelReasons: ["Policy evaluation did not complete"],
-          deliveryReasons: ["Policy evaluation did not complete"],
-        };
-        await publish(statusSha, "terminal", failure);
-      } catch {
-        // The workflow failure remains visible when status publication is unavailable.
-      }
-    }
-    throw error;
-  }
+async function auditRepositoryPolicy() {
+  const repo = repository();
+  const summaries = await api(`/repos/${repo}/rulesets`);
+  const summary = summaries.find(
+    (item) => item.name === "Protect main" && item.target === "branch",
+  );
+  if (!summary) throw new Error("active Protect main ruleset was not found");
+  const [ruleset, settings] = await Promise.all([
+    api(`/repos/${repo}/rulesets/${summary.id}`),
+    api(`/repos/${repo}`),
+  ]);
+  const drifts = evaluateRepositoryPolicy({
+    ruleset,
+    settings,
+    desired: {
+      ...config.desired_ruleset,
+      repository_settings: config.desired_repository_settings,
+    },
+  });
+  console.log(JSON.stringify({ repository: repo, policy_drift: drifts }, null, 2));
+  if (drifts.length > 0) process.exitCode = 1;
 }
 
 async function evaluateBranches() {
@@ -159,7 +122,8 @@ async function evaluateBranches() {
 const command = process.argv[2];
 if (command === "github") await evaluatePullRequest();
 else if (command === "branches") await evaluateBranches();
+else if (command === "audit") await auditRepositoryPolicy();
 else {
-  console.error("usage: node scripts/review-gate.mjs <github|branches>");
+  console.error("usage: node scripts/review-gate.mjs <github|branches|audit>");
   process.exitCode = 2;
 }

@@ -80,7 +80,9 @@ repository audit logs are the external evidence for destructive administrative c
   human maintainer who posted the comment. Bot and App records are rejected. A different maintainer
   uses `kind: "maintainer_review"`. A self-authored sensitive bootstrap uses
   `kind: "operator_authorization"` and links the public issue or comment containing that explicit
-  authorization. Automation validates this attestation but must never create it.
+  authorization in the current repository. Automation validates this attestation but must never
+  create it. An attestation inside syntactically invalid review metadata is not trusted; native
+  current-HEAD approval remains independent and can still satisfy the delivery check.
 - Native approval clicks do not count as independent model records and cannot replace the structured
   three-review evidence.
 - Auto-merge is armed only after applicable checks and review are green. Squash is the only merge
@@ -92,4 +94,6 @@ repository audit logs are the external evidence for destructive administrative c
 The auditable repository policy is `.github/delivery-policy.json`. Changes to the policy or its
 enforcement are themselves sensitive. It also records the desired live ruleset: strict required
 `verify`, `model-review-gate`, and `delivery-policy` contexts; squash-only merge; required review
-conversation resolution; and no bypass actors.
+conversation resolution; and no bypass actors. Each required context is source-bound to the
+GitHub Actions application ID recorded from the repository API. The hourly read-only audit compares
+the live ruleset and repository merge settings with this desired state and fails crisply on drift.

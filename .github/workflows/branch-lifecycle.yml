@@ -24,3 +24,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/review-gate.mjs branches
+      - name: Audit live repository delivery policy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/review-gate.mjs audit
