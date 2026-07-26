@@ -7,6 +7,12 @@ relationship, not a status.
 
 The public requirement is **three independent model reviews**.
 
+This is a cooperative repository quality policy, not a security boundary against a malicious
+repository administrator. Evidence is bound to a pull request and exact HEAD, and the gate retains
+best-effort cross-pull-request and concurrent-run checks. GitHub statuses remain SHA-scoped, so
+intentional identical-SHA reuse and administrator bypass are platform limitations outside the v0.1
+threat model.
+
 Entry to Review requires a complete implementation, focused and full required tests, an open pull
 request with green `verify`, and assembled closure evidence. Exit to Done requires three independent
 model reviews of the current pull request HEAD. Every review has a verdict and a distinct seat and
@@ -14,10 +20,8 @@ model identity; public seat identifiers use `R<n>`. Every material finding has a
 disposition, blocker fixes are re-verified, and review conversations are resolved. A push changes
 the HEAD, dismisses stale approvals, and invalidates all earlier evidence.
 
-Concurrent gate runs are ordered by their numeric Actions run identifiers. The gate reads the full
-paginated commit-status history, lets a higher run reclaim later writes from a lower run, and
-reasserts each status state actually observed from a higher run. A foreign or unparseable run URL
-in either policy context fails closed.
+Concurrent runs are ordered by numeric Actions run identifiers. Full paginated status history lets
+the higher run reclaim lower-run writes, while foreign or unparseable status sources fail closed.
 
 One compact, attribution-neutral pull request comment is the canonical evidence. The comment must
 be posted by a configured maintainer and use this shape:
@@ -132,10 +136,11 @@ repository audit logs are the external evidence for destructive administrative c
   audit reports every other branch without a same-repository pull request; a same-named fork branch
   or malformed pull-request head does not satisfy the rule.
 - A commit SHA must be the HEAD of exactly one open pull request for the gate to evaluate it. Shared
-  open HEADs fail closed so commit-scoped statuses cannot be reused by another pull request. After
+  open HEADs fail closed as a best-effort guard. After
   closing the duplicate pull request or moving it to a different HEAD, use the delivery-policy
   workflow's manual dispatch with the affected pull request number to recover the original pull
-  request immediately; normal pull request activity also re-evaluates it.
+  request immediately; normal pull request activity also re-evaluates it. This cannot change
+  GitHub's SHA-scoped status model.
 
 The auditable repository policy is `.github/delivery-policy.json`. Changes to the policy or its
 enforcement are themselves sensitive. It also records the desired live ruleset: strict required

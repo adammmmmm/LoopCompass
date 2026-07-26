@@ -57,6 +57,9 @@ test("community health files remain complete and discoverable", async () => {
   ]) {
     assert.match(publicPolicy, /three independent model reviews/);
   }
+  assert.match(maintainerPolicy, /cooperative repository quality policy/);
+  assert.match(maintainerPolicy, /GitHub statuses remain SHA-scoped/);
+  assert.match(maintainerPolicy, /outside the v0\.1\s+threat model/);
 });
 
 test("GitHub workflows use immutable actions and bounded permissions", async () => {
