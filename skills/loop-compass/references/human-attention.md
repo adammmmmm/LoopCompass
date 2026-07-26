@@ -93,6 +93,10 @@ action plus a stable requirement declared human-only; every `verified_closed` ma
 closure-evidence reference. These are intrinsic record checks, separate from validating the
 selected marker against current incident state. A malformed lower revision fails the whole slug;
 a valid later marker cannot mask it or authorize repair.
+Parse marker, registry, and projection collections defensively before reading fields. Null, scalar,
+array, or malformed sibling records produce explicit non-sensitive conformance errors, never a
+runtime exception. Preserve them for quarantine or authorized repair. An unscoped malformed record
+blocks mutation; a malformed record with a trustworthy canonical slug blocks only that slug.
 
 The surface also maintains a minimal known-obligation registry keyed by canonical incident slug.
 Keep this registry structurally separate from the projection block so deterministic re-rendering
@@ -123,6 +127,9 @@ If later valid history exists but revision 1 is absent, the same stricter curren
 reconstruct revision 1 before advancing the registry; preserve every later marker unchanged. Stable
 revision-0 metadata without either retained revision-1 history or that live exact match is missing
 history, not repair authority.
+Stage the reconstructed marker and registry advancement together, validate the complete candidate
+history and selected marker against canonical state, and only then commit both changes. Failed
+validation is an exact no-op: it must not leave a synthetic revision 1 behind.
 Reconciliation must preserve the full marker history, sibling and unknown records, unknown fields,
 pending metadata, and configured retention metadata; mutate only the targeted registry record or
 append the missing revision-1 marker.

@@ -2178,6 +2178,87 @@
           "recoverable_registry_lag:console-action-required"
         ]
       }
+    },
+    {
+      "id": "synthetic-revision-one-is-atomic-with-invalid-closed-marker",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verified_closed",
+          "revision": 2,
+          "closure_evidence_ref": "stale-closure-console-v1"
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [
+        {
+          "id": "stale-closure-console-v1",
+          "incident_slug": "console-action-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "obligation_conflicts_current_requires:console-action-required",
+          "unrepairable_registry_lag:console-action-required",
+          "verified_closed_incident_still_open:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-revision-one-is-atomic-with-invalid-reassignment",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "reassigned_nonhuman",
+          "revision": 2
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "obligation_conflicts_current_requires:console-action-required",
+          "reassigned_nonhuman_requires_nonhuman_match:console-action-required",
+          "unrepairable_registry_lag:console-action-required"
+        ]
+      }
     }
   ]
 }
