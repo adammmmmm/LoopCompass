@@ -505,6 +505,44 @@ describe("evaluation benchmark report", () => {
     }
   });
 
+  it("enforces false-trigger and stale-candidate consistency", () => {
+    const impossibleFalseTrigger = readFixture();
+    impossibleFalseTrigger.cases[0].expected.false_trigger = true;
+    let result = runEvaluateWithDoc(impossibleFalseTrigger);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /false_trigger true requires consultation when consultation was not expected/,
+    );
+
+    const unobservedFalseTrigger = readFixture();
+    unobservedFalseTrigger.cases[2].expected.false_trigger = true;
+    result = runEvaluateWithDoc(unobservedFalseTrigger);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /false_trigger true requires consultation when consultation was not expected/,
+    );
+
+    const rejectedWithoutStale = readFixture();
+    rejectedWithoutStale.cases[0].receipt.stale_rejected = true;
+    result = runEvaluateWithDoc(rejectedWithoutStale);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /stale_rejected true requires candidate_artifact_status stale/,
+    );
+
+    const expectedWithoutStale = readFixture();
+    expectedWithoutStale.cases[0].expected.stale_rejected = true;
+    result = runEvaluateWithDoc(expectedWithoutStale);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /expected\.stale_rejected must match candidate_artifact_status stale/,
+    );
+  });
+
   it("requires read-only subagents to expect proposal and parent closure", () => {
     const doc = readFixture();
     doc.cases[0].scope.agent_role = "subagent-readonly";

@@ -16,6 +16,9 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Evaluation fixture schema 1 now requires explicit terminal/parent receipt slots and the full
+  ordered receipt metric inventory; evaluator-owned semantic digests preserve the complete
+  benchmark ground truth.
 - GitHub Actions use current immutable releases, least-privilege permissions, and bounded jobs.
 - GitHub Pages deploys only when the site, its brand asset, or its workflow changes.
 

@@ -4,7 +4,7 @@ name: loop-compass
 version: 0.3.0
 source: https://github.com/adammmmmm/LoopCompass
 release: https://github.com/adammmmmm/LoopCompass/releases/tag/v0.3.0
-commit: 960df08261b728a35e13420406af8aa3dfa38fb1
+commit: abf34464c67f9717b55f0acb5d92760d547ced6f
 skill_schema: 1
 policy_version: 2
 state_schema: 1
@@ -18,4 +18,4 @@ files:
   references/classification.md: 6013de10a8c101f59070b2311fdd540b49c904b29418073a594b880d140fd566
   references/integration.md: 3c76c74717d1684d1fe9a7f4be197006a231d1540ef161082b9e567c702db40b
   references/pii-sanitation.md: 4fad1f47dd5d7a34006206e9edafcbd6bcd22c7e495955ec995039d90c41cd4f
-  references/terminal-receipts.md: 2aa8758c2cff593396abaf96eec5aab4497f3f89465ad043fef5a4c5f53dcd8f
+  references/terminal-receipts.md: 72fa65fe645c154378563a8fd442aec84b83ed1a0ef13e9c85022c918e65cf1f

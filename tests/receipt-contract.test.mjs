@@ -380,6 +380,14 @@ describe("terminal receipt contract", () => {
     );
   });
 
+  it("accepts parent closure only for a proposed-artifact child", () => {
+    const parent = structuredClone(parentNoArtifactCase.parent_receipt);
+    assert.throws(
+      () => validateParentReceipt(parent, structuredClone(persisted)),
+      /child_receipt must have terminal_outcome proposed_artifact/,
+    );
+  });
+
   it("rejects broken links and partial further propagation", () => {
     const wrongLink = structuredClone(propagatedCase.parent_receipt);
     wrongLink.child_receipt_id = "different-child";
@@ -987,6 +995,34 @@ describe("terminal receipt contract", () => {
     const proposed = recoveryProposalReceipt();
     assert.ok(recoveryTemplate.includes("## Recovery"));
     assert.doesNotThrow(() => validateTerminalReceipt(proposed));
+  });
+
+  it("accepts JSON-compatible quoted scalar fields after decoding", () => {
+    const receipt = recoveryProposalReceipt();
+    receipt.proposed_artifact.content = receipt.proposed_artifact.content
+      .replace(
+        "  versions: managed",
+        '  versions: "22.15.0; Codex managed sandbox"',
+      )
+      .replace("status: candidate", 'status: "candidate"')
+      .replace("expires_after_days: 30", 'expires_after_days: "30"');
+    assert.doesNotThrow(() => validateTerminalReceipt(receipt));
+
+    for (const malformed of [
+      '  versions: "22.15.0; Codex managed sandbox',
+      '  versions: "22.15.0; \\q"',
+    ]) {
+      const invalid = recoveryProposalReceipt();
+      invalid.proposed_artifact.content =
+        invalid.proposed_artifact.content.replace(
+          "  versions: managed",
+          malformed,
+        );
+      assert.throws(
+        () => validateTerminalReceipt(invalid),
+        /content must be a complete filled sanitized recovery artifact/,
+      );
+    }
   });
 
   it("rejects schema-invalid incident artifacts despite present keys and headings", () => {

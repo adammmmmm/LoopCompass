@@ -507,7 +507,10 @@ function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
   if (kind === "incident" && !nested && field === "consulted") {
     return parseStrictInlineList(value, { nonempty: false });
   }
-  return strictPlainScalar(value);
+  const decoded = value.startsWith('"')
+    ? parseStrictQuotedString(value)
+    : value;
+  return decoded === null ? null : strictPlainScalar(decoded);
 }
 
 function parseStrictProposedFrontmatter(source, kind) {
@@ -543,6 +546,7 @@ function parseStrictProposedFrontmatter(source, kind) {
       }
       keys.add(match[1]);
       nested.set(activeMap, keys);
+      fields[activeMap][match[1]] = parsed;
       continue;
     }
 
@@ -561,7 +565,7 @@ function parseStrictProposedFrontmatter(source, kind) {
     } else if (kind !== "recovery" || match[1] !== "scope") {
       return null;
     } else {
-      fields[match[1]] = "";
+      fields[match[1]] = {};
     }
   }
 
@@ -580,32 +584,6 @@ function parseStrictProposedFrontmatter(source, kind) {
     && [...recoveryScopeFields].every((field) => scope.has(field))
     ? fields
     : null;
-}
-
-function parseNestedMap(source, key) {
-  const lines = source.split("\n");
-  const start = lines.findIndex((line) => new RegExp(`^${key}:\\s*$`).test(line));
-  if (start === -1) {
-    return null;
-  }
-  const result = {};
-  for (const line of lines.slice(start + 1)) {
-    if (!/^\s/.test(line)) {
-      break;
-    }
-    if (!line.trim()) {
-      continue;
-    }
-    const match = /^\s+([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
-    if (!match || match[2].trim().length === 0) {
-      return null;
-    }
-    if (hasField(result, match[1])) {
-      return null;
-    }
-    result[match[1]] = match[2].trim();
-  }
-  return result;
 }
 
 function getSectionBody(body, section) {
@@ -733,11 +711,11 @@ function validateIncidentArtifactSchema(fields, source) {
     && source.length > 0;
 }
 
-function validateRecoveryArtifactSchema(fields, source) {
+function validateRecoveryArtifactSchema(fields) {
   const requiredPresent = requiredArtifactFields.recovery.every((field) =>
     field === "scope" ? hasField(fields, field) : hasNonemptyField(fields, field),
   );
-  const scope = parseNestedMap(source, "scope");
+  const scope = fields.scope;
   const scopeValid =
     scope !== null
     && Object.keys(scope).length === recoveryScopeFields.size
@@ -788,7 +766,7 @@ function validateProposedArtifact(artifact, label) {
   );
   const schemaValid = kind === "incident"
     ? validateIncidentArtifactSchema(fields, source)
-    : validateRecoveryArtifactSchema(fields, source);
+    : validateRecoveryArtifactSchema(fields);
   const completeSections = requiredArtifactSections[kind].every((section) =>
     sectionHasBody(body, section),
   );
@@ -976,6 +954,9 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
 export function validateParentReceipt(parent, childReceipt, label = "parent_receipt") {
   requireObject(parent, label);
   validateTerminalReceipt(childReceipt, `${label}.child_receipt`);
+  if (childReceipt.terminal_outcome !== "proposed_artifact") {
+    fail(label, ".child_receipt must have terminal_outcome proposed_artifact");
+  }
   requireExactFields(parent, label, parentReceiptFields);
   if (requireField(parent, "receipt_schema", label) !== 1) {
     fail(label, ".receipt_schema must be 1");

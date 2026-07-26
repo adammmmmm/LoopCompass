@@ -531,6 +531,7 @@ function requireBoolean(obj, field, label) {
   if (typeof value !== "boolean") {
     throw new Error(`${label}.${field} must be boolean`);
   }
+  return value;
 }
 
 function requireNullableBoolean(obj, field, label) {
@@ -685,15 +686,24 @@ function validateFixture(doc) {
         `${label}.receipt`,
       );
     }
-    if (hasField(receipt, "candidate_artifact_status")) {
-      requireNullableEnum(
+    const candidateArtifactStatus = hasField(receipt, "candidate_artifact_status")
+      ? requireNullableEnum(
         receipt,
         "candidate_artifact_status",
         `${label}.receipt`,
         candidateArtifactStatuses,
+      )
+      : null;
+    const staleRejected = requireBoolean(
+      receipt,
+      "stale_rejected",
+      `${label}.receipt`,
+    );
+    if (staleRejected && candidateArtifactStatus !== "stale") {
+      throw new Error(
+        `${label}.receipt.stale_rejected true requires candidate_artifact_status stale`,
       );
     }
-    requireBoolean(receipt, "stale_rejected", `${label}.receipt`);
     requireNonnegativeInteger(receipt, "repeated_failure_attempts_before", `${label}.receipt`);
     requireNonnegativeInteger(receipt, "repeated_failure_attempts_after", `${label}.receipt`);
     requireNonnegativeIntegerOrNull(receipt, "steps_to_verified_normal_path", `${label}.receipt`);
@@ -763,8 +773,29 @@ function validateFixture(doc) {
       `${label}.expected`,
       classifications,
     );
-    requireBoolean(expected, "false_trigger", `${label}.expected`);
-    requireBoolean(expected, "stale_rejected", `${label}.expected`);
+    const expectedFalseTrigger = requireBoolean(
+      expected,
+      "false_trigger",
+      `${label}.expected`,
+    );
+    if (
+      expectedFalseTrigger
+      && !(expected.consulted === false && receipt.consulted === true)
+    ) {
+      throw new Error(
+        `${label}.expected.false_trigger true requires consultation when consultation was not expected`,
+      );
+    }
+    const expectedStaleRejected = requireBoolean(
+      expected,
+      "stale_rejected",
+      `${label}.expected`,
+    );
+    if (expectedStaleRejected !== (candidateArtifactStatus === "stale")) {
+      throw new Error(
+        `${label}.expected.stale_rejected must match candidate_artifact_status stale`,
+      );
+    }
     requireBoolean(expected, "repeated_failure_reduced", `${label}.expected`);
     if (hasField(expected, "time_to_verified_normal_path_max_steps")) {
       requireNonnegativeInteger(expected, "time_to_verified_normal_path_max_steps", `${label}.expected`);

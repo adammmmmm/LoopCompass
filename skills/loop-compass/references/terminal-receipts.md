@@ -71,8 +71,9 @@ validation. Frontmatter uses exact `---` delimiter lines, only the documented sc
 fully parsed unique fields; malformed lines, duplicates, unknown keys, and unresolved values fail
 validation. The canonical receipt representation uses a JSON-compatible double-quoted
 `signature`, strict bracketed `requires` and `consulted` lists whose entries are bare safe scalars
-or JSON-compatible double-quoted strings, and safe plain scalars for the remaining fields.
-Unbalanced lists or quotes, malformed escapes, anchors, aliases, and tags fail validation.
+or JSON-compatible double-quoted strings, and bare or JSON-compatible double-quoted values for
+every other scalar field. Validation uses the decoded value. Unbalanced lists or quotes, malformed
+escapes, anchors, aliases, and tags fail validation.
 JSON escapes are decoded once and the same decoded signature and list items drive strict schema and
 shared capsule validation. Quoted commas remain inside one list item; an escape that decodes to an
 unsafe control or unresolved structural marker still fails.

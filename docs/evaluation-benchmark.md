@@ -19,6 +19,11 @@ The command prints a Markdown report. It records the exact baseline commit in th
 d7879fec762322ae658603104c7c334ade6ba43f
 ```
 
+This release revises fixture schema 1 in place: every case now has mandatory object-or-null
+`terminal_receipt` and `parent_receipt` fields, and `metrics` must contain the evaluator's complete
+ordered receipt-aware registry. Older schema-1 fixtures that omit those additions fail explicitly
+rather than silently changing a denominator.
+
 ## Metrics
 
 The generated report watermark lists the receipt types actually present: synthetic, recorded, or
@@ -86,6 +91,9 @@ injecting extra structure. The functional tokens `<user-home>`, `<project-root>`
 brackets and Markdown metacharacters are rejected. When present,
 `receipt.applied_existing_artifact` is boolean or null, and
 `receipt.candidate_artifact_status` is null or a recovery lifecycle status.
+An observed stale rejection requires candidate status `stale`, and the expected stale-rejection
+flag must agree with whether the case observes a stale candidate. `expected.false_trigger: true`
+is valid only when consultation was not expected but was observed.
 
 Cases that exercise cross-actor coordination populate `receipt.terminal_receipt` and, when
 observed, `receipt.parent_receipt`, following the shipped
