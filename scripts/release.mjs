@@ -61,6 +61,7 @@ const REQUIRED_TOP_LEVEL = [
   "references/pii-sanitation.md",
   "references/redaction-audit.md",
   "scripts/redact-check.mjs",
+  "references/terminal-receipts.md",
 ];
 
 function die(message) {

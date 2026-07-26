@@ -162,6 +162,7 @@ describe("release tooling", () => {
       "references/pii-sanitation.md",
       "references/redaction-audit.md",
       "scripts/redact-check.mjs",
+      "references/terminal-receipts.md",
     ]) {
       assert.match(text, new RegExp(`^\\s+${rel.replace(".", "\\.")}:\\s+[0-9a-f]{64}$`, "m"));
     }

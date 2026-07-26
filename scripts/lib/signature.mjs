@@ -27,7 +27,7 @@ const PID_RE = /\bpid[=:\s]+\d+\b/gi;
  * @returns {string}
  */
 export function normalizeSignature(raw) {
-  let s = String(raw ?? "");
+  let s = String(raw ?? "").normalize("NFC");
   s = s.replace(SECRET_RE, "<secret>");
   s = s.replace(UUID_RE, "<id>");
   s = s.replace(LONG_HEX_RE, "<hex>");
@@ -57,6 +57,28 @@ export function slugFromSignature(normalized) {
     slug = slug.slice(0, 96).replace(/-+$/g, "");
   }
   return slug || "failure";
+}
+
+/**
+ * Accept a mechanical slug or its documented unpadded -N collision form.
+ * @param {string} candidate
+ * @param {string} canonical
+ * @returns {boolean}
+ */
+export function isMechanicalSlugOrCollision(candidate, canonical) {
+  if (candidate === canonical) return true;
+  if (
+    typeof candidate !== "string"
+    || typeof canonical !== "string"
+    || !candidate.startsWith(`${canonical}-`)
+  ) {
+    return false;
+  }
+  const suffix = candidate.slice(canonical.length + 1);
+  const number = Number(suffix);
+  return /^[1-9][0-9]*$/.test(suffix)
+    && Number.isSafeInteger(number)
+    && number >= 2;
 }
 
 /**

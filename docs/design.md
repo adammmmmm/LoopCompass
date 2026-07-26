@@ -87,20 +87,39 @@ Delegated agents with shared repository write authority follow the same rule. Br
 read-only workers return the normalized signature, classification, evidence, proposed artifact,
 and exact escalation to the parent, which must close the classification in the same turn.
 
+Cross-actor handoffs use a small
+[terminal receipt](../skills/loop-compass/references/terminal-receipts.md) that is distinct from
+capsule schema. It records normalized identity, classification, sanitized evidence, task outcome,
+mechanism health, containment, terminal outcome, proposed content, and exact escalation. The
+receiving parent links its own ingestion receipt to the worker receipt and records persistence,
+`no_artifact`, or further full-payload escalation. Core validates this contract but stays
+storage-neutral. The emitting actor sanitizes before the first handoff and before deriving receipt
+identity. Host integrations own mechanical ingestion, deduplication, durable queueing, and closure;
+their sanitation checks are defense in depth rather than a substitute for worker-side sanitation.
+Parent receipts bind a distinct parent id to both the child id and a canonical digest of the full
+child payload, so an id cannot be reused to acknowledge swapped content.
+
 ## Artifact identity and concurrency
 
-Normalize signatures by removing volatile paths, IDs, timestamps, and secret-bearing values. Derive
-the artifact slug mechanically from the exact normalized signature: lowercase it, replace each
+Normalize signatures to Unicode NFC before removing volatile paths, IDs, timestamps, and
+secret-bearing values. Derive the artifact slug mechanically from the exact normalized signature:
+lowercase it, replace each
 maximal run outside ASCII `a-z` and `0-9` with one hyphen, trim it, truncate it to 96 characters,
 and trim it again. Use `failure` when empty. The ID is the slug and the filename is `<slug>.md`.
 Search recoveries and incidents for the exact signature immediately before writing.
+
+Existing non-NFC artifacts are not rewritten automatically. Upgrade handling is an explicit,
+reviewed migration: NFC-normalize the signature, recompute the id and filename, search both
+directories for a canonically equivalent artifact, and merge or resolve collisions before
+retrieval resumes.
 
 When a matching artifact exists, update or supersede it rather than creating another. Parallel
 writes that still race should resolve around the deterministic artifact path, making the conflict
 visible instead of silently creating divergent knowledge.
 
-If the deterministic path contains a different signature, append the lowest available integer
-suffix beginning with `-2`. Agents must not invent alternate descriptive filenames.
+If the deterministic path contains a different signature, append the lowest available unpadded
+base-10 integer suffix beginning with `-2`. Values such as `-0`, `-1`, `-01`, and `-02` are not
+collision identities. Agents must not invent alternate descriptive filenames.
 
 ## Escalation ladder
 
@@ -259,8 +278,9 @@ cannot write safely.
 13. Two agents handling the same signature converge on one deterministic artifact path.
 14. Every triggered signature ends as `persisted_artifact`, `no_artifact`, or
     `proposed_artifact`, even if a later retry, runtime switch, or workaround succeeds.
-15. A delegated read-only worker returns the full classification payload to a parent that closes
-    the outcome in the same turn.
+15. A delegated read-only worker returns a complete proposed-artifact receipt to a parent whose
+    linked receipt proves ingestion and persistence, `no_artifact`, or complete further escalation
+    in the same turn.
 16. A successful task or validation result does not mark a still-broken mechanism healthy.
 17. Acknowledgment or requested-action completion does not close an incident without normal-path
     verification.

@@ -40,6 +40,8 @@ describe("install and update dry-run", () => {
 
     assert.ok(existsSync(path.join(skillDest, "SKILL.md")));
     assert.ok(existsSync(path.join(skillDest, "manifest.yaml")));
+    assert.ok(existsSync(path.join(skillDest, "references", "pii-sanitation.md")));
+    assert.ok(existsSync(path.join(skillDest, "references", "terminal-receipts.md")));
 
     const policy = readFileSync(policySrc, "utf8");
     assert.match(policy, /loopcompass:start policy=\d+/);

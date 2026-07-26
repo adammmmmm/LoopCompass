@@ -13,6 +13,8 @@ uses [Semantic Versioning](https://semver.org/).
 - Automated GitHub Actions dependency updates.
 - A manifested, dependency-free committed-state redaction checker that consumers can invoke
   locally in non-mutating audit or enforce mode.
+- Host-neutral terminal and parent receipt contracts, strict validators, and evaluation metrics for
+  classification completeness, semantic accuracy, and worker-to-parent closure.
 - Optional, disabled-by-default human-attention integration profile with durable obligation
   markers, typed authority-bound surfaces, fail-closed compare-and-swap reconciliation, and
   deterministic lifecycle fixtures.
@@ -21,6 +23,13 @@ uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Evaluation fixture schema 1 now requires explicit terminal/parent receipt slots and the full
+  ordered receipt metric inventory; evaluator-owned semantic digests preserve the complete
+  benchmark ground truth.
+- Evaluation fixture JSON rejects duplicate keys before materialization, and receipt proposal
+  validation applies placeholder and containment-expiry rules to decoded scalar values.
+- Receipt sanitation rejects encoded character-reference bypasses, and signature identity now
+  normalizes Unicode to NFC with explicit legacy-state migration guidance.
 - GitHub Actions use current immutable releases, least-privilege permissions, and bounded jobs.
 - GitHub Pages deploys only when the site, its brand asset, or its workflow changes.
 - Consumer verification admits only manifested skill scripts and verifies the complete installed

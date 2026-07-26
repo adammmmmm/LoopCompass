@@ -34,6 +34,17 @@ describe("normalizeSignature", () => {
     );
     assert.equal(a, b);
   });
+
+  it("NFC-normalizes canonically equivalent signatures", () => {
+    const composed = normalizeSignature("Caf\u00e9 validator fails");
+    const decomposed = normalizeSignature("Cafe\u0301 validator fails");
+    assert.equal(composed, "Caf\u00e9 validator fails");
+    assert.equal(decomposed, composed);
+    assert.equal(
+      slugFromSignature(decomposed),
+      slugFromSignature(composed),
+    );
+  });
 });
 
 describe("slugFromSignature", () => {

@@ -6,6 +6,7 @@ import { describe, it, after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
+  parseIsoDate,
   validateCapsuleText,
   validateStateDir,
 } from "../scripts/lib/capsule.mjs";
@@ -15,6 +16,12 @@ const fixtures = path.join(root, "fixtures", "capsules");
 const examples = path.join(root, "examples", "capsules");
 
 describe("capsule validator", () => {
+  it("accepts only real calendar dates", () => {
+    assert.ok(parseIsoDate("2026-02-28") instanceof Date);
+    assert.equal(parseIsoDate("2026-02-30"), null);
+    assert.equal(parseIsoDate("2026-13-01"), null);
+  });
+
   it("accepts good recovery fixture", () => {
     const text = readFileSync(path.join(fixtures, "good-recovery.md"), "utf8");
     const r = validateCapsuleText(text, {
@@ -31,6 +38,29 @@ describe("capsule validator", () => {
       filename: "bad-recovery-slug.md",
     });
     assert.ok(r.errors.some((e) => /mechanical slug|filename/i.test(e)));
+  });
+
+  it("accepts only exact or unpadded collision ids across capsule validation", () => {
+    const text = readFileSync(path.join(fixtures, "good-recovery.md"), "utf8");
+    const baseId = "sandbox-package-cache-outside-writable-root";
+    for (const suffix of ["-0", "-1", "-01", "-02"]) {
+      const id = `${baseId}${suffix}`;
+      const result = validateCapsuleText(
+        text.replace(`id: ${baseId}`, `id: ${id}`),
+        { kind: "recovery", filename: `${id}.md` },
+      );
+      assert.ok(
+        result.errors.some((error) => /id must be mechanical slug of signature/.test(error)),
+        suffix,
+      );
+    }
+
+    const collisionId = `${baseId}-2`;
+    const collision = validateCapsuleText(
+      text.replace(`id: ${baseId}`, `id: ${collisionId}`),
+      { kind: "recovery", filename: `${collisionId}.md` },
+    );
+    assert.deepEqual(collision.errors, []);
   });
 
   it("accepts good incident fixture with future expiry", () => {
