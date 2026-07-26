@@ -15,6 +15,7 @@ import {
   latestBotReviewMatches,
   normalizeGitHubSnapshot,
   parseHumanAuthorization,
+  parseReviewComment,
   renderHumanAuthorization,
   renderVisibleReview,
   resolvePullRequestNumber,
@@ -805,6 +806,40 @@ test("review schema rejects unknown fields and weak or duplicate provenance", ()
   assert.match(evaluate({ data: duplicate }).modelReasons.join(" "), /digests must be unique/);
 });
 
+test("review metadata rejects duplicate JSON keys at every nesting level", () => {
+  const body = (json) => `Visible\n\n<!-- loopcompass-review:v1\n${json}\n-->`;
+  const otherSha = "b".repeat(40);
+  for (const json of [
+    `{"head_sha":"${sha}","head_sha":"${otherSha}"}`,
+    `{"head_sha":"${otherSha}","head_sha":"${sha}"}`,
+    `{"reviews":[{"verdict":"approved","verdict":"changes_requested"}]}`,
+    `{"reviews":[{"verdict":"changes_requested","verdict":"approved"}]}`,
+  ]) {
+    assert.equal(
+      parseReviewComment(body(json)).error,
+      "review metadata contains duplicate JSON object keys",
+    );
+  }
+});
+
+test("operator authorization rejects duplicate JSON keys", () => {
+  const body = [
+    "### Operator authorization",
+    "",
+    `**Target:** \`${sha}\``,
+    "",
+    "**Verdict:** `Approved`",
+    "",
+    "<!-- loopcompass-human-authorization:v1",
+    `{"schema":1,"head_sha":"${sha}","verdict":"approved","verdict":"changes_requested"}`,
+    "-->",
+  ].join("\n");
+  assert.equal(
+    parseHumanAuthorization(body).error,
+    "operator authorization metadata contains duplicate JSON object keys",
+  );
+});
+
 test("visible Target and Verdict fields use the canonical bold format", () => {
   for (const [from, to] of [
     [`**Target:** \`${sha}\``, `Target: \`${sha}\``],
@@ -852,6 +887,54 @@ test("material findings persist across review comment revisions", () => {
   assert.equal(
     validateReviewRecord({
       comment: comment(currentData),
+      headSha: sha,
+      author: "maintainer",
+      changedFiles: ["README.md"],
+      config,
+      ...history,
+    }).modelOk,
+    true,
+  );
+
+  const changedIdentity = freshReviewProvenance(metadata(), 7);
+  changedIdentity.previous_comment_id = 99;
+  changedIdentity.reviews[0].findings = [
+    finding({
+      id: "R1-OLD",
+      prefix: "Risk identified",
+      summary: "Different summary.",
+      impact: "Different impact.",
+      required_fix: "Different required fix.",
+      verification: "Different verification.",
+    }),
+  ];
+  assert.match(
+    validateReviewRecord({
+      comment: comment(changedIdentity),
+      headSha: sha,
+      author: "maintainer",
+      changedFiles: ["README.md"],
+      config,
+      ...history,
+    }).modelReasons.join(" "),
+    /changed immutable identity fields/,
+  );
+
+  const dispositionOnly = freshReviewProvenance(metadata(), 10);
+  dispositionOnly.previous_comment_id = 99;
+  dispositionOnly.reviews[0].findings = [
+    finding({
+      id: "R1-OLD",
+      disposition: {
+        status: "accepted",
+        rationale: "The residual risk is bounded.",
+        evidence: "The limitation is documented and approved.",
+      },
+    }),
+  ];
+  assert.equal(
+    validateReviewRecord({
+      comment: comment(dispositionOnly),
       headSha: sha,
       author: "maintainer",
       changedFiles: ["README.md"],
@@ -1980,6 +2063,8 @@ test("repository policy drift fixtures cover every required live control", () =>
     (value) => (value.ruleset.target = "tag"),
     (value) => (value.ruleset.conditions.ref_name.include = ["refs/heads/develop"]),
     (value) => (value.ruleset.conditions.ref_name.exclude = ["refs/heads/main"]),
+    (value) => (value.ruleset.conditions.ref_name.include = "refs/heads/main"),
+    (value) => (value.ruleset.conditions.ref_name.exclude = [""]),
     (value) =>
       (value.ruleset.rules[0].parameters.allowed_merge_methods = ["merge", "squash"]),
     (value) =>
@@ -2018,6 +2103,9 @@ test("repository policy drift fixtures cover every required live control", () =>
   });
   additiveResponseFields.ruleset.rules[0].parameters.future_option = true;
   additiveResponseFields.ruleset.rules[1].parameters.future_option = true;
+  additiveResponseFields.ruleset.conditions.ref_name.future_option = {
+    mode: "additive",
+  };
   additiveResponseFields.workflowPermissions.future_option = true;
   assert.deepEqual(
     evaluateRepositoryPolicy({ ...additiveResponseFields, desired }),

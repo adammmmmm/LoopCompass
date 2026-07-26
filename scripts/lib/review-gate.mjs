@@ -32,6 +32,89 @@ const canonicalJson = (value) => {
 const sameJson = (left, right) =>
   JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
 
+function parseUniqueJson(source) {
+  let offset = 0;
+  const whitespace = () => {
+    while (/\s/.test(source[offset] ?? "")) offset += 1;
+  };
+  const string = () => {
+    const start = offset;
+    if (source[offset] !== '"') throw new Error("expected JSON string");
+    offset += 1;
+    while (offset < source.length) {
+      if (source[offset] === "\\") {
+        offset += 2;
+      } else if (source[offset] === '"') {
+        offset += 1;
+        return JSON.parse(source.slice(start, offset));
+      } else {
+        offset += 1;
+      }
+    }
+    throw new Error("unterminated JSON string");
+  };
+  const value = () => {
+    whitespace();
+    if (source[offset] === "{") {
+      offset += 1;
+      whitespace();
+      const keys = new Set();
+      if (source[offset] === "}") {
+        offset += 1;
+        return;
+      }
+      while (offset < source.length) {
+        const key = string();
+        if (keys.has(key)) throw new Error("duplicate JSON object key");
+        keys.add(key);
+        whitespace();
+        if (source[offset] !== ":") throw new Error("expected JSON colon");
+        offset += 1;
+        value();
+        whitespace();
+        if (source[offset] === "}") {
+          offset += 1;
+          return;
+        }
+        if (source[offset] !== ",") throw new Error("expected JSON object separator");
+        offset += 1;
+        whitespace();
+      }
+      throw new Error("unterminated JSON object");
+    }
+    if (source[offset] === "[") {
+      offset += 1;
+      whitespace();
+      if (source[offset] === "]") {
+        offset += 1;
+        return;
+      }
+      while (offset < source.length) {
+        value();
+        whitespace();
+        if (source[offset] === "]") {
+          offset += 1;
+          return;
+        }
+        if (source[offset] !== ",") throw new Error("expected JSON array separator");
+        offset += 1;
+      }
+      throw new Error("unterminated JSON array");
+    }
+    if (source[offset] === '"') {
+      string();
+      return;
+    }
+    const start = offset;
+    while (offset < source.length && !/[\s,\]}]/.test(source[offset])) offset += 1;
+    JSON.parse(source.slice(start, offset));
+  };
+  value();
+  whitespace();
+  if (offset !== source.length) throw new Error("unexpected JSON suffix");
+  return JSON.parse(source);
+}
+
 function globRegex(pattern) {
   let source = "^";
   for (let index = 0; index < pattern.length; index += 1) {
@@ -159,12 +242,16 @@ export function parseReviewComment(body) {
     return { error: "review comment contains text after the metadata marker" };
   }
   try {
+    const metadataSource = source.slice(start + REVIEW_OPEN.length, end);
     return {
-      metadata: JSON.parse(source.slice(start + REVIEW_OPEN.length, end)),
+      metadata: parseUniqueJson(metadataSource),
       visible: source.slice(0, start).trimEnd(),
       body: source,
     };
-  } catch {
+  } catch (error) {
+    if (error.message === "duplicate JSON object key") {
+      return { error: "review metadata contains duplicate JSON object keys" };
+    }
     return { error: "review metadata is not valid JSON" };
   }
 }
@@ -199,7 +286,7 @@ export function parseHumanAuthorization(body) {
     return { error: "operator authorization marker is malformed" };
   }
   try {
-    const metadata = JSON.parse(source.slice(start + open.length, end));
+    const metadata = parseUniqueJson(source.slice(start + open.length, end));
     const canonical = renderHumanAuthorization(metadata?.head_sha);
     const canonicalWithLineFeed = `${canonical}\n`;
     if (
@@ -213,7 +300,10 @@ export function parseHumanAuthorization(body) {
       return { error: "operator authorization record is invalid" };
     }
     return { metadata };
-  } catch {
+  } catch (error) {
+    if (error.message === "duplicate JSON object key") {
+      return { error: "operator authorization metadata contains duplicate JSON object keys" };
+    }
     return { error: "operator authorization metadata is not valid JSON" };
   }
 }
@@ -442,6 +532,7 @@ export function validateReviewRecord({
   authorizationComments = [],
   nativeApprovals = [],
   priorFindingIds = [],
+  priorFindings = [],
   priorExecutionIds = [],
   priorEvidenceDigests = [],
   expectedPreviousCommentId = null,
@@ -449,6 +540,7 @@ export function validateReviewRecord({
   allowChangesRequested = false,
 }) {
   priorFindingIds = Array.isArray(priorFindingIds) ? priorFindingIds : [];
+  priorFindings = Array.isArray(priorFindings) ? priorFindings : [];
   priorExecutionIds = Array.isArray(priorExecutionIds) ? priorExecutionIds : [];
   priorEvidenceDigests = Array.isArray(priorEvidenceDigests)
     ? priorEvidenceDigests
@@ -538,6 +630,11 @@ export function validateReviewRecord({
       const executionIds = new Set();
       const evidenceDigests = new Set();
       const findingIds = new Set();
+      const priorFindingById = new Map(
+        priorFindings
+          .filter((finding) => isRecord(finding) && nonEmpty(finding.id))
+          .map((finding) => [finding.id, finding]),
+      );
       for (const review of reviews) {
         const reviewValid = validateKeys(
         review,
@@ -610,6 +707,26 @@ export function validateReviewRecord({
             modelReasons.push("finding identifiers must be present and unique");
           }
           findingIds.add(finding.id);
+          const priorFinding = priorFindingById.get(finding.id);
+          const identityFields = [
+            "id",
+            "prefix",
+            "summary",
+            "impact",
+            "required_fix",
+            "verification",
+          ];
+          if (
+            priorFinding &&
+            !sameJson(
+              Object.fromEntries(identityFields.map((field) => [field, finding[field]])),
+              Object.fromEntries(identityFields.map((field) => [field, priorFinding[field]])),
+            )
+          ) {
+            modelReasons.push(
+              `prior material finding ${finding.id} changed immutable identity fields`,
+            );
+          }
           if (!ALLOWED_FINDING_PREFIXES.has(finding.prefix)) {
             modelReasons.push(`${finding.id || "finding"} uses an unsupported finding prefix`);
           }
@@ -697,6 +814,7 @@ export function analyzeReviewHistory(
   pullNumber,
 ) {
   const identifiers = new Set();
+  const findingsById = new Map();
   const executionIds = new Set();
   const evidenceDigests = new Set();
   const allowed = new Set(config.human_maintainers.map(normalize));
@@ -740,6 +858,7 @@ export function analyzeReviewHistory(
       pullNumber,
       authorizationComments: comments,
       priorFindingIds: [...identifiers],
+      priorFindings: [...findingsById.values()],
       priorExecutionIds: [...executionIds],
       priorEvidenceDigests: [...evidenceDigests],
       expectedPreviousCommentId: precedingId,
@@ -759,7 +878,12 @@ export function analyzeReviewHistory(
         }
         if (Array.isArray(review.findings)) {
           for (const finding of review.findings) {
-            if (isRecord(finding) && nonEmpty(finding.id)) identifiers.add(finding.id);
+            if (isRecord(finding) && nonEmpty(finding.id)) {
+              identifiers.add(finding.id);
+              if (!findingsById.has(finding.id)) {
+                findingsById.set(finding.id, structuredClone(finding));
+              }
+            }
           }
         }
       }
@@ -768,6 +892,8 @@ export function analyzeReviewHistory(
   }
   return {
     priorFindingIds: [...identifiers].sort(),
+    priorFindings: [...findingsById.values()].sort((left, right) =>
+      left.id.localeCompare(right.id)),
     priorExecutionIds: [...executionIds].sort(),
     priorEvidenceDigests: [...evidenceDigests].sort(),
     expectedPreviousCommentId: precedingId,
@@ -1292,7 +1418,6 @@ export function evaluateRepositoryPolicy({
   const normalizeRefName = (value) => {
     if (
       !isRecord(value) ||
-      Object.keys(value).sort().join(",") !== "exclude,include" ||
       !Array.isArray(value.include) ||
       !Array.isArray(value.exclude) ||
       ![...value.include, ...value.exclude].every(nonEmpty)
