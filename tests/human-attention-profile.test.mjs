@@ -136,6 +136,7 @@ const RELEASED_OBLIGATIONS = new Set([
   "verified_closed",
 ]);
 const CANONICAL_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const STABLE_IDENTIFIER = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
 const REQUIRED_PROJECTION_FIELDS = [
   "incident_slug",
   "requested_action",
@@ -159,6 +160,14 @@ function isCanonicalSlug(value) {
     typeof value === "string" &&
     value.length <= 96 &&
     CANONICAL_SLUG.test(value)
+  );
+}
+
+function isStableIdentifier(value) {
+  return (
+    typeof value === "string" &&
+    value.length <= 96 &&
+    STABLE_IDENTIFIER.test(value)
   );
 }
 
@@ -192,7 +201,7 @@ function parseProfileDeclaration(value) {
   ]) {
     if (
       !Array.isArray(value[field]) ||
-      value[field].some((identifier) => !isCanonicalSlug(identifier))
+      value[field].some((identifier) => !isStableIdentifier(identifier))
     ) {
       errors.push(`invalid_profile:${field}`);
     }
@@ -292,7 +301,7 @@ function isIntrinsicallyValidObligation(obligation, config) {
     (typeof obligation.closure_evidence_ref === "string" &&
       obligation.closure_evidence_ref.trim());
   return Boolean(
-    Number.isInteger(obligation.revision) &&
+    Number.isSafeInteger(obligation.revision) &&
       obligation.revision > 0 &&
       supportedState &&
       activeFieldsValid &&
@@ -438,7 +447,7 @@ function registryBySlug(testCase, errors) {
     }
     if (
       !slugIsCanonical ||
-      !Number.isInteger(record.last_known_revision) ||
+      !Number.isSafeInteger(record.last_known_revision) ||
       record.last_known_revision < 0
     ) {
       const diagnosticSlug = slugIsCanonical ? slug : "invalid-slug";
@@ -457,10 +466,11 @@ function registryBySlug(testCase, errors) {
 
 function projectionsBySlug(testCase, errors) {
   const projections = new Map();
+  const failed = new Set();
   let unscopedInvalid = false;
   if (!Array.isArray(testCase.projections)) {
     errors.push("invalid_projection_collection");
-    return { projections, unscopedInvalid: true };
+    return { projections, failed, unscopedInvalid: true };
   }
   for (const projection of testCase.projections) {
     if (!isPlainRecord(projection)) {
@@ -474,11 +484,22 @@ function projectionsBySlug(testCase, errors) {
       unscopedInvalid = true;
       continue;
     }
+    if (
+      Object.prototype.hasOwnProperty.call(
+        projection,
+        "obligation_revision",
+      ) &&
+      (!Number.isSafeInteger(projection.obligation_revision) ||
+        projection.obligation_revision <= 0)
+    ) {
+      errors.push(`invalid_projection_revision:${slug}`);
+      failed.add(slug);
+    }
     const matches = projections.get(slug) ?? [];
     matches.push(projection);
     projections.set(slug, matches);
   }
-  return { projections, unscopedInvalid };
+  return { projections, failed, unscopedInvalid };
 }
 
 function canonicalProjection(config, obligation) {
@@ -535,7 +556,7 @@ function intrinsicProjectionIsValid(projection) {
       projection.incident_path ===
         `.loopcompass/incidents/${projection.incident_slug}.md` &&
       ACTIVE_OBLIGATIONS.has(projection.state) &&
-      Number.isInteger(projection.obligation_revision) &&
+      Number.isSafeInteger(projection.obligation_revision) &&
       projection.obligation_revision > 0 &&
       typeof projection.surface === "string" &&
       projection.surface.trim(),
@@ -692,6 +713,7 @@ function assessConformance(testCase) {
   } = registryBySlug(testCase, errors);
   const {
     projections: projectionRecords,
+    failed: failedProjections,
     unscopedInvalid: unscopedProjection,
   } = projectionsBySlug(
     testCase,
@@ -710,7 +732,11 @@ function assessConformance(testCase) {
   if (unscopedSurfaceFailure) {
     errors.push("invalid_attention_surface:unscoped-record");
   }
-  const failedState = new Set([...failedObligations, ...failedRegistry]);
+  const failedState = new Set([
+    ...failedObligations,
+    ...failedRegistry,
+    ...failedProjections,
+  ]);
   for (const [slug, record] of registry) {
     if (failedState.has(slug) || failedIncidents.has(slug)) continue;
     const obligation = obligations.get(slug);
@@ -839,7 +865,10 @@ function reconcileProjections(testCase) {
     testCase,
     obligationErrors,
   );
-  const { projections: projectionRecords } = projectionsBySlug(
+  const {
+    projections: projectionRecords,
+    failed: failedProjections,
+  } = projectionsBySlug(
     testCase,
     obligationErrors,
   );
@@ -848,7 +877,11 @@ function reconcileProjections(testCase) {
     testCase.profile_config,
     obligationErrors,
   );
-  const failedState = new Set([...failed, ...failedRegistry]);
+  const failedState = new Set([
+    ...failed,
+    ...failedRegistry,
+    ...failedProjections,
+  ]);
   for (const [slug, record] of registry) {
     if (!obligations.has(slug) && !failedState.has(slug)) {
       obligationErrors.push(`missing_obligation_history:${slug}`);
@@ -974,7 +1007,10 @@ function repairRegistryCrash(testCase) {
     failed: failedRegistry,
     unscopedInvalid: unscopedRegistry,
   } = registryBySlug(working, errors);
-  const { unscopedInvalid: unscopedProjection } = projectionsBySlug(
+  const {
+    failed: failedProjections,
+    unscopedInvalid: unscopedProjection,
+  } = projectionsBySlug(
     testCase,
     errors,
   );
@@ -1007,7 +1043,8 @@ function repairRegistryCrash(testCase) {
       registry.get(slug) !== record ||
       failedIncidents.has(slug) ||
       failed.has(slug) ||
-      failedRegistry.has(slug)
+      failedRegistry.has(slug) ||
+      failedProjections.has(slug)
     ) {
       continue;
     }
@@ -1192,6 +1229,7 @@ describe("optional human-attention profile", () => {
     for (const id of [
       "disabled-imposes-no-projection",
       "enabled-exactly-one-human-capability",
+      "schema1-underscore-capability-is-conformant",
       "mixed-capability-list-creates-human-obligation",
       "enabled-needs-persisted-obligation",
       "first-marker-write-crash-is-recoverable",
@@ -1289,6 +1327,48 @@ describe("optional human-attention profile", () => {
     assert.deepEqual(firstPass, [testCase.expected.reconciled_projection]);
     const replay = reconcileProjections({ ...testCase, projections: firstPass });
     assert.deepEqual(replay, firstPass);
+  });
+
+  it("rejects unsafe marker, registry, and projection revisions before repair or reconciliation", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const unsafeRevision = Number.MAX_SAFE_INTEGER + 1;
+    const variants = [
+      {
+        error: "invalid_obligation:console-action-required",
+        mutate(testCase) {
+          testCase.obligations.at(-1).revision = unsafeRevision;
+        },
+      },
+      {
+        error: "invalid_registry_record:console-action-required",
+        mutate(testCase) {
+          testCase.known_obligations[0].last_known_revision = unsafeRevision;
+        },
+      },
+      {
+        error: "invalid_projection_revision:console-action-required",
+        mutate(testCase) {
+          testCase.projections[0].obligation_revision = unsafeRevision;
+        },
+      },
+    ];
+
+    for (const { error, mutate } of variants) {
+      const testCase = resolveCase(fixture, structuredClone(rawCase));
+      mutate(testCase);
+      const original = structuredClone(testCase);
+      assert.ok(assessConformance(testCase).includes(error), error);
+      assert.deepEqual(repairRegistryCrash(testCase), original, error);
+      assert.throws(
+        () => reconcileProjections(testCase),
+        /obligation conflict blocks reconciliation/,
+        error,
+      );
+      assert.deepEqual(testCase, original, error);
+    }
   });
 
   it("detects total deletion from the retained known-obligation registry", () => {

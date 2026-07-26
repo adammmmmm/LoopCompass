@@ -28,7 +28,10 @@ file. Before any marker, registry, or projection mutation, validate that the pro
 enabled and has one nonempty designated surface, one nonempty integration authority, and a
 nonempty project audit/retention policy. The declaration must be a mapping, `enabled` must be a
 Boolean, and the human-only capability and decision collections must be arrays containing only
-nonempty stable identifiers. Parse this declaration once, defensively, before classification or
+nonempty stable identifiers. Stable capability and decision identifiers use lowercase letters and
+digits separated by hyphens or underscores; schema-1 vocabulary such as `repository_write`,
+`operator_approval`, and `global_config_write` remains valid. Incident slugs use their separate,
+hyphen-only grammar. Parse this declaration once, defensively, before classification or
 reconciliation. A disabled or incomplete declaration grants no mutation authority; a malformed
 enabled declaration reports only configuration errors, suppresses repair/recovery diagnostics,
 preserves every existing record unchanged, and never causes a runtime exception. Report the
@@ -94,6 +97,11 @@ Each marker is keyed by canonical incident slug and carries:
   active; and
 - for `verified_closed`, a non-sensitive durable reference to the normal-path verification and
   closure evidence.
+
+Every marker revision and projection `obligation_revision` must be a positive safe integer.
+Registry `last_known_revision` must be a nonnegative safe integer because revision 0 is reserved
+for the documented first-write crash window. Unsafe integers never participate in ordering,
+selection, fingerprinting, repair, or reconciliation.
 
 Every historical co-marker must be a mapping with a canonical nonempty slug, a positive integer
 revision, and one of the supported states. Every active historical marker must carry a nonempty

@@ -22,6 +22,14 @@
       "human_only_capabilities": [],
       "human_only_decisions": ["production-release"]
     },
+    "schema1_underscore": {
+      "enabled": true,
+      "surface": "HANDOFF.md",
+      "authority": "incident-coordinator",
+      "history_retention": "project-audit-policy",
+      "human_only_capabilities": ["repository_write"],
+      "human_only_decisions": []
+    },
     "invalid": {
       "enabled": true,
       "surface": "",
@@ -81,6 +89,47 @@
           "incident_slug": "console-action-required",
           "requested_action": "Perform the production console action.",
           "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "schema1-underscore-capability-is-conformant",
+      "profile_config": "schema1_underscore",
+      "incidents": [
+        {
+          "slug": "repository-write-required",
+          "open": true,
+          "requires": ["repository_write"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "repository-write-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "repository-write-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "repository_write",
+          "requested_action": "Perform the repository write."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "repository-write-required",
+          "requested_action": "Perform the repository write.",
+          "incident_path": ".loopcompass/incidents/repository-write-required.md",
           "state": "human_action_pending",
           "obligation_revision": 1,
           "surface": "HANDOFF.md"
