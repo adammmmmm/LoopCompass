@@ -2369,43 +2369,45 @@ test("cleanup attempts dismissal even when blocking status publication fails", a
   assert.equal(dismissalAttempted, true);
 });
 
-test("post-terminal association failure blocks and dismisses the active receipt", async () => {
+test("post-terminal association loader failure cleans up and remains operational", async () => {
   const runUrl = "https://github.com/example/project/actions/runs/100";
   const calls = [];
   let associations = 0;
   let terminalResult = null;
-  const result = await runPolicyEvaluation({
-    loadHead: async () => sha,
-    loadSnapshot: async () => rawSnapshot(),
-    loadAssociatedPullRequests: async () => {
-      associations += 1;
-      if (associations >= 4) throw new Error("association unavailable");
-      return associatedPullRequests();
-    },
-    publish: async (head, state, value) => {
-      calls.push(state);
-      if (state === "terminal") terminalResult = value;
-    },
-    publishReview: async () => {
-      calls.push("review");
-      return { id: 503 };
-    },
-    dismissReview: async (review) => calls.push(`dismiss-${review.id}`),
-    listStatuses: async () =>
-      ownedStatuses(runUrl).map((status) => ({
-        ...status,
-        state: terminalResult
-          ? status.context === "model-review-gate"
-            ? terminalResult.modelOk ? "success" : "failure"
-            : terminalResult.deliveryOk ? "success" : "failure"
-          : "pending",
-      })),
-    config,
-    repository,
-    pullNumber: 1,
-    runUrl,
-  });
-  assert.equal(result.outcome, "blocked_post_terminal_association");
+  await assert.rejects(
+    runPolicyEvaluation({
+      loadHead: async () => sha,
+      loadSnapshot: async () => rawSnapshot(),
+      loadAssociatedPullRequests: async () => {
+        associations += 1;
+        if (associations >= 4) throw new Error("association unavailable");
+        return associatedPullRequests();
+      },
+      publish: async (head, state, value) => {
+        calls.push(state);
+        if (state === "terminal") terminalResult = value;
+      },
+      publishReview: async () => {
+        calls.push("review");
+        return { id: 503 };
+      },
+      dismissReview: async (review) => calls.push(`dismiss-${review.id}`),
+      listStatuses: async () =>
+        ownedStatuses(runUrl).map((status) => ({
+          ...status,
+          state: terminalResult
+            ? status.context === "model-review-gate"
+              ? terminalResult.modelOk ? "success" : "failure"
+              : terminalResult.deliveryOk ? "success" : "failure"
+            : "pending",
+        })),
+      config,
+      repository,
+      pullNumber: 1,
+      runUrl,
+    }),
+    /association unavailable/,
+  );
   assert.deepEqual(calls, [
     "pending",
     "review",
@@ -2413,6 +2415,75 @@ test("post-terminal association failure blocks and dismisses the active receipt"
     "pending",
     "dismiss-503",
   ]);
+});
+
+test("pre-terminal association loader failure rejects after publishing blocking statuses", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  const published = [];
+  let terminalResult = null;
+  await assert.rejects(
+    runPolicyEvaluation({
+      loadHead: async () => sha,
+      loadSnapshot: async () => rawSnapshot(),
+      loadAssociatedPullRequests: async () => {
+        throw new Error("association API unavailable");
+      },
+      publish: async (head, state, value) => {
+        published.push({ head, state, value });
+        if (state === "terminal") terminalResult = value;
+      },
+      publishReview: async () => ({ id: 504 }),
+      listStatuses: async () =>
+        ownedStatuses(runUrl).map((status) => ({
+          ...status,
+          state: terminalResult ? "failure" : "pending",
+        })),
+      config,
+      repository,
+      pullNumber: 1,
+      runUrl,
+    }),
+    /association API unavailable/,
+  );
+  assert.deepEqual(
+    published.map(({ state }) => state),
+    ["pending", "terminal"],
+  );
+  assert.equal(published.at(-1).value.modelOk, false);
+  assert.equal(published.at(-1).value.deliveryOk, false);
+});
+
+test("successfully loaded ambiguous associations remain a normal policy denial", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  let terminalResult = null;
+  const result = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    loadAssociatedPullRequests: async () => [
+      ...associatedPullRequests(),
+      { number: 2, state: "open", head: { sha } },
+    ],
+    publish: async (_head, state, value) => {
+      if (state === "terminal") terminalResult = value;
+    },
+    publishReview: async () => ({ id: 505 }),
+    listStatuses: async () =>
+      ownedStatuses(runUrl).map((status) => ({
+        ...status,
+        state: terminalResult ? "failure" : "pending",
+      })),
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl,
+  });
+  assert.equal(result.outcome, "fail");
+  assert.match(
+    result.result.modelReasons.join(" "),
+    /exactly one open current pull request/,
+  );
+  assert.equal(result.result.modelOk, false);
+  assert.equal(result.result.deliveryOk, false);
 });
 
 test("snapshot pager failure occurs only after pending and fails closed in review-first order", async () => {
