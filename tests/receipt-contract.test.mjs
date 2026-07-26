@@ -1111,10 +1111,43 @@ describe("terminal receipt contract", () => {
       );
     }
 
+    for (const mutate of [
+      (content) => content.replace(
+        "owner: Incident Coordinator",
+        'owner: "Incident \\ud800 Coordinator"',
+      ),
+      (content) => content.replace(
+        'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+        'signature: "Panel launcher \\udc00 discovery differs between contexts."',
+      ),
+    ]) {
+      const surrogate = structuredClone(propagatedCase.terminal_receipt);
+      surrogate.proposed_artifact.content = mutate(
+        surrogate.proposed_artifact.content,
+      );
+      assert.throws(
+        () => validateTerminalReceipt(surrogate),
+        /unpaired Unicode surrogate/,
+      );
+    }
+
+    for (const [field, replacement] of [
+      ["  versions: managed", '  versions: "managed \\ud800"'],
+      ["first_seen: 2026-07-26", 'first_seen: "2026-07-26\\udc00"'],
+    ]) {
+      const surrogate = recoveryProposalReceipt();
+      surrogate.proposed_artifact.content =
+        surrogate.proposed_artifact.content.replace(field, replacement);
+      assert.throws(
+        () => validateTerminalReceipt(surrogate),
+        /unpaired Unicode surrogate/,
+      );
+    }
+
     const benign = recoveryProposalReceipt();
     benign.proposed_artifact.content = benign.proposed_artifact.content.replace(
       "  versions: managed",
-      '  versions: "22.15.0; Codex\\u0020managed sandbox"',
+      '  versions: "22.15.0; Codex\\u0020managed sandbox \\ud83d\\ude80"',
     );
     assert.doesNotThrow(() => validateTerminalReceipt(benign));
   });

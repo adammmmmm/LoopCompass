@@ -193,6 +193,13 @@ export function validateSanitizedProse(
   if (typeof value !== "string" || value.trim().length === 0) {
     fail(label, " must be a non-empty string");
   }
+  if (
+    typeof value.isWellFormed === "function"
+      ? !value.isWellFormed()
+      : /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value)
+  ) {
+    fail(label, " contains an unpaired Unicode surrogate; sanitize it before use");
+  }
   if (hasUnsafeTextControl(value, options)) {
     fail(
       label,
