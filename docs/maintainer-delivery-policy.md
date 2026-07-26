@@ -18,7 +18,9 @@ request with green `verify`, and assembled closure evidence. Exit to Done requir
 model reviews of the current pull request HEAD. Every review has a verdict and a distinct seat and
 model identity; public seat identifiers use `R<n>`. Every material finding has an evidence-backed
 disposition, blocker fixes are re-verified, and review conversations are resolved. A push changes
-the HEAD, dismisses stale approvals, and invalidates all earlier evidence.
+the HEAD generation, dismisses stale approvals, and invalidates all earlier evidence. The trusted
+workflow-run identifier for each open or synchronize event is the durable per-pull-request
+generation marker, so returning to an earlier SHA does not reactivate its evidence.
 
 Concurrent runs are ordered by numeric Actions run identifiers. Full paginated status history lets
 the higher run reclaim lower-run writes, while foreign or unparseable status sources fail closed.
@@ -31,6 +33,8 @@ be posted by a configured maintainer and use this shape:
 
 **Target:** `<40-character commit SHA>`
 
+**Generation:** `<workflow run identifier>`
+
 **Verdict:** `Approved`
 
 - R1 — <provider/model> — Approved
@@ -40,7 +44,7 @@ be posted by a configured maintainer and use this shape:
 No blocking findings identified.
 
 <!-- loopcompass-review:v1
-{"schema":1,"head_sha":"<40-character commit SHA>","overall_verdict":"approved","previous_comment_id":null,"reviews":[{"seat":"R1","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]},{"seat":"R2","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]},{"seat":"R3","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]}]}
+{"schema":1,"head_sha":"<40-character commit SHA>","head_generation":<workflow run identifier>,"overall_verdict":"approved","previous_comment_id":null,"reviews":[{"seat":"R1","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]},{"seat":"R2","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]},{"seat":"R3","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]}]}
 -->
 ```
 
@@ -96,7 +100,7 @@ repository audit logs are the external evidence for destructive administrative c
   boundaries, policy configuration, this policy, and every file under `scripts/`, `tests/`, or
   `fixtures/`.
 - Human review can be a native approval targeting the current HEAD or a `human_approval` object in
-  the canonical maintainer comment. The object contains `reviewer`, `head_sha`,
+  the canonical maintainer comment. The object contains `reviewer`, `head_sha`, `head_generation`,
   `verdict: "approved"`, `kind`, and `authorization_reference`; its reviewer must be the configured
   human maintainer who posted the comment. Bot and App records are rejected. A different maintainer
   uses `kind: "maintainer_review"`; the pull request author's own native approval is not accepted. A
@@ -118,10 +122,12 @@ repository audit logs are the external evidence for destructive administrative c
 
   **Target:** `<40-character commit SHA>`
 
+  **Generation:** `<workflow run identifier>`
+
   **Verdict:** `Approved`
 
   <!-- loopcompass-human-authorization:v1
-  {"schema":1,"head_sha":"<40-character commit SHA>","verdict":"approved"}
+  {"schema":1,"head_sha":"<40-character commit SHA>","head_generation":<workflow run identifier>,"verdict":"approved"}
   -->
   ```
 - Native approval clicks do not count as independent model records and cannot replace the structured
@@ -155,8 +161,8 @@ reviews; only the trusted gate workflow receives local `pull-requests: write`. T
 tolerates additive API response fields while checking every configured security-relevant value.
 Hidden bypass actors, missing required parameters, or insufficient visibility are `unverifiable`,
 never compliant. Complete closure evidence requires running
-`node scripts/review-gate.mjs audit` with an explicit read-only maintainer or administrator
-credential. No credential is stored by the workflow.
+`node scripts/review-gate.mjs audit` with an ephemeral, least-privilege read-only maintainer or
+administrator credential. No credential is stored by the workflow.
 
 Policy enablement is not complete when files merely merge. Closure requires the workflow on the
 default branch, `can_approve_pull_request_reviews: true` with default workflow permissions still

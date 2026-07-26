@@ -191,6 +191,8 @@ export function renderVisibleReview(metadata) {
     "",
     `**Target:** \`${metadata.head_sha}\``,
     "",
+    `**Generation:** \`${metadata.head_generation}\``,
+    "",
     `**Verdict:** \`${overall}\``,
     "",
     ...verdictLines,
@@ -256,12 +258,19 @@ export function parseReviewComment(body) {
   }
 }
 
-export function renderHumanAuthorization(headSha) {
-  const metadata = { schema: 1, head_sha: headSha, verdict: "approved" };
+export function renderHumanAuthorization(headSha, headGeneration = 1) {
+  const metadata = {
+    schema: 1,
+    head_sha: headSha,
+    head_generation: headGeneration,
+    verdict: "approved",
+  };
   return [
     "### Operator authorization",
     "",
     `**Target:** \`${headSha}\``,
+    "",
+    `**Generation:** \`${headGeneration}\``,
     "",
     "**Verdict:** `Approved`",
     "",
@@ -287,13 +296,18 @@ export function parseHumanAuthorization(body) {
   }
   try {
     const metadata = parseUniqueJson(source.slice(start + open.length, end));
-    const canonical = renderHumanAuthorization(metadata?.head_sha);
+    const canonical = renderHumanAuthorization(
+      metadata?.head_sha,
+      metadata?.head_generation,
+    );
     const canonicalWithLineFeed = `${canonical}\n`;
     if (
       !isRecord(metadata) ||
-      Object.keys(metadata).sort().join(",") !== "head_sha,schema,verdict" ||
+      Object.keys(metadata).sort().join(",") !== "head_generation,head_sha,schema,verdict" ||
       metadata.schema !== 1 ||
       !exactSha(metadata.head_sha) ||
+      !Number.isSafeInteger(metadata.head_generation) ||
+      metadata.head_generation < 1 ||
       metadata.verdict !== "approved" ||
       ![canonical, canonicalWithLineFeed].includes(source)
     ) {
@@ -346,7 +360,13 @@ function validateVisibleContract(visible, metadata, rawBody) {
   return errors;
 }
 
-function latestEffectiveHumanApproval(nativeApprovals, maintainers, headSha, author) {
+function latestEffectiveHumanApproval(
+  nativeApprovals,
+  maintainers,
+  headSha,
+  author,
+  generationCreatedAt,
+) {
   const allowed = new Set(maintainers.map(normalize));
   const byMaintainer = new Map();
   const ordered = (Array.isArray(nativeApprovals) ? [...nativeApprovals] : []).sort((left, right) => {
@@ -365,7 +385,10 @@ function latestEffectiveHumanApproval(nativeApprovals, maintainers, headSha, aut
     }
     if (review.state === "APPROVED") {
       byMaintainer.set(login, {
-        approved: review.commit_id === headSha,
+        approved:
+          review.commit_id === headSha &&
+          (!validTimestamp(generationCreatedAt) ||
+            new Date(review.submitted_at) >= new Date(generationCreatedAt)),
         commit: review.commit_id,
       });
     } else if (["CHANGES_REQUESTED", "DISMISSED"].includes(review.state)) {
@@ -382,14 +405,17 @@ function validateHumanApprovalStructure(
 ) {
   const validObject = validateKeys(
     attestation,
-    ["reviewer", "head_sha", "verdict", "kind", "authorization_reference"],
-    ["reviewer", "head_sha", "verdict", "kind", "authorization_reference"],
+    ["reviewer", "head_sha", "head_generation", "verdict", "kind", "authorization_reference"],
+    ["reviewer", "head_sha", "head_generation", "verdict", "kind", "authorization_reference"],
     "human_approval",
     reasons,
   );
   if (!validObject) return false;
   if (!nonEmpty(attestation.reviewer)) reasons.push("human_approval reviewer is required");
   if (!exactSha(attestation.head_sha)) reasons.push("human_approval head_sha must be exact");
+  if (!Number.isSafeInteger(attestation.head_generation) || attestation.head_generation < 1) {
+    reasons.push("human_approval head_generation must be a positive integer");
+  }
   if (attestation.verdict !== "approved") {
     reasons.push("human_approval verdict must be approved");
   }
@@ -419,6 +445,7 @@ function validHumanAttestation({
   comment,
   author,
   headSha,
+  headGeneration,
   maintainers,
   repository,
   pullNumber,
@@ -450,6 +477,7 @@ function validHumanAttestation({
     comment.created_at === comment.updated_at &&
     normalize(attestation.reviewer) === normalize(comment.author) &&
     attestation.head_sha === headSha &&
+    attestation.head_generation === headGeneration &&
     attestation.verdict === "approved" &&
     attestation.kind === expectedKind;
   if (!baseValid) return false;
@@ -484,7 +512,8 @@ function validHumanAttestation({
   const parsedAuthorization = parseHumanAuthorization(authorization.body);
   return (
     !parsedAuthorization?.error &&
-    parsedAuthorization?.metadata?.head_sha === headSha
+    parsedAuthorization?.metadata?.head_sha === headSha &&
+    parsedAuthorization?.metadata?.head_generation === headGeneration
   );
 }
 
@@ -493,6 +522,8 @@ function deliveryEvaluation({
   comment,
   author,
   headSha,
+  headGeneration,
+  generationCreatedAt,
   delivery,
   config,
   nativeApprovals,
@@ -506,12 +537,14 @@ function deliveryEvaluation({
     config.human_maintainers,
     headSha,
     author,
+    generationCreatedAt,
   );
   const attestation = validHumanAttestation({
     metadata: parsed?.metadata,
     comment,
     author,
     headSha,
+    headGeneration,
     maintainers: config.human_maintainers,
     repository,
     pullNumber,
@@ -523,6 +556,8 @@ function deliveryEvaluation({
 export function validateReviewRecord({
   comment,
   headSha,
+  headGeneration = 1,
+  generationCreatedAt,
   author,
   changedFiles,
   filesComplete = true,
@@ -553,6 +588,8 @@ export function validateReviewRecord({
     comment,
     author,
     headSha,
+    headGeneration,
+    generationCreatedAt,
     delivery,
     config,
     nativeApprovals,
@@ -572,12 +609,20 @@ export function validateReviewRecord({
       [
         "schema",
         "head_sha",
+        "head_generation",
         "overall_verdict",
         "previous_comment_id",
         "reviews",
         "human_approval",
       ],
-      ["schema", "head_sha", "overall_verdict", "previous_comment_id", "reviews"],
+      [
+        "schema",
+        "head_sha",
+        "head_generation",
+        "overall_verdict",
+        "previous_comment_id",
+        "reviews",
+      ],
       "review metadata",
       modelReasons,
     );
@@ -588,6 +633,20 @@ export function validateReviewRecord({
       if (metadata.schema !== 1) modelReasons.push("review metadata schema must be 1");
       if (metadata.head_sha !== headSha) {
         modelReasons.push("review evidence does not target the current HEAD");
+      }
+      if (
+        !Number.isSafeInteger(headGeneration) ||
+        headGeneration < 1 ||
+        metadata.head_generation !== headGeneration
+      ) {
+        modelReasons.push("review evidence does not target the current head generation");
+      }
+      if (
+        validTimestamp(generationCreatedAt) &&
+        (!validTimestamp(comment?.created_at) ||
+          new Date(comment.created_at) < new Date(generationCreatedAt))
+      ) {
+        modelReasons.push("review evidence predates the current head generation");
       }
       if (!["approved", "changes_requested"].includes(metadata.overall_verdict)) {
         modelReasons.push("overall verdict must be approved or changes_requested");
@@ -798,7 +857,7 @@ export function selectReviewComment(comments, maintainers = []) {
     .filter(
       (comment) =>
         isRecord(comment) &&
-        allowed.has(normalize(comment.author)) && comment.body?.includes(REVIEW_MARKER),
+        allowed.has(normalize(comment.author)) && comment.body?.includes(REVIEW_OPEN),
     )
     .sort((left, right) => {
       const time = new Date(right.created_at) - new Date(left.created_at);
@@ -828,7 +887,7 @@ export function analyzeReviewHistory(
     }
     if (
       !allowed.has(normalize(comment.author)) ||
-      !comment.body?.includes(REVIEW_MARKER)
+      !comment.body?.includes(REVIEW_OPEN)
     ) {
       continue;
     }
@@ -847,9 +906,13 @@ export function analyzeReviewHistory(
     const historicalTarget = isRecord(entry.parsed?.metadata)
       ? entry.parsed.metadata.head_sha
       : "";
+    const historicalGeneration = isRecord(entry.parsed?.metadata)
+      ? entry.parsed.metadata.head_generation
+      : null;
     const validation = validateReviewRecord({
       comment: entry.comment,
       headSha: historicalTarget,
+      headGeneration: historicalGeneration,
       author: entry.comment.author,
       changedFiles: [],
       filesComplete: true,
@@ -914,7 +977,28 @@ export function resolvePullRequestNumber(event) {
   return number;
 }
 
-export function normalizeGitHubSnapshot({ pull, files, comments, reviews }) {
+export function selectWorkflowHeadGeneration(runs, pullNumber) {
+  return (Array.isArray(runs) ? runs : [])
+    .filter(
+      (run) =>
+        Number.isSafeInteger(Number(run?.id)) &&
+        Number(run.id) > 0 &&
+        exactSha(run.head_sha) &&
+        validTimestamp(run.created_at) &&
+        new RegExp(`^delivery-policy-(?:opened|synchronize)-pr-${pullNumber}$`)
+          .test(run.display_title ?? "") &&
+        run.pull_requests?.some((pull) => Number(pull?.number) === pullNumber),
+    )
+    .sort((left, right) => Number(right.id) - Number(left.id))
+    .map((run) => ({
+      id: Number(run.id),
+      pullNumber,
+      headSha: run.head_sha,
+      createdAt: run.created_at,
+    }))[0] ?? null;
+}
+
+export function normalizeGitHubSnapshot({ pull, files, comments, reviews, generation }) {
   if (!isRecord(pull) || !isRecord(pull.head) || !exactSha(pull.head.sha)) {
     throw new Error("pull request payload is missing an exact HEAD SHA");
   }
@@ -928,14 +1012,9 @@ export function normalizeGitHubSnapshot({ pull, files, comments, reviews }) {
       ),
     ),
   ];
-  return {
-    pullNumber: pull.number,
-    headSha: pull.head.sha,
-    author: pull.user?.login,
-    changedFiles,
-    filesComplete:
-      Number.isInteger(pull.changed_files) && fileList.length >= pull.changed_files,
-    comments: (Array.isArray(comments) ? comments : []).filter(isRecord).map((item) => ({
+  const normalizedComments = (Array.isArray(comments) ? comments : [])
+    .filter(isRecord)
+    .map((item) => ({
       id: item.id,
       body: item.body,
       author: item.user?.login,
@@ -943,7 +1022,24 @@ export function normalizeGitHubSnapshot({ pull, files, comments, reviews }) {
       performed_via_github_app: item.performed_via_github_app,
       created_at: item.created_at,
       updated_at: item.updated_at,
-    })),
+    }));
+  const validGeneration =
+    isRecord(generation) &&
+    Number.isSafeInteger(generation.id) &&
+    generation.id > 0 &&
+    generation.pullNumber === pull.number &&
+    generation.headSha === pull.head.sha &&
+    validTimestamp(generation.createdAt);
+  return {
+    pullNumber: pull.number,
+    headSha: pull.head.sha,
+    author: pull.user?.login,
+    changedFiles,
+    filesComplete:
+      Number.isInteger(pull.changed_files) && fileList.length >= pull.changed_files,
+    headGeneration: validGeneration ? generation.id : null,
+    generationCreatedAt: validGeneration ? generation.createdAt : null,
+    comments: normalizedComments,
     reviews: (Array.isArray(reviews) ? reviews : []).filter(isRecord).map((item) => ({
       id: item.id,
       state: item.state,
@@ -967,6 +1063,8 @@ export function evaluateSnapshot(snapshot, config, repository) {
   return validateReviewRecord({
     comment,
     headSha: snapshot.headSha,
+    headGeneration: snapshot.headGeneration,
+    generationCreatedAt: snapshot.generationCreatedAt,
     author: snapshot.author,
     changedFiles: snapshot.changedFiles,
     filesComplete: snapshot.filesComplete,
@@ -1012,8 +1110,8 @@ function sameRunRepository(left, right) {
 }
 
 function newestFirst(left, right) {
-  const leftTime = new Date(left?.created_at ?? "").getTime();
-  const rightTime = new Date(right?.created_at ?? "").getTime();
+  const leftTime = new Date(left?.submitted_at ?? left?.created_at ?? "").getTime();
+  const rightTime = new Date(right?.submitted_at ?? right?.created_at ?? "").getTime();
   if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
     return rightTime - leftTime;
   }
@@ -1353,6 +1451,7 @@ export function auditBranches({
   branches,
   openPullRequests,
   repository,
+  defaultBranch = "main",
   exemptions = [],
 }) {
   const covered = new Set(
@@ -1369,7 +1468,7 @@ export function auditBranches({
   const exempt = Array.isArray(exemptions) ? exemptions : [];
   return (Array.isArray(branches) ? branches : [])
     .filter((branch) => isRecord(branch) && nonEmpty(branch.name))
-    .filter((branch) => branch.name !== "main")
+    .filter((branch) => branch.name !== defaultBranch)
     .filter((branch) => !matchesSensitivePath(branch.name, exempt))
     .filter((branch) => !covered.has(branch.name))
     .map((branch) => branch.name);

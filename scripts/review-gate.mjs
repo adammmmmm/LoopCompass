@@ -10,6 +10,7 @@ import {
   loadStatusHistory,
   resolvePullRequestNumber,
   runPolicyEvaluation,
+  selectWorkflowHeadGeneration,
 } from "./lib/review-gate.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -46,11 +47,46 @@ function repository() {
   return value;
 }
 
+async function resolveHeadGeneration(event, repo, pullNumber, headSha) {
+  if (
+    event.pull_request &&
+    ["opened", "synchronize"].includes(event.action)
+  ) {
+    const run = await api(`/repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`);
+    return {
+      id: Number(run.id),
+      pullNumber,
+      headSha,
+      createdAt: run.created_at,
+    };
+  }
+  const candidates = [];
+  for (let page = 1; ; page += 1) {
+    const response = await api(
+      `/repos/${repo}/actions/workflows/review-gate.yml/runs?event=pull_request_target&per_page=100&page=${page}`,
+    );
+    const runs = Array.isArray(response?.workflow_runs) ? response.workflow_runs : [];
+    candidates.push(
+      ...runs.filter((run) =>
+        run.pull_requests?.some((pull) => Number(pull.number) === pullNumber)),
+    );
+    if (runs.length < 100) break;
+  }
+  return selectWorkflowHeadGeneration(candidates, pullNumber);
+}
+
 async function evaluatePullRequest() {
   const event = JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH, "utf8"));
   const number = resolvePullRequestNumber(event);
   const repo = repository();
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+  const initialHead = await api(`/repos/${repo}/pulls/${number}`);
+  const generation = await resolveHeadGeneration(
+    event,
+    repo,
+    number,
+    initialHead.head.sha,
+  );
   const publish = async (sha, state, result, targetUrl = runUrl) => {
     const payloads =
       state === "reassert"
@@ -72,7 +108,7 @@ async function evaluatePullRequest() {
       pages(`/repos/${repo}/issues/${number}/comments`),
       pages(`/repos/${repo}/pulls/${number}/reviews`),
     ]);
-    return { pull, files, comments, reviews };
+    return { pull, files, comments, reviews, generation };
   };
   const loadHead = async () => (await api(`/repos/${repo}/pulls/${number}`)).head.sha;
   const loadAssociatedPullRequests = async (sha) =>
@@ -146,14 +182,16 @@ async function auditRepositoryPolicy() {
 
 async function evaluateBranches() {
   const repo = repository();
-  const [branches, pulls] = await Promise.all([
+  const [branches, pulls, settings] = await Promise.all([
     pages(`/repos/${repo}/branches`),
     pages(`/repos/${repo}/pulls?state=open`),
+    api(`/repos/${repo}`),
   ]);
   const orphaned = auditBranches({
     branches,
     openPullRequests: pulls,
     repository: repo,
+    defaultBranch: settings.default_branch,
     exemptions: config.branch_audit_exemptions,
   });
   console.log(JSON.stringify({ orphaned_branches: orphaned }, null, 2));

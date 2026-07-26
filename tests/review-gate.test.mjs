@@ -20,6 +20,7 @@ import {
   renderVisibleReview,
   resolvePullRequestNumber,
   runPolicyEvaluation,
+  selectWorkflowHeadGeneration,
   selectReviewComment,
   validateReviewRecord,
 } from "../scripts/lib/review-gate.mjs";
@@ -60,6 +61,7 @@ function metadata(overrides = {}) {
   return {
     schema: 1,
     head_sha: sha,
+    head_generation: 1,
     overall_verdict: "approved",
     previous_comment_id: null,
     reviews: [
@@ -145,10 +147,11 @@ function authorizationComment({
   app = null,
   createdAt = "2025-12-31T23:59:00Z",
   updatedAt = createdAt,
+  headGeneration = 1,
 } = {}) {
   return {
     id,
-    body: renderHumanAuthorization(headSha),
+    body: renderHumanAuthorization(headSha, headGeneration),
     author,
     author_type: authorType,
     performed_via_github_app: app,
@@ -165,6 +168,8 @@ function rawSnapshot({
   comments = [apiComment()],
   reviews = [],
   changedFiles = files.length,
+  headGeneration = 1,
+  generationCreatedAt = "2025-12-31T23:58:00Z",
 } = {}) {
   return {
     pull: {
@@ -176,6 +181,12 @@ function rawSnapshot({
     files,
     comments,
     reviews,
+    generation: {
+      id: headGeneration,
+      pullNumber,
+      headSha,
+      createdAt: generationCreatedAt,
+    },
   };
 }
 
@@ -188,10 +199,14 @@ function evaluate({
   nativeApprovals = [],
   authorizationComments = [],
   policy = config,
+  headGeneration = 1,
+  generationCreatedAt,
 } = {}) {
   return validateReviewRecord({
     comment: reviewComment ?? comment(data, commentAuthor),
     headSha: sha,
+    headGeneration,
+    generationCreatedAt,
     author,
     changedFiles,
     config: policy,
@@ -280,6 +295,7 @@ test("external and sensitive changes require current human maintainer review", (
     human_approval: {
       reviewer: "maintainer",
       head_sha: sha,
+      head_generation: 1,
       verdict: "approved",
       kind: "operator_authorization",
       authorization_reference: "https://github.com/example/project/pull/1#issuecomment-50",
@@ -289,6 +305,7 @@ test("external and sensitive changes require current human maintainer review", (
     human_approval: {
       reviewer: "maintainer",
       head_sha: sha,
+      head_generation: 1,
       verdict: "approved",
       kind: "maintainer_review",
       authorization_reference: "https://github.com/example/project/pull/1",
@@ -394,6 +411,7 @@ test("attestation authorization must reference the current repository", () => {
     human_approval: {
       reviewer: "maintainer",
       head_sha: sha,
+      head_generation: 1,
       verdict: "approved",
       kind: "operator_authorization",
       authorization_reference: "https://github.com/another/project/pull/1#issuecomment-50",
@@ -410,6 +428,7 @@ test("operator authorization resolves to an immutable same-PR human comment", ()
     human_approval: {
       reviewer: "maintainer",
       head_sha: sha,
+      head_generation: 1,
       verdict: "approved",
       kind: "operator_authorization",
       authorization_reference: "https://github.com/example/project/pull/1#issuecomment-50",
@@ -544,6 +563,7 @@ test("edited carrying review comments cannot satisfy human approval", () => {
     human_approval: {
       reviewer: "maintainer",
       head_sha: sha,
+      head_generation: 1,
       verdict: "approved",
       kind: "maintainer_review",
       authorization_reference: "https://github.com/example/project/pull/1",
@@ -576,6 +596,7 @@ test("human_approval is structurally validated even when delivery review is not 
     human_approval: {
       reviewer: 7,
       head_sha: "not-a-sha",
+      head_generation: 0,
       verdict: "maybe",
       kind: "unknown",
       authorization_reference: 9,
@@ -692,6 +713,7 @@ test("Bot and App records cannot satisfy human review", () => {
     human_approval: {
       reviewer: "maintainer",
       head_sha: sha,
+      head_generation: 1,
       verdict: "approved",
       kind: "operator_authorization",
       authorization_reference: "https://github.com/example/project/pull/1#issuecomment-50",
@@ -1220,7 +1242,17 @@ test("selector fails forward to the latest maintainer marker and ignores foreign
     created_at: "2026-01-01T00:02:00Z",
     updated_at: "2026-01-01T00:02:00Z",
   };
-  assert.equal(selectReviewComment([older, latest, foreign], ["maintainer"]), latest);
+  const quotedMarker = {
+    ...comment(metadata()),
+    id: 13,
+    body: "Documentation mentions loopcompass-review:v1 without publishing metadata.",
+    created_at: "2026-01-01T00:03:00Z",
+    updated_at: "2026-01-01T00:03:00Z",
+  };
+  assert.equal(
+    selectReviewComment([older, latest, foreign, quotedMarker], ["maintainer"]),
+    latest,
+  );
 });
 
 test("delivery classification distinguishes first-party, external, and sensitive changes", () => {
@@ -1295,6 +1327,15 @@ test("durable remote implementation branches need a same-repository pull request
       repository: "owner/project",
     }),
     ["codex/null-head"],
+  );
+  assert.deepEqual(
+    auditBranches({
+      branches: [{ name: "trunk" }, { name: "main" }],
+      openPullRequests: [],
+      repository: "owner/project",
+      defaultBranch: "trunk",
+    }),
+    ["main"],
   );
 });
 
@@ -1408,6 +1449,44 @@ test("event resolution and layered status payloads are deterministic", () => {
   );
 });
 
+test("workflow runs provide a trusted per-pull-request head generation", () => {
+  const otherSha = "b".repeat(40);
+  assert.deepEqual(
+    selectWorkflowHeadGeneration(
+      [
+        {
+          id: 10,
+          display_title: "delivery-policy-opened-pr-1",
+          head_sha: sha,
+          created_at: "2026-01-01T00:00:00Z",
+          pull_requests: [{ number: 1 }],
+        },
+        {
+          id: 12,
+          display_title: "delivery-policy-synchronize-pr-1",
+          head_sha: otherSha,
+          created_at: "2026-01-01T00:02:00Z",
+          pull_requests: [{ number: 1 }],
+        },
+        {
+          id: 99,
+          display_title: "delivery-policy-synchronize-pr-2",
+          head_sha: sha,
+          created_at: "2026-01-01T00:03:00Z",
+          pull_requests: [{ number: 2 }],
+        },
+      ],
+      1,
+    ),
+    {
+      id: 12,
+      pullNumber: 1,
+      headSha: otherSha,
+      createdAt: "2026-01-01T00:02:00Z",
+    },
+  );
+});
+
 function ownedStatuses(runUrl) {
   return [
     { context: "model-review-gate", state: "pending", target_url: runUrl },
@@ -1452,7 +1531,7 @@ async function runDriver(
   return { outcome: await outcomePromise, published, reviewDecisions };
 }
 
-test("driver revalidates same-SHA comment deletion and edit before terminal status", async () => {
+test("driver rejects missing or edited same-SHA review comments", async () => {
   const initial = rawSnapshot();
   const deleted = rawSnapshot({ comments: [] });
   const deletion = await runDriver([initial, deleted]);
@@ -1466,6 +1545,85 @@ test("driver revalidates same-SHA comment deletion and edit before terminal stat
   assert.equal(edit.outcome.outcome, "fail");
   assert.match(edit.published.at(-1).result.modelReasons.join(" "), /immutable/);
   assert.equal(edit.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
+});
+
+test("A to B to A requires newly generated model and human evidence", async () => {
+  const headB = "b".repeat(40);
+  const oldModelComment = apiComment(comment(metadata({ head_generation: 1 })));
+
+  assert.equal(
+    (await runDriver([
+      rawSnapshot({
+        comments: [oldModelComment],
+        headGeneration: 1,
+      }),
+    ])).outcome.outcome,
+    "pass",
+  );
+  assert.equal(
+    (await runDriver([
+      rawSnapshot({
+        headSha: headB,
+        comments: [oldModelComment],
+        headGeneration: 2,
+      }),
+    ])).outcome.outcome,
+    "fail",
+  );
+  assert.equal(
+    (await runDriver([
+      rawSnapshot({
+        comments: [oldModelComment],
+        headGeneration: 3,
+      }),
+    ])).outcome.outcome,
+    "fail",
+  );
+
+  const freshModel = freshReviewProvenance(metadata({ head_generation: 3 }), 20);
+  assert.equal(
+    (await runDriver([
+      rawSnapshot({
+        comments: [apiComment(comment(freshModel))],
+        headGeneration: 3,
+      }),
+    ])).outcome.outcome,
+    "pass",
+  );
+
+  const staleHuman = metadata({
+    head_generation: 1,
+    human_approval: {
+      reviewer: "maintainer",
+      head_sha: sha,
+      head_generation: 1,
+      verdict: "approved",
+      kind: "operator_authorization",
+      authorization_reference: "https://github.com/example/project/pull/1#issuecomment-50",
+    },
+  });
+  assert.equal(
+    evaluate({
+      data: staleHuman,
+      changedFiles: [".github/workflows/verify.yml"],
+      authorizationComments: [authorizationComment()],
+      headGeneration: 3,
+    }).deliveryOk,
+    false,
+  );
+
+  const freshHuman = structuredClone(staleHuman);
+  freshHuman.head_generation = 3;
+  freshHuman.human_approval.head_generation = 3;
+  assert.equal(
+    evaluate({
+      data: freshHuman,
+      changedFiles: [".github/workflows/verify.yml"],
+      authorizationComments: [authorizationComment({ headGeneration: 3 })],
+      headGeneration: 3,
+    }).deliveryOk,
+    true,
+  );
 });
 
 test("trusted non-sensitive pull requests receive an autonomous bot approval", async () => {

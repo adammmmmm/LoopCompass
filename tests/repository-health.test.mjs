@@ -105,6 +105,8 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.match(releaseWorkflow, /loopcompass-release-dist/);
   assert.match(reviewWorkflow, /statuses: write/);
   assert.match(reviewWorkflow, /pull-requests: write/);
+  assert.match(reviewWorkflow, /actions: read/);
+  assert.match(reviewWorkflow, /run-name: delivery-policy-/);
   for (const otherWorkflow of [
     verifyWorkflow,
     releaseWorkflow,

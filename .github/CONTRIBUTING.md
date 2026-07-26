@@ -72,9 +72,9 @@ authentication or permissions, migrations, release credentials, security boundar
 review gate itself; all `scripts/`, `tests/`, and `fixtures/` changes are sensitive. The trusted
 delivery workflow records a pull-request-scoped approval only after every applicable requirement is
 green and records changes requested otherwise. That automation review is a delivery attestation,
-not one of the three independent model reviews. A push dismisses stale approvals and requires a new
-approval after the latest push. Auto-merge may be armed only after the applicable checks and review
-are green.
+not one of the three independent model reviews. Review and human evidence bind to the current HEAD
+and its trusted workflow-run generation; a push invalidates both even if the branch later returns
+to an earlier SHA. Auto-merge may be armed only after the applicable checks and review are green.
 Pull requests merge by squash; merged remote branches are deleted automatically.
 
 The compact public evidence format and maintainer procedure are in

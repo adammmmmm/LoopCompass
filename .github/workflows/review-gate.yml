@@ -1,4 +1,5 @@
 name: delivery-policy
+run-name: delivery-policy-${{ github.event.action || 'manual' }}-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull_request_number }}
 
 on:
   workflow_dispatch:
@@ -15,6 +16,7 @@ on:
     types: [submitted, edited, dismissed]
 
 permissions:
+  actions: read
   contents: read
   issues: read
   pull-requests: write

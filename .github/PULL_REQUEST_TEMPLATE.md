@@ -18,8 +18,9 @@
 
 <!--
 Enter Review only after implementation, tests, green verify, and closure evidence are complete.
-Before Done, attach one compact summary of three independent model reviews for the current HEAD using
-docs/maintainer-delivery-policy.md. A later push invalidates that evidence.
+Before Done, attach one compact summary of three independent model reviews for the current HEAD and
+head generation using docs/maintainer-delivery-policy.md. A later push invalidates that evidence,
+including when the branch later returns to an earlier SHA.
 -->
 
 Trusted first-party, non-sensitive changes require green `verify`, `model-review-gate`, and
