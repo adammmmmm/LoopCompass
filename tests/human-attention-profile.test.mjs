@@ -351,11 +351,34 @@ function selectObligations(obligations, config, errors = []) {
   return { selected, failed, unscopedInvalid };
 }
 
+function parseClosureEvidence(testCase) {
+  if (!Array.isArray(testCase.closure_evidence)) {
+    return { records: [], valid: false };
+  }
+  const ids = new Set();
+  for (const evidence of testCase.closure_evidence) {
+    if (
+      !isPlainRecord(evidence) ||
+      typeof evidence.id !== "string" ||
+      !evidence.id.trim() ||
+      ids.has(evidence.id) ||
+      !isCanonicalSlug(evidence.incident_slug) ||
+      typeof evidence.normal_path_verified !== "boolean" ||
+      typeof evidence.containment_removed !== "boolean" ||
+      typeof evidence.incident_closure_recorded !== "boolean"
+    ) {
+      return { records: [], valid: false };
+    }
+    ids.add(evidence.id);
+  }
+  return { records: testCase.closure_evidence, valid: true };
+}
+
 function hasCompleteClosureEvidence(testCase, slug, evidenceRef) {
-  if (!Array.isArray(testCase.closure_evidence)) return false;
-  return testCase.closure_evidence.some(
+  const closure = parseClosureEvidence(testCase);
+  if (!closure.valid) return false;
+  return closure.records.some(
     (evidence) =>
-      isPlainRecord(evidence) &&
       (!evidenceRef || evidence.id === evidenceRef) &&
       evidence.incident_slug === slug &&
       evidence.normal_path_verified === true &&
@@ -837,6 +860,20 @@ function reconcileProjections(testCase) {
       failedIncidents,
     ),
   );
+  for (const [slug] of projectionRecords) {
+    if (
+      obligations.has(slug) ||
+      failedState.has(slug) ||
+      failedIncidents.has(slug) ||
+      registry.has(slug) ||
+      openIncidents.has(slug)
+    ) {
+      continue;
+    }
+    if (!hasCompleteClosureEvidence(testCase, slug)) {
+      obligationErrors.push(`orphan_projection:unknown-closure:${slug}`);
+    }
+  }
   assert.deepEqual(obligationErrors, [], "obligation conflict blocks reconciliation");
   const deterministic = [];
 
@@ -2043,6 +2080,55 @@ describe("optional human-attention profile", () => {
         "recoverable_registry_lag:console-action-required",
       ),
     );
+    assert.equal(
+      repairRegistryCrash(repair).known_obligations[0].last_known_revision,
+      2,
+    );
+  });
+
+  it("invalidates closure authority when any sibling evidence record is malformed", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) =>
+        testCase.id === "verified-closed-stale-projection-must-be-cleaned",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    testCase.closure_evidence.push(null);
+    const original = structuredClone(testCase);
+
+    const errors = assessConformance(testCase);
+    assert.ok(
+      errors.includes("missing_closure_evidence:console-action-required"),
+    );
+    assert.throws(
+      () => reconcileProjections(testCase),
+      /obligation conflict blocks reconciliation/,
+    );
+    assert.deepEqual(testCase, original);
+  });
+
+  it("does not partially rewrite a repairable projection around an unresolved orphan", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "enabled-divergent-duplicates-recompute",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    testCase.projections.push({
+      incident_slug: "unresolved-orphan",
+      malformed_record: true,
+    });
+    const originalBytes = JSON.stringify(testCase);
+
+    assert.ok(
+      assessConformance(testCase).includes(
+        "orphan_projection:unknown-closure:unresolved-orphan",
+      ),
+    );
+    assert.throws(
+      () => reconcileProjections(testCase),
+      /obligation conflict blocks reconciliation/,
+    );
+    assert.equal(JSON.stringify(testCase), originalBytes);
   });
 
   it("rejects same-revision marker conflicts independent of input order", () => {

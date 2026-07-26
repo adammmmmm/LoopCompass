@@ -164,9 +164,11 @@ guessing.
 Closure evidence is a referenced authority, not a writable collection on the designated attention
 surface. Parse it defensively: a missing, scalar, or malformed evidence collection, and malformed
 sibling evidence records, never authorize terminal cleanup and never cause a runtime exception.
-They fail closed as missing or unknown closure evidence. They do not by themselves suppress
-marker/registry crash-repair diagnostics; that asymmetry preserves safe attention-surface repair
-without treating unusable external evidence as proof of closure.
+Validate the complete collection before any lookup; one malformed sibling makes closure authority
+unknown for every entry in that collection. The records fail closed as missing or unknown closure
+evidence. They do not by themselves suppress marker/registry crash-repair diagnostics; that
+asymmetry preserves safe attention-surface repair without treating unusable external evidence as
+proof of closure.
 
 Do not remove a known-obligation registry entry as part of projection cleanup, incident deletion,
 reassignment, installation, or ordinary reconciliation. It remains through the explicit
@@ -238,6 +240,12 @@ Reconciliation is an idempotent upsert by canonical incident slug:
 8. Re-read the surface and confirm the exactly-one invariant and matching obligation revision
    before reporting projection success. Mechanically validate the complete rendered projection
    again; reconciliation must not report success for its own incomplete or corrupt output.
+
+Preflight the complete projection surface before producing any replacement. An unrelated malformed
+record or an orphan without verified closure authority blocks reconciliation surface-wide, even
+when another active projection is deterministically repairable. Preserve the complete surface
+byte-for-byte until the unresolved record is quarantined or repaired; never partially rewrite
+around it.
 
 Human acknowledgment or completion of the requested action is progress, not closure. Update the
 same projection to `verification_pending` while the incident coordinator verifies the authoritative
