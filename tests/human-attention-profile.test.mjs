@@ -232,6 +232,32 @@ function obligationFingerprint(obligation) {
   return JSON.stringify(stableRecord(obligation));
 }
 
+function isIntrinsicallyValidObligation(obligation, config) {
+  if (!isPlainRecord(obligation) || !isCanonicalSlug(obligation.incident_slug)) {
+    return false;
+  }
+  const supportedState =
+    ACTIVE_OBLIGATIONS.has(obligation.state) ||
+    RELEASED_OBLIGATIONS.has(obligation.state);
+  const activeFieldsValid =
+    !ACTIVE_OBLIGATIONS.has(obligation.state) ||
+    (typeof obligation.requested_action === "string" &&
+      obligation.requested_action.trim() &&
+      typeof obligation.human_requirement === "string" &&
+      isDeclaredHumanRequirement(obligation.human_requirement, config));
+  const closureFieldValid =
+    obligation.state !== "verified_closed" ||
+    (typeof obligation.closure_evidence_ref === "string" &&
+      obligation.closure_evidence_ref.trim());
+  return Boolean(
+    Number.isInteger(obligation.revision) &&
+      obligation.revision > 0 &&
+      supportedState &&
+      activeFieldsValid &&
+      closureFieldValid,
+  );
+}
+
 function selectObligations(obligations, config, errors = []) {
   const bySlug = new Map();
   const failed = new Set();
@@ -248,26 +274,9 @@ function selectObligations(obligations, config, errors = []) {
     }
     const slug = obligation.incident_slug;
     const slugIsCanonical = isCanonicalSlug(slug);
-    const supportedState =
-      ACTIVE_OBLIGATIONS.has(obligation.state) ||
-      RELEASED_OBLIGATIONS.has(obligation.state);
-    const activeFieldsValid =
-      !ACTIVE_OBLIGATIONS.has(obligation.state) ||
-      (typeof obligation.requested_action === "string" &&
-        obligation.requested_action.trim() &&
-        typeof obligation.human_requirement === "string" &&
-        isDeclaredHumanRequirement(obligation.human_requirement, config));
-    const closureFieldValid =
-      obligation.state !== "verified_closed" ||
-      (typeof obligation.closure_evidence_ref === "string" &&
-        obligation.closure_evidence_ref.trim());
     if (
       !slugIsCanonical ||
-      !Number.isInteger(obligation.revision) ||
-      obligation.revision <= 0 ||
-      !supportedState ||
-      !activeFieldsValid ||
-      !closureFieldValid
+      !isIntrinsicallyValidObligation(obligation, config)
     ) {
       const diagnosticSlug = slugIsCanonical ? slug : "invalid-slug";
       errors.push(`invalid_obligation:${diagnosticSlug}`);
@@ -328,6 +337,7 @@ function hasVerifiedClosure(testCase, obligation) {
 function registryBySlug(testCase, errors) {
   const registry = new Map();
   const failed = new Set();
+  const seen = new Set();
   let unscopedInvalid = false;
   if (!Array.isArray(testCase.known_obligations)) {
     errors.push("invalid_registry_collection");
@@ -347,15 +357,20 @@ function registryBySlug(testCase, errors) {
     ) {
       const diagnosticSlug = isCanonicalSlug(slug) ? slug : "invalid-slug";
       errors.push(`invalid_registry_record:${diagnosticSlug}`);
-      if (isCanonicalSlug(slug)) failed.add(slug);
-      else unscopedInvalid = true;
+      if (isCanonicalSlug(slug)) {
+        failed.add(slug);
+        registry.delete(slug);
+      } else unscopedInvalid = true;
       continue;
     }
-    if (registry.has(slug)) {
+    if (seen.has(slug)) {
       errors.push(`duplicate_registry_record:${slug}`);
+      failed.add(slug);
+      registry.delete(slug);
       continue;
     }
-    registry.set(slug, record);
+    seen.add(slug);
+    if (!failed.has(slug)) registry.set(slug, record);
   }
   return { registry, failed, unscopedInvalid };
 }
@@ -456,6 +471,20 @@ function registryCatchUpError(
     );
     if (history === "invalid") return "invalid_first_write_metadata";
     if (history === "missing") return "missing_obligation_history";
+  } else {
+    const knownRevision = testCase.obligations.filter(
+      (candidate) =>
+        isPlainRecord(candidate) &&
+        candidate.incident_slug === record.incident_slug &&
+        candidate.revision === record.last_known_revision,
+    );
+    if (knownRevision.length === 0) return "missing_known_revision_history";
+    if (
+      knownRevision.length !== 1 ||
+      !isIntrinsicallyValidObligation(knownRevision[0], config)
+    ) {
+      return "corrupt_known_revision_history";
+    }
   }
   if (
     selectedMarkerStateErrors(config, testCase, marker, openIncidents).length > 0
@@ -626,7 +655,7 @@ function assessConformance(testCase) {
     }
   }
   for (const slug of obligations.keys()) {
-    if (!registry.has(slug)) {
+    if (!registry.has(slug) && !failedRegistry.has(slug)) {
       errors.push(`unregistered_obligation:${slug}`);
     }
   }
@@ -727,7 +756,7 @@ function reconcileProjections(testCase) {
     }
   }
   for (const slug of obligations.keys()) {
-    if (!registry.has(slug)) {
+    if (!registry.has(slug) && !failedRegistry.has(slug)) {
       obligationErrors.push(`unregistered_obligation:${slug}`);
     }
   }
@@ -965,6 +994,14 @@ describe("optional human-attention profile", () => {
     assert.match(
       reference,
       /Projection representation does not gate marker\/registry crash repair/i,
+    );
+    assert.match(
+      reference,
+      /exactly one intrinsically valid marker[\s\S]*positive `last_known_revision`/i,
+    );
+    assert.match(
+      reference,
+      /Duplicate registry records[\s\S]*ambiguous authority/i,
     );
     assert.match(reference, /suppresses every `recoverable` diagnostic/i);
     assert.match(
@@ -1629,6 +1666,40 @@ describe("optional human-attention profile", () => {
     assert.deepEqual(assessConformance(reconciled), []);
   });
 
+  it("requires the exact known positive revision before registry catch-up", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+
+    const intact = resolveCase(fixture, structuredClone(rawCase));
+    const intactHistory = structuredClone(intact.obligations);
+    assert.deepEqual(assessConformance(intact), [
+      "recoverable_registry_lag:console-action-required",
+    ]);
+    const repairedIntact = repairRegistryCrash(intact);
+    assert.equal(repairedIntact.known_obligations[0].last_known_revision, 2);
+    assert.deepEqual(repairedIntact.obligations, intactHistory);
+
+    const missing = resolveCase(fixture, structuredClone(rawCase));
+    missing.obligations = missing.obligations.filter(
+      (marker) => marker.revision !== 1,
+    );
+    const missingOriginal = structuredClone(missing);
+    assert.deepEqual(assessConformance(missing), [
+      "missing_known_revision_history:console-action-required",
+    ]);
+    assert.deepEqual(repairRegistryCrash(missing), missingOriginal);
+
+    const corrupt = resolveCase(fixture, structuredClone(rawCase));
+    corrupt.obligations.unshift(structuredClone(corrupt.obligations[0]));
+    const corruptOriginal = structuredClone(corrupt);
+    assert.deepEqual(assessConformance(corrupt), [
+      "corrupt_known_revision_history:console-action-required",
+    ]);
+    assert.deepEqual(repairRegistryCrash(corrupt), corruptOriginal);
+  });
+
   it("does not repair registry-ahead state or mislabel failed markers as orphans", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     const aheadRaw = fixture.cases.find(
@@ -1660,12 +1731,16 @@ describe("optional human-attention profile", () => {
       last_known_revision: 0,
       duplicate_note: "preserve",
     });
-    const repairedDuplicate = repairRegistryCrash(duplicateRegistry);
-    assert.equal(repairedDuplicate.known_obligations[0].last_known_revision, 2);
-    assert.deepEqual(
-      repairedDuplicate.known_obligations[1],
-      duplicateRegistry.known_obligations[1],
+    const duplicateOriginal = structuredClone(duplicateRegistry);
+    assert.deepEqual(assessConformance(duplicateRegistry), [
+      "duplicate_registry_record:console-action-required",
+    ]);
+    assert.doesNotMatch(
+      assessConformance(duplicateRegistry).join("\n"),
+      /recoverable_(?:first_marker_gap|registry_lag)/,
     );
+    const repairedDuplicate = repairRegistryCrash(duplicateRegistry);
+    assert.deepEqual(repairedDuplicate, duplicateOriginal);
 
     const unrepairableRaw = fixture.cases.find(
       (testCase) => testCase.id === "unrepairable-canonical-state-registry-lag",
@@ -1676,6 +1751,49 @@ describe("optional human-attention profile", () => {
       /recoverable_registry_lag/,
     );
     assert.deepEqual(repairRegistryCrash(unrepairable), unrepairable);
+  });
+
+  it("isolates duplicate registry ambiguity by canonical slug", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "multi-slug-repair-is-isolated",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    testCase.obligations.find(
+      (marker) =>
+        marker.incident_slug === "second-console-action" &&
+        marker.revision === 1,
+    ).human_requirement = "production-console";
+    testCase.known_obligations.push({
+      incident_slug: "second-console-action",
+      last_known_revision: 0,
+      duplicate_note: "preserve",
+    });
+    const duplicateRecords = structuredClone(
+      testCase.known_obligations.filter(
+        (record) => record.incident_slug === "second-console-action",
+      ),
+    );
+
+    const errors = assessConformance(testCase);
+    assert.ok(
+      errors.includes("duplicate_registry_record:second-console-action"),
+    );
+    assert.ok(
+      errors.includes("recoverable_registry_lag:console-action-required"),
+    );
+    assert.ok(
+      !errors.includes("recoverable_registry_lag:second-console-action"),
+    );
+
+    const repaired = repairRegistryCrash(testCase);
+    assert.equal(repaired.known_obligations[0].last_known_revision, 2);
+    assert.deepEqual(
+      repaired.known_obligations.filter(
+        (record) => record.incident_slug === "second-console-action",
+      ),
+      duplicateRecords,
+    );
   });
 
   it("rejects same-revision marker conflicts independent of input order", () => {

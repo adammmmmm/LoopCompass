@@ -117,9 +117,11 @@ Two first-write crash windows are repairable:
 2. matching valid marker revision 1 exists but the registry remains at revision 0: advance only
    that complete registry record to revision 1.
 
-The same redo rule applies after later writes: when a complete registry record lags a valid selected
-marker, advance `last_known_revision` to that marker revision. A registry ahead of the selected
-marker, or a positive registry revision with no marker, is a hard deletion failure.
+The same redo rule applies after later writes only when a complete registry record lags a valid
+selected marker and the history contains exactly one intrinsically valid marker at the registry's
+positive `last_known_revision`. A missing known revision is missing history; duplicate or malformed
+records at that revision are corrupt history. Neither authorizes advancement. A registry ahead of
+the selected marker, or a positive registry revision with no marker, is a hard deletion failure.
 For revision-0 catch-up to an existing later marker, require retained revision-1 history whose
 stable `human_requirement` and `requested_action` match the registry metadata. Validate the selected
 marker against its current canonical-state rule. A `verification_pending` marker does not require
@@ -139,6 +141,9 @@ stale, incomplete, or divergent entries from the repaired canonical state.
 Reconciliation must preserve the full marker history, sibling and unknown records, unknown fields,
 pending metadata, and configured retention metadata; mutate only the targeted registry record or
 append the missing revision-1 marker.
+Duplicate registry records for one canonical slug are ambiguous authority. Exclude that slug from
+the accepted registry map, suppress repair diagnostics for it, preserve every duplicate exactly,
+and do not mutate it. A duplicate for one slug does not block a separately valid slug's repair.
 
 This registry is the durable expected-slug source used to detect accidental deletion of the
 incident, marker, projection, and closure evidence together. Outside the revision-0 first-write
