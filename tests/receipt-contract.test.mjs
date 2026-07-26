@@ -1025,6 +1025,104 @@ describe("terminal receipt contract", () => {
     }
   });
 
+  it("rejects Unicode-escaped placeholders in every decoded scalar surface", () => {
+    const incidentMutations = [
+      (content) => content.replace(
+        "owner: Incident Coordinator",
+        'owner: "\\u003cincident-coordinator\\u003e"',
+      ),
+      (content) => content.replace(
+        'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+        'signature: "\\u0052epair the broken mechanism"',
+      ),
+      (content) => content.replace(
+        "status: detected",
+        'status: "\\u003ccapability\\u003e"',
+      ),
+    ];
+    for (const mutate of incidentMutations) {
+      const invalid = structuredClone(propagatedCase.terminal_receipt);
+      invalid.proposed_artifact.content = mutate(invalid.proposed_artifact.content);
+      assert.throws(
+        () => validateTerminalReceipt(invalid),
+        /content must be a complete filled sanitized incident artifact/,
+      );
+    }
+
+    const nested = recoveryProposalReceipt();
+    nested.proposed_artifact.content = nested.proposed_artifact.content.replace(
+      "  versions: managed",
+      '  versions: "\\u0043orrect path in one line"',
+    );
+    assert.throws(
+      () => validateTerminalReceipt(nested),
+      /content must be a complete filled sanitized recovery artifact/,
+    );
+
+    const benign = recoveryProposalReceipt();
+    benign.proposed_artifact.content = benign.proposed_artifact.content.replace(
+      "  versions: managed",
+      '  versions: "22.15.0; Codex\\u0020managed sandbox"',
+    );
+    assert.doesNotThrow(() => validateTerminalReceipt(benign));
+  });
+
+  it("requires bounded proposed containment and rejects expired persistence", () => {
+    const proposed = structuredClone(propagatedCase.terminal_receipt);
+    assert.equal(proposed.containment.used, true);
+    assert.doesNotThrow(() => validateTerminalReceipt(proposed));
+
+    for (const expiry of ["null", "2026-07-26"]) {
+      const invalid = structuredClone(proposed);
+      invalid.proposed_artifact.content =
+        invalid.proposed_artifact.content.replace(
+          "containment_expires: 2026-08-02",
+          `containment_expires: ${expiry}`,
+        );
+      assert.throws(
+        () => validateTerminalReceipt(invalid),
+        /containment\.used with a proposed incident requires containment_expires after opened/,
+      );
+    }
+
+    const parent = structuredClone(parentNoArtifactCase.parent_receipt);
+    parent.receipt_id = "authoritative-containment-parent";
+    parent.child_receipt_id = proposed.receipt_id;
+    parent.child_payload_sha256 = receiptPayloadDigest(proposed);
+    parent.terminal_action = "persisted_artifact";
+    parent.artifact_ref =
+      "panel-launcher-discovery-differs-between-sandbox-and-host-contexts";
+    parent.no_artifact_reason = null;
+    parent.proposed_artifact = null;
+    parent.escalation = structuredClone(proposed.escalation);
+    parent.forwarded_receipt = null;
+    assert.doesNotThrow(() =>
+      validateParentReceipt(parent, proposed, "parent_receipt", {
+        today: new Date("2026-08-02T00:00:00.000Z"),
+      }),
+    );
+    assert.throws(
+      () =>
+        validateParentReceipt(parent, proposed, "parent_receipt", {
+          today: new Date("2026-08-03T00:00:00.000Z"),
+        }),
+      /persisted_artifact requires unexpired containment/,
+    );
+
+    const unused = structuredClone(proposed);
+    unused.containment = {
+      used: false,
+      summary: null,
+      verification_gate: null,
+    };
+    unused.proposed_artifact.content =
+      unused.proposed_artifact.content.replace(
+        "containment_expires: 2026-08-02",
+        "containment_expires: null",
+      );
+    assert.doesNotThrow(() => validateTerminalReceipt(unused));
+  });
+
   it("rejects schema-invalid incident artifacts despite present keys and headings", () => {
     const base = propagatedCase.terminal_receipt.proposed_artifact.content;
     const invalidBodies = [

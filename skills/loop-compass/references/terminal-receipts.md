@@ -76,7 +76,8 @@ every other scalar field. Validation uses the decoded value. Unbalanced lists or
 escapes, anchors, aliases, and tags fail validation.
 JSON escapes are decoded once and the same decoded signature and list items drive strict schema and
 shared capsule validation. Quoted commas remain inside one list item; an escape that decodes to an
-unsafe control or unresolved structural marker still fails.
+unsafe control, unresolved structural marker, or shipped prose placeholder still fails on every
+scalar surface, including nested recovery scope.
 Incident dates must be real calendar dates. Proposal validation checks containment
 expiry date shape deterministically but defers whether the expiry is current to authoritative
 persistence, when the actual persistence date is known. Recovery scope contains only the required
@@ -85,6 +86,11 @@ schema, and `expires_after_days` is a positive base-10 integer without alternate
 Its signature is itself normalized, one-line, at most 512 characters, and exactly matches the
 terminal receipt signature. Its id is the mechanical signature slug or that slug plus an unpadded
 `-N` collision suffix where `N` is at least 2.
+
+When a proposed incident uses containment, `containment_expires` is mandatory, valid, and later
+than `opened`; unused containment may retain `null`. An authoritative parent persisting that
+proposal checks the expiry against its explicit persistence date and rejects already-expired
+containment. This remains storage-neutral: the receipt carries no project path or store binding.
 
 Long prose placeholders shipped in a template are invalid anywhere in the proposed artifact,
 including HTML comments, whether bare, angle-wrapped, nested, split across whitespace, or split by

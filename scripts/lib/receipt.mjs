@@ -472,6 +472,15 @@ function strictPlainScalar(raw) {
   return value;
 }
 
+function decodedScalarLooksTemplate(value) {
+  const normalized = normalizeTemplateMarker(value);
+  return scalarLooksUnresolved(value)
+    || structuralTemplatePlaceholders.has(unwrapStructuralPlaceholder(value))
+    || [...proseTemplatePlaceholders].some((marker) =>
+      normalized.includes(normalizeTemplateMarker(marker)),
+    );
+}
+
 function parseStrictInlineList(raw, { nonempty }) {
   const items = parseInlineListValue(raw);
   if (items === null || (nonempty && items.length === 0)) {
@@ -487,8 +496,7 @@ function parseStrictInlineList(raw, { nonempty }) {
       return null;
     }
     if (
-      scalarLooksUnresolved(parsed)
-      || structuralTemplatePlaceholders.has(unwrapStructuralPlaceholder(parsed))
+      decodedScalarLooksTemplate(parsed)
     ) {
       return null;
     }
@@ -499,7 +507,10 @@ function parseStrictInlineList(raw, { nonempty }) {
 function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
   const value = raw.trim();
   if (field === "signature" && !nested) {
-    return parseStrictQuotedString(value);
+    const signature = parseStrictQuotedString(value);
+    return signature !== null && !decodedScalarLooksTemplate(signature)
+      ? signature
+      : null;
   }
   if (kind === "incident" && !nested && field === "requires") {
     return parseStrictInlineList(value, { nonempty: true });
@@ -510,7 +521,10 @@ function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
   const decoded = value.startsWith('"')
     ? parseStrictQuotedString(value)
     : value;
-  return decoded === null ? null : strictPlainScalar(decoded);
+  if (decoded === null || decodedScalarLooksTemplate(decoded)) {
+    return null;
+  }
+  return strictPlainScalar(decoded);
 }
 
 function parseStrictProposedFrontmatter(source, kind) {
@@ -802,6 +816,11 @@ function validateProposedArtifact(artifact, label) {
   return {
     id: fields.id,
     signature: proposedSignature,
+    opened: kind === "incident" ? fields.opened : null,
+    containmentExpires:
+      kind === "incident" && fields.containment_expires !== "null"
+        ? fields.containment_expires
+        : null,
   };
 }
 
@@ -925,6 +944,21 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
     fail(label, ".containment.used may be true only for incident or external classification");
   }
   if (
+    containmentUsed
+    && outcome === "proposed_artifact"
+    && (
+      proposedArtifactIdentity?.containmentExpires === null
+      || parseIsoDate(proposedArtifactIdentity?.containmentExpires) === null
+      || parseIsoDate(proposedArtifactIdentity?.opened) === null
+      || proposedArtifactIdentity.containmentExpires <= proposedArtifactIdentity.opened
+    )
+  ) {
+    fail(
+      label,
+      ".containment.used with a proposed incident requires containment_expires after opened",
+    );
+  }
+  if (
     outcome === "persisted_artifact"
     && !artifactRefMatchesCanonicalId(
       receipt.artifact_ref,
@@ -951,7 +985,12 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
   return receipt;
 }
 
-export function validateParentReceipt(parent, childReceipt, label = "parent_receipt") {
+export function validateParentReceipt(
+  parent,
+  childReceipt,
+  label = "parent_receipt",
+  { today = new Date() } = {},
+) {
   requireObject(parent, label);
   validateTerminalReceipt(childReceipt, `${label}.child_receipt`);
   if (childReceipt.terminal_outcome !== "proposed_artifact") {
@@ -980,6 +1019,20 @@ export function validateParentReceipt(parent, childReceipt, label = "parent_rece
     fail(label, ".ingested must be true");
   }
   const outcome = requireEnum(parent, "terminal_action", label, terminalOutcomes);
+  if (outcome === "persisted_artifact" && childReceipt.containment.used) {
+    const childArtifact = validateProposedArtifact(
+      childReceipt.proposed_artifact,
+      `${label}.child_receipt.proposed_artifact`,
+    );
+    const expiry = parseIsoDate(childArtifact?.containmentExpires);
+    const persistenceDate = new Date(today);
+    const persistenceDay = Number.isNaN(persistenceDate.getTime())
+      ? null
+      : persistenceDate.toISOString().slice(0, 10);
+    if (expiry === null || persistenceDay === null || childArtifact.containmentExpires < persistenceDay) {
+      fail(label, ".terminal_action persisted_artifact requires unexpired containment");
+    }
+  }
   if (outcome !== "proposed_artifact") {
     const forwarded = requireField(parent, "forwarded_receipt", label);
     if (forwarded !== null) {

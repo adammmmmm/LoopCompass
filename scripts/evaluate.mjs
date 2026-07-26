@@ -122,7 +122,7 @@ const requiredCorpusDigests = new Map([
   ["lc-eval-010-missing-project-instructions", "b3cfcb0393b900c9026a2ddd308b22175ebf145e301d2ebc4310b76b8fa7f198"],
   ["lc-eval-011-workaround-erases-classification", "c471bf5b8a1357d544234194ffffe4d4f0221f2f95b859ed6501a82630d8c97a"],
   ["lc-eval-012-workaround-is-containment", "e44ba5e440e5f3f448f6b3903d3a780c239c53551213e82d940aafc45dfc4390"],
-  ["lc-eval-013-parent-without-store-propagates", "92d5075a1979bab1ae20d0b9971bf5cc526e58be274ec189e1f1009e2cf08348"],
+  ["lc-eval-013-parent-without-store-propagates", "92c8c5b35ed038cd9452c3294ec6292774af52607f0f5f67d1cd09c01ad1b644"],
   ["lc-eval-014-parent-no-artifact", "018d5c692c9d763fc48c627f3020e0d7fe051069be5d2128b19738ccdfa32b60"],
   ["lc-eval-015-missing-parent-receipt", "e6dd54dee2702475d950955d14ca003d3f14764041c589e3cc9af7a75118d2ed"],
 ]);
@@ -169,6 +169,116 @@ function parseArgs(argv) {
   return {
     fixture: argv[fixtureIndex + 1],
   };
+}
+
+function rejectDuplicateJsonKeys(source) {
+  let index = 0;
+  const skipWhitespace = () => {
+    while (/\s/u.test(source[index] ?? "")) {
+      index += 1;
+    }
+  };
+  const scanString = () => {
+    const start = index;
+    index += 1;
+    let escaped = false;
+    while (index < source.length) {
+      const character = source[index];
+      index += 1;
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        return JSON.parse(source.slice(start, index));
+      }
+    }
+    throw new Error("fixture JSON contains an unterminated string");
+  };
+  const scanValue = () => {
+    skipWhitespace();
+    if (source[index] === "{") {
+      scanObject();
+      return;
+    }
+    if (source[index] === "[") {
+      index += 1;
+      skipWhitespace();
+      if (source[index] === "]") {
+        index += 1;
+        return;
+      }
+      while (index < source.length) {
+        scanValue();
+        skipWhitespace();
+        if (source[index] === "]") {
+          index += 1;
+          return;
+        }
+        if (source[index] !== ",") {
+          throw new Error("fixture JSON array is malformed");
+        }
+        index += 1;
+      }
+      throw new Error("fixture JSON array is unterminated");
+    }
+    if (source[index] === '"') {
+      scanString();
+      return;
+    }
+    const start = index;
+    while (
+      index < source.length
+      && !/[\s,\]}]/u.test(source[index])
+    ) {
+      index += 1;
+    }
+    if (index === start) {
+      throw new Error("fixture JSON value is malformed");
+    }
+  };
+  const scanObject = () => {
+    index += 1;
+    const keys = new Set();
+    skipWhitespace();
+    if (source[index] === "}") {
+      index += 1;
+      return;
+    }
+    while (index < source.length) {
+      skipWhitespace();
+      if (source[index] !== '"') {
+        throw new Error("fixture JSON object key must be a string");
+      }
+      const key = scanString();
+      if (keys.has(key)) {
+        throw new Error("fixture JSON contains a duplicate object key");
+      }
+      keys.add(key);
+      skipWhitespace();
+      if (source[index] !== ":") {
+        throw new Error("fixture JSON object is missing a colon");
+      }
+      index += 1;
+      scanValue();
+      skipWhitespace();
+      if (source[index] === "}") {
+        index += 1;
+        return;
+      }
+      if (source[index] !== ",") {
+        throw new Error("fixture JSON object is malformed");
+      }
+      index += 1;
+    }
+    throw new Error("fixture JSON object is unterminated");
+  };
+
+  scanValue();
+  skipWhitespace();
+  if (index !== source.length) {
+    throw new Error("fixture JSON has trailing content");
+  }
 }
 
 function percent(numerator, denominator) {
@@ -999,7 +1109,9 @@ function renderReport(doc) {
 try {
   const { fixture } = parseArgs(args);
   const fixturePath = path.resolve(root, fixture);
-  const doc = JSON.parse(readFileSync(fixturePath, "utf8"));
+  const fixtureSource = readFileSync(fixturePath, "utf8");
+  rejectDuplicateJsonKeys(fixtureSource);
+  const doc = JSON.parse(fixtureSource);
   validateFixture(doc);
   process.stdout.write(renderReport(doc));
 } catch (error) {

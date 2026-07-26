@@ -23,6 +23,8 @@ This release revises fixture schema 1 in place: every case now has mandatory obj
 `terminal_receipt` and `parent_receipt` fields, and `metrics` must contain the evaluator's complete
 ordered receipt-aware registry. Older schema-1 fixtures that omit those additions fail explicitly
 rather than silently changing a denominator.
+Raw fixture JSON is scanned before `JSON.parse`; duplicate keys at any object depth fail before
+validation, scoring, or rendering, even when the repeated values are identical.
 
 ## Metrics
 

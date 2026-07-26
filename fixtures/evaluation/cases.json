@@ -1045,7 +1045,7 @@
           "no_artifact_reason": null,
           "proposed_artifact": {
             "kind": "incident",
-            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
           },
           "escalation": {
             "requires": [
@@ -1059,14 +1059,14 @@
           "receipt_schema": 1,
           "receipt_id": "parent-lc-eval-013",
           "child_receipt_id": "worker-lc-eval-013",
-          "child_payload_sha256": "058928d698181d448ebcc8af1acae651a7fd5e099a7a01404072363266c2e483",
+          "child_payload_sha256": "5c9a186a932090fd3fa7f380b21ca2a40e1d3177d8e020772e4bccb6fc596815",
           "ingested": true,
           "terminal_action": "proposed_artifact",
           "artifact_ref": null,
           "no_artifact_reason": null,
           "proposed_artifact": {
             "kind": "incident",
-            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
           },
           "escalation": {
             "requires": [
@@ -1097,7 +1097,7 @@
             "no_artifact_reason": null,
             "proposed_artifact": {
               "kind": "incident",
-              "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+              "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
             },
             "escalation": {
               "requires": [
@@ -1138,7 +1138,7 @@
           "no_artifact_reason": null,
           "proposed_artifact": {
             "kind": "incident",
-            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
           },
           "escalation": {
             "requires": [
@@ -1154,7 +1154,7 @@
           "no_artifact_reason": null,
           "proposed_artifact": {
             "kind": "incident",
-            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: null\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
+            "content": "---\nid: panel-launcher-discovery-differs-between-sandbox-and-host-contexts\nschema: 1\nsignature: \"Panel launcher discovery differs between sandbox and host contexts.\"\nstatus: detected\nrequires: [repository_write]\nowner: Incident Coordinator\nopened: 2026-07-26\ncontainment_expires: 2026-08-02\nconsulted: []\n---\n# Repair panel launcher discovery\n\n## Failure\n\nNormal path: resolve authenticated reviewer launchers from the host execution context.\n\nEvidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.\n\n## Repair\n\nMake launcher discovery and authentication preflight host-aware.\n\n## Containment\n\nUse verified launchers in the required host context for the current run.\n\n## Verification\n\nRun the installed resolver without ad hoc launcher or authentication hints."
           },
           "escalation": {
             "requires": [

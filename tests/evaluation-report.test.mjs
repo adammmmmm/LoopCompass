@@ -36,6 +36,17 @@ function runEvaluateWithDoc(doc) {
   }
 }
 
+function runEvaluateWithSource(source) {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "lc-eval-"));
+  const tempFixture = path.join(tempDir, "cases.json");
+  writeFileSync(tempFixture, source);
+  try {
+    return runEvaluate(tempFixture);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 describe("evaluation benchmark report", () => {
   it("generates deterministic Markdown metrics from bundled receipts", () => {
     const result = runEvaluate("fixtures/evaluation/cases.json");
@@ -181,6 +192,35 @@ describe("evaluation benchmark report", () => {
       const result = runEvaluateWithDoc(doc);
       assert.equal(result.status, 1);
       assert.match(result.stderr, /\.typo is not allowed/);
+    }
+  });
+
+  it("rejects duplicate JSON keys at every object depth before scoring", () => {
+    const source = readFileSync(fixturePath, "utf8");
+    const mutations = [
+      source.replace('"schema": 1,', '"schema": 1,\n  "schema": 1,'),
+      source.replace(
+        '"consulted": true,',
+        '"consulted": true,\n        "consulted": true,',
+      ),
+      source.replace(
+        '"consulted": true,',
+        '"consulted": true,\n        "consulted": false,',
+      ),
+      source.replace(
+        '"containment": {\n            "used": false,',
+        '"containment": {\n            "used": false,\n            "used": false,',
+      ),
+      source.replace(
+        '"parent_receipt": {\n          "receipt_schema": 1,',
+        '"parent_receipt": {\n          "receipt_schema": 1,\n          "receipt_schema": 1,',
+      ),
+    ];
+    for (const duplicate of mutations) {
+      const result = runEvaluateWithSource(duplicate);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /fixture JSON contains a duplicate object key/);
+      assert.equal(result.stdout, "");
     }
   });
 
