@@ -26,6 +26,7 @@ const testFiles = [
   "tests/identity-goldens.test.mjs",
   "tests/classification-fixtures.test.mjs",
   "tests/classification-assist.test.mjs",
+  "tests/conversational-aliases.test.mjs",
   "tests/human-attention-profile.test.mjs",
   "tests/ownership-probe.test.mjs",
   "tests/evaluation-fixtures.test.mjs",

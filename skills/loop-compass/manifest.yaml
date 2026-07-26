@@ -4,19 +4,20 @@ name: loop-compass
 version: 0.3.0
 source: https://github.com/adammmmmm/LoopCompass
 release: https://github.com/adammmmmm/LoopCompass/releases/tag/v0.3.0
-commit: 06d78e2c2f6d79cd8c4a5f671005e32d4ee7f95e
+commit: 66d03d781eb92933cc2fcb1f1996acc47935a6b8
 skill_schema: 1
 policy_version: 2
 state_schema: 1
 minimum_policy_version: 2
 files:
-  SKILL.md: a79a11b7e455b8164345a6637b063ffffca9efce8b79a66d7cd9d4050f322a00
+  SKILL.md: ba9df16727c9f85dbf32f350ba0e592d42458f75a105494f48644d338096785c
   agents/openai.yaml: 433e1b2c8c68bb53ebbdc84eb293dcaf0103ade22f34392a59e79a262114b168
   assets/incident-template.md: fcc6dfecb9975c1cf57074a4559ba495347873b07e757ae6cae9a7f32e61200e
   assets/project-policy.md: 32fb3d165210e1154e8fc8826ff287bef2234f2eaa1349466401e157b47debfb
   assets/recovery-template.md: 007da02dc6b6ff13b713860e574ae153082a2329d72c70320a1e0a06c61d6e77
   references/classification.md: 6013de10a8c101f59070b2311fdd540b49c904b29418073a594b880d140fd566
-  references/human-attention.md: d4e1413d98620f73bad695f5eedfcdbc74c4008376240c8d3db252b41a5de1ac
+  references/conversational-aliases.md: 50d5ab305843f2705456886cfb6bb6e0940c41321d12bdc0adb1ce302e365219
+  references/human-attention.md: da2421f0d40b5defaab1ebf0d4fbce5148696c72ebfbce00f020ee1dce79e50d
   references/integration.md: 1a3acbb26d2f4209ebeff292ac23c312ea9718def8919fd23c2f61e370493436
   references/pii-sanitation.md: 8a881bbec9ee4e8600b616a90d5567686fc40c469076c998112499ea13d33c39
   references/redaction-audit.md: b3fb8f772b137469785ed79480d6f5161eb80bd4b33b3c2810b03e1c1aba0b02

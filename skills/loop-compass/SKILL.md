@@ -18,6 +18,10 @@ Projects may explicitly enable the optional, default-off
 [human-attention profile](references/human-attention.md). Its projection and reconciliation
 requirements do not apply unless the project declaration enables it.
 
+For optional presentation-only incident shorthand, follow
+[conversational-aliases.md](references/conversational-aliases.md). Conversational aliases never
+replace canonical slugs or become durable identity.
+
 Consult once per normalized failure signature per agent task:
 
 - For a distinctive deterministic failure, consult before the first substantially equivalent
