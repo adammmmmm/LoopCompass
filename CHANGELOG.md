@@ -23,6 +23,8 @@ uses [Semantic Versioning](https://semver.org/).
   benchmark ground truth.
 - Evaluation fixture JSON rejects duplicate keys before materialization, and receipt proposal
   validation applies placeholder and containment-expiry rules to decoded scalar values.
+- Receipt sanitation rejects encoded character-reference bypasses, and signature identity now
+  normalizes Unicode to NFC with explicit legacy-state migration guidance.
 - GitHub Actions use current immutable releases, least-privilege permissions, and bounded jobs.
 - GitHub Pages deploys only when the site, its brand asset, or its workflow changes.
 - Ordinary pull requests run only the meaningful `verify` job; tag verification and release

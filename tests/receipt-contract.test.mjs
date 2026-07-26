@@ -1488,6 +1488,50 @@ describe("terminal receipt contract", () => {
     }
   });
 
+  it("rejects encoded character references before receipt persistence", () => {
+    const mutations = [
+      (receipt) => {
+        receipt.evidence = ["Contact private&#64;example.com for access."];
+      },
+      (receipt) => {
+        receipt.containment.summary = "Use bounded &colon; containment.";
+      },
+      (receipt) => {
+        receipt.proposed_artifact.content =
+          receipt.proposed_artifact.content.replace(
+            "Make launcher discovery and authentication preflight host-aware.",
+            "&#x54;he intended repair remains pending.",
+          );
+      },
+    ];
+    for (const [index, mutate] of mutations.entries()) {
+      const receipt = index === 2
+        ? structuredClone(propagatedCase.terminal_receipt)
+        : structuredClone(persisted);
+      mutate(receipt);
+      const before = JSON.stringify(receipt);
+      assert.throws(
+        () => validateTerminalReceipt(receipt),
+        /contains character-reference syntax/,
+      );
+      assert.equal(JSON.stringify(receipt), before);
+    }
+  });
+
+  it("requires NFC-normalized receipt signatures", () => {
+    const composed = structuredClone(persisted);
+    composed.signature = "Caf\u00e9 validator fails.";
+    composed.artifact_ref = "caf-validator-fails";
+    assert.doesNotThrow(() => validateTerminalReceipt(composed));
+
+    const decomposed = structuredClone(composed);
+    decomposed.signature = "Cafe\u0301 validator fails.";
+    assert.throws(
+      () => validateTerminalReceipt(decomposed),
+      /signature must be a normalized one-line signature/,
+    );
+  });
+
   it("catches home paths across every prose surface without echoing the value", () => {
     const privatePath = "file:///Users/PrivateUser/private-project";
     const terminalMutations = [

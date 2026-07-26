@@ -101,11 +101,17 @@ child payload, so an id cannot be reused to acknowledge swapped content.
 
 ## Artifact identity and concurrency
 
-Normalize signatures by removing volatile paths, IDs, timestamps, and secret-bearing values. Derive
-the artifact slug mechanically from the exact normalized signature: lowercase it, replace each
+Normalize signatures to Unicode NFC before removing volatile paths, IDs, timestamps, and
+secret-bearing values. Derive the artifact slug mechanically from the exact normalized signature:
+lowercase it, replace each
 maximal run outside ASCII `a-z` and `0-9` with one hyphen, trim it, truncate it to 96 characters,
 and trim it again. Use `failure` when empty. The ID is the slug and the filename is `<slug>.md`.
 Search recoveries and incidents for the exact signature immediately before writing.
+
+Existing non-NFC artifacts are not rewritten automatically. Upgrade handling is an explicit,
+reviewed migration: NFC-normalize the signature, recompute the id and filename, search both
+directories for a canonically equivalent artifact, and merge or resolve collisions before
+retrieval resumes.
 
 When a matching artifact exists, update or supersede it rather than creating another. Parallel
 writes that still race should resolve around the deterministic artifact path, making the conflict

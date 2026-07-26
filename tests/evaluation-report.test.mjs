@@ -331,6 +331,28 @@ describe("evaluation benchmark report", () => {
     }
   });
 
+  it("rejects character references before evaluator scoring", () => {
+    const mutations = [
+      (doc) => {
+        doc.cases[0].scenario = "Contact private&#64;example.com.";
+      },
+      (doc) => {
+        doc.cases[0].receipt.failure = "&#x54;he intended path failed.";
+      },
+      (doc) => {
+        doc.description = "Benchmark &colon; encoded separator.";
+      },
+    ];
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      mutate(doc);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stderr, /contains character-reference syntax/);
+      assert.equal(result.stdout, "");
+    }
+  });
+
   it("rejects unsafe Unicode and controls in fixture prose without echoing them", () => {
     for (const character of ["\u202E", "\0", "\v", "\f"]) {
       const mutations = [

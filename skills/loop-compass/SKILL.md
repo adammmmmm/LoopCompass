@@ -77,8 +77,8 @@ review, but agents must not apply or inject it. Promote it to `verified` only af
 causally supported and verified within its stated scope.
 
 1. Copy [recovery-template.md](assets/recovery-template.md).
-2. Normalize the signature only after sanitation, removing volatile paths, IDs, timestamps, and
-   secret-bearing values.
+2. Normalize the signature only after sanitation: first normalize Unicode to NFC, then remove
+   volatile paths, IDs, timestamps, and secret-bearing values.
 3. Derive the slug mechanically from the exact normalized signature: lowercase it, replace each
    maximal run outside ASCII `a-z` and `0-9` with one hyphen, trim leading and trailing hyphens,
    truncate to 96 characters, then trim any trailing hyphen again. Use `failure` if the result is
@@ -101,6 +101,11 @@ If `<slug>.md` already contains a different normalized signature, append the low
 integer suffix beginning with `-2`. Never choose alternate descriptive words. A simultaneous write
 to the same deterministic path must remain a visible file or Git conflict rather than silently
 creating a second artifact.
+
+On upgrade, audit any pre-existing non-NFC signature before normal retrieval. Canonicalize its
+signature to NFC, recompute the mechanical id and filename, and deduplicate against both artifact
+directories in one reviewed migration. Do not auto-rewrite committed state or retain two
+canonically equivalent artifacts.
 
 ## Open and repair an incident
 

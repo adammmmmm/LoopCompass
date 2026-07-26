@@ -27,7 +27,7 @@ const PID_RE = /\bpid[=:\s]+\d+\b/gi;
  * @returns {string}
  */
 export function normalizeSignature(raw) {
-  let s = String(raw ?? "");
+  let s = String(raw ?? "").normalize("NFC");
   s = s.replace(SECRET_RE, "<secret>");
   s = s.replace(UUID_RE, "<id>");
   s = s.replace(LONG_HEX_RE, "<hex>");
