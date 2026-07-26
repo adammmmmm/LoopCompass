@@ -61,26 +61,45 @@ function isDeclaredHumanRequirement(requirement, config) {
   );
 }
 
-function exactPendingMetadataMatches(record, incident, config) {
+function pendingMetadataIsStable(record, config) {
   return Boolean(
-    incident &&
-      record.last_known_revision === 0 &&
+    record.last_known_revision === 0 &&
       typeof record.pending_requested_action === "string" &&
       record.pending_requested_action.trim() &&
       typeof record.pending_human_requirement === "string" &&
-      incident.requires.includes(record.pending_human_requirement) &&
       isDeclaredHumanRequirement(record.pending_human_requirement, config),
   );
 }
 
-function initialMarkerMatches(record, marker, incident, config) {
+function exactPendingMetadataMatches(record, incident, config) {
   return Boolean(
-    exactPendingMetadataMatches(record, incident, config) &&
+    incident &&
+      pendingMetadataIsStable(record, config) &&
+      incident.requires.includes(record.pending_human_requirement),
+  );
+}
+
+function initialMarkerMatches(record, marker, config) {
+  return Boolean(
+    pendingMetadataIsStable(record, config) &&
       marker &&
       marker.revision === 1 &&
       marker.state === "human_action_pending" &&
       marker.requested_action === record.pending_requested_action &&
       marker.human_requirement === record.pending_human_requirement,
+  );
+}
+
+function retainedInitialHistoryMatches(record, markers, config) {
+  if (!pendingMetadataIsStable(record, config)) return false;
+  const initial = markers.filter(
+    (marker) =>
+      marker.incident_slug === record.incident_slug && marker.revision === 1,
+  );
+  return (
+    initial.length > 0 &&
+    initial.every((marker) => initialMarkerMatches(record, marker, config)) &&
+    new Set(initial.map(obligationFingerprint)).size === 1
   );
 }
 
@@ -168,19 +187,26 @@ function selectObligations(obligations, errors = []) {
   return { selected, failed };
 }
 
-function hasVerifiedClosure(testCase, obligation) {
-  if (obligation.state !== "verified_closed" || !obligation.closure_evidence_ref) {
-    return false;
-  }
-  const evidence = testCase.closure_evidence.find(
-    (candidate) => candidate.id === obligation.closure_evidence_ref,
-  );
-  return Boolean(
-    evidence &&
-      evidence.incident_slug === obligation.incident_slug &&
+function hasCompleteClosureEvidence(testCase, slug, evidenceRef) {
+  return testCase.closure_evidence.some(
+    (evidence) =>
+      (!evidenceRef || evidence.id === evidenceRef) &&
+      evidence.incident_slug === slug &&
       evidence.normal_path_verified === true &&
       evidence.containment_removed === true &&
       evidence.incident_closure_recorded === true,
+  );
+}
+
+function hasVerifiedClosure(testCase, obligation) {
+  return Boolean(
+    obligation.state === "verified_closed" &&
+      obligation.closure_evidence_ref &&
+      hasCompleteClosureEvidence(
+        testCase,
+        obligation.incident_slug,
+        obligation.closure_evidence_ref,
+      ),
   );
 }
 
@@ -222,22 +248,62 @@ function projectionRepresentationErrors(config, obligation, projection) {
   for (const field of REQUIRED_PROJECTION_FIELDS) {
     if (
       !Object.prototype.hasOwnProperty.call(projection, field) ||
-      projection[field] === ""
+      projection[field] === "" ||
+      projection[field] === null ||
+      projection[field] === undefined
     ) {
       errors.push(`projection_field_missing:${field}:${slug}`);
     }
   }
-  const expected = canonicalProjection(config, obligation);
-  for (const field of REQUIRED_PROJECTION_FIELDS) {
+  const expectedValues = {
+    incident_slug: obligation.incident_slug,
+    requested_action: obligation.requested_action,
+    incident_path: `.loopcompass/incidents/${obligation.incident_slug}.md`,
+    state: obligation.state,
+    obligation_revision: obligation.revision,
+    surface: config.surface,
+  };
+  for (const [field, expected] of Object.entries(expectedValues)) {
     if (
-      Object.prototype.hasOwnProperty.call(projection, field) &&
+      projection[field] !== undefined &&
+      projection[field] !== null &&
       projection[field] !== "" &&
-      projection[field] !== expected[field]
+      projection[field] !== expected
     ) {
       errors.push(`projection_${field}_mismatch:${slug}`);
     }
   }
   return errors;
+}
+
+function selectedMarkerStateErrors(config, testCase, marker, openIncidents) {
+  return canonicalStateErrors(
+    config,
+    testCase,
+    new Map([[marker.incident_slug, marker]]),
+    openIncidents,
+  );
+}
+
+function registryCatchUpError(
+  config,
+  testCase,
+  record,
+  marker,
+  openIncidents,
+) {
+  if (
+    record.last_known_revision === 0 &&
+    !retainedInitialHistoryMatches(record, testCase.obligations, config)
+  ) {
+    return "invalid_first_write_metadata";
+  }
+  if (
+    selectedMarkerStateErrors(config, testCase, marker, openIncidents).length > 0
+  ) {
+    return "unrepairable_registry_lag";
+  }
+  return null;
 }
 
 function canonicalStateErrors(config, testCase, obligations, openIncidents) {
@@ -316,18 +382,15 @@ function assessConformance(testCase) {
         errors.push(`missing_obligation_history:${slug}`);
       }
     } else if (record.last_known_revision < obligation.revision) {
-      const incident = openIncidents.get(slug);
-      if (
-        record.last_known_revision === 0 &&
-        obligation.revision === 1 &&
-        !initialMarkerMatches(record, obligation, incident, config)
-      ) {
-        errors.push(`invalid_first_write_metadata:${slug}`);
-      } else if (
-        record.last_known_revision === 0 &&
-        !exactPendingMetadataMatches(record, incident, config)
-      ) {
-        errors.push(`invalid_first_write_metadata:${slug}`);
+      const catchUpError = registryCatchUpError(
+        config,
+        testCase,
+        record,
+        obligation,
+        openIncidents,
+      );
+      if (catchUpError) {
+        errors.push(`${catchUpError}:${slug}`);
       } else {
         errors.push(`recoverable_registry_lag:${slug}`);
       }
@@ -392,13 +455,7 @@ function assessConformance(testCase) {
 
   for (const [slug] of projectionsBySlug) {
     if (obligations.has(slug) || failedObligations.has(slug)) continue;
-    const closureKnown = testCase.closure_evidence.some(
-      (evidence) =>
-        evidence.incident_slug === slug &&
-        evidence.normal_path_verified === true &&
-        evidence.containment_removed === true &&
-        evidence.incident_closure_recorded === true,
-    );
+    const closureKnown = hasCompleteClosureEvidence(testCase, slug);
     const closure = closureKnown ? "verified-closure" : "unknown-closure";
     errors.push(`orphan_projection:${closure}:${slug}`);
   }
@@ -459,12 +516,9 @@ function reconcileProjections(testCase) {
 
   for (const projection of testCase.projections) {
     if (obligations.has(projection.incident_slug)) continue;
-    const hasClosure = testCase.closure_evidence.some(
-      (evidence) =>
-        evidence.incident_slug === projection.incident_slug &&
-        evidence.normal_path_verified === true &&
-        evidence.containment_removed === true &&
-        evidence.incident_closure_recorded === true,
+    const hasClosure = hasCompleteClosureEvidence(
+      testCase,
+      projection.incident_slug,
     );
     if (!hasClosure) deterministic.push(projection);
   }
@@ -489,7 +543,10 @@ function repairRegistryCrash(testCase) {
     obligations: markerHistory,
   };
   const registry = registryBySlug(working, errors);
-  const { selected: obligations } = selectObligations(markerHistory, errors);
+  const { selected: obligations, failed } = selectObligations(
+    markerHistory,
+    errors,
+  );
   const openIncidents = new Map(
     testCase.incidents
       .filter((incident) => incident.open)
@@ -499,7 +556,7 @@ function repairRegistryCrash(testCase) {
   for (let index = 0; index < knownObligations.length; index++) {
     const record = knownObligations[index];
     const slug = record.incident_slug;
-    if (!registry.has(slug)) continue;
+    if (registry.get(slug) !== record || failed.has(slug)) continue;
     const incident = openIncidents.get(slug);
     let marker = obligations.get(slug);
 
@@ -519,17 +576,13 @@ function repairRegistryCrash(testCase) {
       continue;
     }
     if (
-      canonicalStateErrors(config, working, new Map([[slug, marker]]), openIncidents)
-        .length > 0
-    ) {
-      continue;
-    }
-    if (
-      record.last_known_revision === 0 &&
-      ((marker.revision === 1 &&
-        !initialMarkerMatches(record, marker, incident, config)) ||
-        (marker.revision > 1 &&
-          !exactPendingMetadataMatches(record, incident, config)))
+      registryCatchUpError(
+        config,
+        working,
+        record,
+        marker,
+        openIncidents,
+      )
     ) {
       continue;
     }
@@ -664,6 +717,10 @@ describe("optional human-attention profile", () => {
       "registry-ahead-of-marker-fails",
       "mixed-valid-invalid-markers-fail-closed",
       "same-revision-unknown-field-conflict-fails",
+      "revision-zero-to-two-verification-lag-is-recoverable",
+      "revision-zero-to-three-verification-lag-is-recoverable",
+      "revision-zero-mismatched-initial-history-fails",
+      "unrepairable-canonical-state-registry-lag",
       "human-action-missing-canonical-incident",
       "reassignment-missing-canonical-incident",
       "projection-requested-action-mismatch-fails",
@@ -768,10 +825,27 @@ describe("optional human-attention profile", () => {
     for (const id of [
       "first-marker-write-crash-is-recoverable",
       "first-marker-registry-lag-is-recoverable",
+      "revision-zero-to-two-verification-lag-is-recoverable",
+      "revision-zero-to-three-verification-lag-is-recoverable",
     ]) {
       const rawCase = fixture.cases.find((testCase) => testCase.id === id);
       const testCase = resolveCase(fixture, structuredClone(rawCase));
+      const originalRegistry = structuredClone(testCase.known_obligations);
+      const originalMarkers = structuredClone(testCase.obligations);
       const repaired = repairRegistryCrash(testCase);
+      if (id === "first-marker-write-crash-is-recoverable") {
+        assert.equal(repaired.obligations.length, originalMarkers.length + 1);
+      } else {
+        assert.deepEqual(repaired.obligations, originalMarkers, `${id}: history`);
+      }
+      for (const [key, value] of Object.entries(originalRegistry[0])) {
+        if (key === "last_known_revision") continue;
+        assert.deepEqual(
+          repaired.known_obligations[0][key],
+          value,
+          `${id}: registry ${key}`,
+        );
+      }
       const reconciled = {
         ...repaired,
         projections: reconcileProjections(repaired),
@@ -791,6 +865,13 @@ describe("optional human-attention profile", () => {
     const invalid = resolveCase(fixture, structuredClone(invalidRaw));
     assert.deepEqual(repairRegistryCrash(invalid), invalid);
     assert.deepEqual(invalid.obligations, []);
+
+    const mismatchRaw = fixture.cases.find(
+      (testCase) =>
+        testCase.id === "revision-zero-mismatched-initial-history-fails",
+    );
+    const mismatch = resolveCase(fixture, structuredClone(mismatchRaw));
+    assert.deepEqual(repairRegistryCrash(mismatch), mismatch);
   });
 
   it("repairs a later registry lag without losing history, metadata, or siblings", () => {
@@ -841,13 +922,41 @@ describe("optional human-attention profile", () => {
       (testCase) => testCase.id === "mixed-valid-invalid-markers-fail-closed",
     );
     const mixed = resolveCase(fixture, mixedRaw);
+    const originalMixed = structuredClone(mixed);
     assert.deepEqual(assessConformance(mixed), [
       "invalid_obligation:console-action-required",
     ]);
+    assert.deepEqual(repairRegistryCrash(mixed), originalMixed);
     assert.throws(
       () => reconcileProjections(mixed),
       /obligation conflict blocks reconciliation/,
     );
+
+    const lagRaw = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const duplicateRegistry = resolveCase(fixture, structuredClone(lagRaw));
+    duplicateRegistry.known_obligations.push({
+      incident_slug: "console-action-required",
+      last_known_revision: 0,
+      duplicate_note: "preserve",
+    });
+    const repairedDuplicate = repairRegistryCrash(duplicateRegistry);
+    assert.equal(repairedDuplicate.known_obligations[0].last_known_revision, 2);
+    assert.deepEqual(
+      repairedDuplicate.known_obligations[1],
+      duplicateRegistry.known_obligations[1],
+    );
+
+    const unrepairableRaw = fixture.cases.find(
+      (testCase) => testCase.id === "unrepairable-canonical-state-registry-lag",
+    );
+    const unrepairable = resolveCase(fixture, structuredClone(unrepairableRaw));
+    assert.doesNotMatch(
+      assessConformance(unrepairable).join("\n"),
+      /recoverable_registry_lag/,
+    );
+    assert.deepEqual(repairRegistryCrash(unrepairable), unrepairable);
   });
 
   it("rejects same-revision marker conflicts independent of input order", () => {

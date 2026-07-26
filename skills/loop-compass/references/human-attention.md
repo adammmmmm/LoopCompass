@@ -106,6 +106,12 @@ Two first-write crash windows are repairable:
 The same redo rule applies after later writes: when a complete registry record lags a valid selected
 marker, advance `last_known_revision` to that marker revision. A registry ahead of the selected
 marker, or a positive registry revision with no marker, is a hard deletion failure.
+For revision-0 catch-up to an existing later marker, require retained revision-1 history whose
+stable `human_requirement` and `requested_action` match the registry metadata. Validate the selected
+marker against its current canonical-state rule. A `verification_pending` marker does not require
+the original human token to remain in current `requires`; the retained revision-1 marker proves the
+initial match. This historical catch-up rule never authorizes synthesizing a missing revision-1
+marker without the stricter current-incident match above.
 Reconciliation must preserve the full marker history, sibling and unknown records, unknown fields,
 pending metadata, and configured retention metadata; mutate only the targeted registry record or
 append the missing revision-1 marker.
