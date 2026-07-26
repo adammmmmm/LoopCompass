@@ -6,7 +6,13 @@
  *   node scripts/verify-consumer.mjs --project <repo-root>
  *   node scripts/verify-consumer.mjs --project <repo-root> --skill-paths .agents/skills/loop-compass,.claude/skills/loop-compass
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+} from "node:fs";
 import path from "node:path";
 import { validateStateDir } from "./lib/capsule.mjs";
 
@@ -38,7 +44,51 @@ const REQUIRED_SKILL_FILES = [
   "assets/recovery-template.md",
   "references/classification.md",
   "references/integration.md",
+  "references/pii-sanitation.md",
+  "references/redaction-audit.md",
+  "scripts/redact-check.mjs",
 ];
+
+function parseManifestFiles(text) {
+  const files = new Map();
+  let inFiles = false;
+  for (const rawLine of text.split(/\r?\n/)) {
+    if (/^files:\s*$/.test(rawLine)) {
+      inFiles = true;
+      continue;
+    }
+    if (!inFiles) continue;
+    const match = rawLine.match(/^\s+([^:]+):\s*([0-9a-f]{64})\s*$/i);
+    if (match) {
+      const rel = match[1].trim().replaceAll("\\", "/");
+      if (
+        path.posix.isAbsolute(rel) ||
+        rel.split("/").includes("..") ||
+        files.has(rel)
+      ) {
+        return null;
+      }
+      files.set(rel, match[2].toLowerCase());
+      continue;
+    }
+    if (/^\S/.test(rawLine)) break;
+    if (rawLine.trim()) return null;
+  }
+  return files.size ? files : null;
+}
+
+function listFiles(root, dir = root, files = []) {
+  for (const name of readdirSync(dir)) {
+    const full = path.join(dir, name);
+    if (lstatSync(full).isDirectory()) listFiles(root, full, files);
+    else files.push(path.relative(root, full).replaceAll("\\", "/"));
+  }
+  return files.sort();
+}
+
+function sha256(file) {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
 
 function main() {
   const { project, skillPaths } = parseArgs(process.argv.slice(2));
@@ -66,26 +116,61 @@ function main() {
         errors.push(`missing ${path.join(skillRoot, rel)}`);
       }
     }
-    // Portable core: no executables inside skill tree
-    const stack = [skillRoot];
-    while (stack.length) {
-      const dir = stack.pop();
-      for (const name of readdirSync(dir)) {
-        const full = path.join(dir, name);
-        if (statSync(full).isDirectory()) stack.push(full);
-        else if (!/\.(md|yaml|yml)$/i.test(name)) {
-          errors.push(`non-portable skill file: ${full}`);
-        }
+    const manifestPath = path.join(skillRoot, "manifest.yaml");
+    const manifestFiles =
+      existsSync(manifestPath) && !lstatSync(manifestPath).isSymbolicLink()
+      ? parseManifestFiles(readFileSync(manifestPath, "utf8"))
+      : null;
+    if (!manifestFiles) {
+      errors.push(`invalid manifest inventory: ${manifestPath}`);
+      continue;
+    }
+    for (const rel of listFiles(skillRoot)) {
+      if (rel === "manifest.yaml") continue;
+      const full = path.join(skillRoot, rel);
+      const fileStat = lstatSync(full);
+      if (fileStat.isSymbolicLink()) {
+        errors.push(`non-portable skill file: ${full}`);
+        continue;
+      }
+      const portableDocument = /\.(md|yaml|yml)$/i.test(rel);
+      const manifestedScript =
+        /^scripts\/[^/]+\.mjs$/.test(rel) && manifestFiles.has(rel);
+      if (!portableDocument && !manifestedScript) {
+        errors.push(`non-portable skill file: ${full}`);
+      }
+      if ((fileStat.mode & 0o111) !== 0 && !manifestedScript) {
+        errors.push(`unexpected executable skill file: ${full}`);
+      }
+      if (!manifestFiles.has(rel)) {
+        errors.push(`unmanifested skill file: ${full}`);
+      } else if (sha256(full) !== manifestFiles.get(rel)) {
+        errors.push(`skill digest mismatch: ${full}`);
+      }
+    }
+    for (const rel of manifestFiles.keys()) {
+      if (!existsSync(path.join(skillRoot, rel))) {
+        errors.push(`manifest lists missing skill file: ${path.join(skillRoot, rel)}`);
       }
     }
   }
 
   // Dual-host byte equality when both present
   if (paths.length >= 2) {
-    for (const rel of REQUIRED_SKILL_FILES) {
-      const a = readFileSync(path.join(paths[0], rel));
+    const firstFiles = listFiles(paths[0]);
+    for (let i = 1; i < paths.length; i++) {
+      if (JSON.stringify(listFiles(paths[i])) !== JSON.stringify(firstFiles)) {
+        errors.push("skill file inventory drift between installs");
+      }
+    }
+    for (const rel of firstFiles) {
+      const first = path.join(paths[0], rel);
+      if (lstatSync(first).isSymbolicLink()) continue;
+      const a = readFileSync(first);
       for (let i = 1; i < paths.length; i++) {
-        const b = readFileSync(path.join(paths[i], rel));
+        const other = path.join(paths[i], rel);
+        if (!existsSync(other) || lstatSync(other).isSymbolicLink()) continue;
+        const b = readFileSync(other);
         if (!a.equals(b)) {
           errors.push(`skill file drift between installs: ${rel}`);
         }

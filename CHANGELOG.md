@@ -11,11 +11,15 @@ uses [Semantic Versioning](https://semver.org/).
 
 - Community health policies, structured issue forms, and a pull request template.
 - Automated GitHub Actions dependency updates.
+- A manifested, dependency-free committed-state redaction checker that consumers can invoke
+  locally in non-mutating audit or enforce mode.
 
 ### Changed
 
 - GitHub Actions use current immutable releases, least-privilege permissions, and bounded jobs.
 - GitHub Pages deploys only when the site, its brand asset, or its workflow changes.
+- Consumer verification admits only manifested skill scripts and verifies the complete installed
+  skill inventory and digests.
 
 ## [0.3.0] - 2026-07-21
 

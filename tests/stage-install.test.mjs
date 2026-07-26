@@ -50,6 +50,41 @@ describe("stage-install dual host", () => {
       readFileSync(a, "utf8"),
       readFileSync(c, "utf8"),
     );
+    const checkerRel = path.join("scripts", "redact-check.mjs");
+    const sourceChecker = readFileSync(
+      path.join(root, "skills", "loop-compass", checkerRel),
+    );
+    assert.deepEqual(
+      readFileSync(
+        path.join(project, ".agents", "skills", "loop-compass", checkerRel),
+      ),
+      sourceChecker,
+    );
+    assert.deepEqual(
+      readFileSync(
+        path.join(project, ".claude", "skills", "loop-compass", checkerRel),
+      ),
+      sourceChecker,
+    );
+    const installedCheck = spawnSync(
+      process.execPath,
+      [
+        path.join(
+          project,
+          ".agents",
+          "skills",
+          "loop-compass",
+          checkerRel,
+        ),
+        "--project",
+        project,
+        "--mode",
+        "audit",
+      ],
+      { cwd: project, encoding: "utf8" },
+    );
+    assert.equal(installedCheck.status, 0, installedCheck.stderr || installedCheck.stdout);
+    assert.match(installedCheck.stdout, /loopcompass-redaction audit/);
     assert.ok(existsSync(path.join(stateRec, "keep-me.md")));
   });
 });

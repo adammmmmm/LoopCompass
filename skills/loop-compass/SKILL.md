@@ -70,6 +70,16 @@ before normalizing the signature or deriving a dedupe key, ID, or filename. Repl
 with functional roles and retain only the minimum mechanism-level evidence. Automated checks are
 defense in depth, not proof that no PII remains.
 
+For a non-mutating check of committed incidents, recoveries, and portable receipts, read
+[redaction-audit.md](references/redaction-audit.md) and run the shipped local checker explicitly:
+
+```text
+node <installed-skill>/scripts/redact-check.mjs --project <repo> --mode <audit|enforce>
+```
+
+Use `audit` for historical assessment and `enforce` when high-confidence findings should fail an
+agent or CI check. Neither mode sanitizes content or replaces review before the first write.
+
 ## Create a recovery
 
 Create one small file under `.loopcompass/recoveries/`. A `candidate` may preserve a proposal for

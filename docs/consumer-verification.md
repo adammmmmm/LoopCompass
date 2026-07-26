@@ -20,12 +20,25 @@ node scripts/verify-consumer.mjs --project /path/to/your/repo \
 ## What it asserts
 
 1. At least one `loop-compass` skill install exists under `.agents`, `.claude`, or `skills`.
-2. Required skill files are present; skill tree contains only `.md` / `.yaml` (portable core).
-3. When multiple installs exist, corresponding files are **byte-identical**.
+2. Required skill files are present and match the manifest digests. The only permitted execution
+   surface is a manifested `.mjs` directly beneath the skill's `scripts/` directory; unexpected
+   or unmanifested scripts are rejected.
+3. When multiple installs exist, their complete file inventories and bytes are identical.
 4. `AGENTS.md` / `CLAUDE.md` (if present) each contain exactly one managed policy marker pair and
    the canonical policy body.
 5. If `.loopcompass` exists, capsules pass `validate-state` rules (slug, status, verification
    section, open-incident containment expiry).
+
+The installed skill also contains an explicitly invoked, non-mutating committed-state audit:
+
+```sh
+node <installed-skill>/scripts/redact-check.mjs --project /path/to/your/repo --mode audit
+node <installed-skill>/scripts/redact-check.mjs --project /path/to/your/repo --mode enforce
+```
+
+`audit` reports historical findings without failing on content. `enforce` fails on
+high-confidence findings. Both are local and use only the Node standard library. See the installed
+`references/redaction-audit.md` for configuration, limits, and non-sensitive output guarantees.
 
 ## Related maintainer commands
 

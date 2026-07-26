@@ -64,6 +64,9 @@ describe("release tooling", () => {
       "assets/incident-template.md",
       "references/classification.md",
       "references/integration.md",
+      "references/pii-sanitation.md",
+      "references/redaction-audit.md",
+      "scripts/redact-check.mjs",
     ]) {
       assert.match(text, new RegExp(`^\\s+${rel.replace(".", "\\.")}:\\s+[0-9a-f]{64}$`, "m"));
     }
@@ -211,6 +214,13 @@ describe("release tooling", () => {
         const actual = createHash("sha256").update(raw).digest("hex");
         assert.equal(actual, expected, `raw digest mismatch for ${rel}`);
       }
+      assert.equal(
+        readFileSync(path.join(staged, "scripts", "redact-check.mjs"), "utf8"),
+        readFileSync(
+          path.join(root, "skills", "loop-compass", "scripts", "redact-check.mjs"),
+          "utf8",
+        ),
+      );
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
