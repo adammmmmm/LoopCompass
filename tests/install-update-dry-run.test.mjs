@@ -76,10 +76,12 @@ describe("install and update dry-run", () => {
     cpSync(skillSrc, skillDest, { recursive: true });
 
     const installedManifest = path.join(skillDest, "manifest.yaml");
-    const text = readFileSync(installedManifest, "utf8").replace(
-      /^version:\s*.+$/m,
-      "version: 0.0.1",
-    );
+    const text = readFileSync(installedManifest, "utf8")
+      .replace(/^version:\s*.+$/m, "version: 0.0.1")
+      .replace(
+        /^release:\s*.+$/m,
+        "release: https://github.com/adammmmmm/LoopCompass/releases/tag/v0.0.1",
+      );
     writeFileSync(installedManifest, text, "utf8");
 
     const check = runNode([

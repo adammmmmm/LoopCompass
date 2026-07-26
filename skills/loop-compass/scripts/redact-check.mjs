@@ -676,6 +676,46 @@ function scanCommittedState(projectRoot, stateRoot, repository, entries, counts,
   }
 }
 
+function assertFinalState(
+  projectRoot,
+  stateRoot,
+  repository,
+  entries,
+  trackedConfig,
+) {
+  const finalHead = runGit(projectRoot, repository, [
+    "rev-parse",
+    "--verify",
+    "HEAD^{commit}",
+  ])
+    .toString("ascii")
+    .trim();
+  if (finalHead !== repository.head) throw new Error("HEAD changed during scan");
+  const finalEntries = committedEntries(projectRoot, repository);
+  if (JSON.stringify(finalEntries) !== JSON.stringify(entries)) {
+    throw new Error("tracked state changed during scan");
+  }
+  assertCleanState(projectRoot, repository);
+  assertExactStateInventory(stateRoot, entries);
+  if (stateRoot) {
+    const finalPatterns = trackedConfig
+      ? loadProjectPatterns(projectRoot, stateRoot, {
+          ...trackedConfig,
+          objectFormat: repository.objectFormat,
+        })
+      : [];
+    scanCommittedState(
+      projectRoot,
+      stateRoot,
+      repository,
+      entries,
+      new Map(),
+      finalPatterns,
+      { scanned: 0, skipped: 0 },
+    );
+  }
+}
+
 function main() {
   const { project, mode } = parseArgs(process.argv.slice(2));
   try {
@@ -729,8 +769,13 @@ function main() {
         stats,
       );
     }
-    assertCleanState(projectRoot, repository);
-    assertExactStateInventory(stateRoot, entries);
+    assertFinalState(
+      projectRoot,
+      stateRoot,
+      repository,
+      entries,
+      trackedConfig,
+    );
     assertStableDirectory(projectRoot, projectBefore);
     if (stateRoot) assertStableDirectory(statePath, stateBefore);
     assertStableDirectory(repository.gitDir, repository.gitDirStat);

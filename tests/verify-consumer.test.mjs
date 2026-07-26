@@ -190,4 +190,22 @@ describe("verify-consumer", () => {
     assert.match(result.stderr, /typed-tree/);
     assert.doesNotMatch(result.stderr, /consumer-fifo|SKILL\.md/);
   });
+
+  it("rejects a FIFO in state before validation without blocking", (context) => {
+    const project = path.join(tmp, "consumer-state-fifo");
+    stageOne(project);
+    const incidents = path.join(project, ".loopcompass", "incidents");
+    mkdirSync(incidents, { recursive: true });
+    const target = path.join(incidents, "candidate.md");
+    const created = spawnSync("mkfifo", [target], { encoding: "utf8" });
+    if (created.status !== 0) {
+      context.skip("mkfifo unavailable on this host");
+      return;
+    }
+    const result = verify(project, 3000);
+    assert.notEqual(result.signal, "SIGTERM", "verification must not block on FIFO");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /regular-tree validation/);
+    assert.doesNotMatch(result.stderr, /consumer-state-fifo|candidate\.md/);
+  });
 });

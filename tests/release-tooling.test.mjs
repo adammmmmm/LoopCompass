@@ -54,6 +54,46 @@ describe("release tooling", () => {
     assert.match(result.stdout, /validate ok/);
   });
 
+  it("rejects noncanonical manifest grammar", () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-manifest-grammar-"));
+    try {
+      for (const name of ["scripts", "skills", "docs"]) {
+        cpSync(path.join(root, name), path.join(fixtureRoot, name), { recursive: true });
+      }
+      for (const name of ["VERSION", "LICENSE", "CHANGELOG.md", "README.md"]) {
+        copyFileSync(path.join(root, name), path.join(fixtureRoot, name));
+      }
+      const manifestPath = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "manifest.yaml",
+      );
+      const canonical = readFileSync(manifestPath, "utf8");
+      const cases = [
+        `${canonical}# extra comment\n`,
+        `${canonical}unknown_field: value\n`,
+        canonical.replace(
+          /^version: (.+)$/m,
+          "version: $1\nversion: $1",
+        ),
+        canonical.replace(
+          /^(version: .+)\n(source: .+)$/m,
+          "$2\n$1",
+        ),
+      ];
+      for (const candidate of cases) {
+        writeFileSync(manifestPath, candidate);
+        const result = runReleaseAt(fixtureRoot, "validate");
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /release operation failed stable filesystem validation/);
+        assert.doesNotMatch(result.stderr, /extra comment|unknown_field/);
+      }
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("manifest lists every required skill file with sha256 digests", () => {
     const manifestPath = path.join(root, "skills", "loop-compass", "manifest.yaml");
     assert.ok(existsSync(manifestPath));
@@ -191,6 +231,16 @@ describe("release tooling", () => {
         "utf8",
       );
       writeFileSync(skillYaml, crlf);
+      const nestedManifest = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "references",
+        "manifest.yaml",
+      );
+      writeFileSync(nestedManifest, "nested payload\n");
+      const generated = runReleaseAt(fixtureRoot, "generate");
+      assert.equal(generated.status, 0, generated.stderr || generated.stdout);
 
       const result = runReleaseAt(fixtureRoot, "package");
       assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -205,6 +255,11 @@ describe("release tooling", () => {
       );
       const man = parseManifestFiles(
         readFileSync(path.join(staged, "manifest.yaml"), "utf8"),
+      );
+      assert.ok(man["references/manifest.yaml"]);
+      assert.equal(
+        readFileSync(path.join(staged, "references", "manifest.yaml"), "utf8"),
+        "nested payload\n",
       );
       for (const [rel, expected] of Object.entries(man)) {
         const raw = readFileSync(path.join(staged, rel));
@@ -275,9 +330,29 @@ describe("release tooling", () => {
           stagedManifest,
         );
         assert.notEqual(drift.status, 0);
-        assert.match(drift.stderr, /manifest bytes do not match release payload/);
+        assert.match(drift.stderr, /release operation failed stable filesystem validation/);
         assert.doesNotMatch(drift.stderr, /comment|unknown_field/);
       }
+      writeFileSync(installedManifest, originalInstalledManifest);
+
+      const bothDrift = `${originalInstalledManifest}# identical drift\n`;
+      writeFileSync(installedManifest, bothDrift);
+      const driftedRelease = path.join(fixtureRoot, "both-drift.yaml");
+      writeFileSync(driftedRelease, bothDrift);
+      const sameInvalidBytes = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        driftedRelease,
+      );
+      assert.notEqual(sameInvalidBytes.status, 0);
+      assert.match(
+        sameInvalidBytes.stderr,
+        /release operation failed stable filesystem validation/,
+      );
+      assert.doesNotMatch(sameInvalidBytes.stderr, /identical drift/);
       writeFileSync(installedManifest, originalInstalledManifest);
 
       writeFileSync(path.join(installedSkill, ".hidden-payload"), "unexpected\n");
@@ -314,6 +389,9 @@ describe("release tooling", () => {
         readFileSync(installedManifest, "utf8").replace(
           /^policy_version:\s*.+$/m,
           "policy_version: 999",
+        ).replace(
+          /^minimum_policy_version:\s*.+$/m,
+          "minimum_policy_version: 999",
         ),
       );
       const sameCommitMismatch = runReleaseAt(
