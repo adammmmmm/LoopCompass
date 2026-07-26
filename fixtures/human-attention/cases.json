@@ -2,12 +2,36 @@
   "schema": 1,
   "profile": "loopcompass-human-attention-v1",
   "description": "Host-neutral conformance cases for the optional human-attention projection contract.",
+  "profiles": {
+    "disabled": {
+      "enabled": false
+    },
+    "capability": {
+      "enabled": true,
+      "surface": "HANDOFF.md",
+      "authority": "incident-coordinator",
+      "human_only_capabilities": ["production-console"],
+      "human_only_decisions": []
+    },
+    "decision": {
+      "enabled": true,
+      "surface": "OPERATOR_QUEUE.md",
+      "authority": "incident-coordinator",
+      "human_only_capabilities": [],
+      "human_only_decisions": ["production-release"]
+    },
+    "invalid": {
+      "enabled": true,
+      "surface": "",
+      "authority": "",
+      "human_only_capabilities": ["production-console"],
+      "human_only_decisions": []
+    }
+  },
   "cases": [
     {
       "id": "disabled-imposes-no-projection",
-      "profile_config": {
-        "enabled": false
-      },
+      "profile_config": "disabled",
       "incidents": [
         {
           "slug": "production-release-needs-approval",
@@ -15,8 +39,9 @@
           "requires": ["decision:production-release"]
         }
       ],
+      "obligations": [],
       "projections": [],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": true,
         "errors": []
@@ -24,13 +49,7 @@
     },
     {
       "id": "enabled-exactly-one-human-capability",
-      "profile_config": {
-        "enabled": true,
-        "surface": "HANDOFF.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
+      "profile_config": "capability",
       "incidents": [
         {
           "slug": "production-console-action-is-required",
@@ -38,27 +57,30 @@
           "requires": ["production-console"]
         }
       ],
+      "obligations": [
+        {
+          "incident_slug": "production-console-action-is-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "requested_action": "Perform the production console action."
+        }
+      ],
       "projections": [
         {
           "incident_slug": "production-console-action-is-required",
-          "state": "human_action_pending"
+          "state": "human_action_pending",
+          "obligation_revision": 1
         }
       ],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": true,
         "errors": []
       }
     },
     {
-      "id": "enabled-missing-human-projection",
-      "profile_config": {
-        "enabled": true,
-        "surface": "HANDOFF.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
+      "id": "enabled-needs-persisted-obligation",
+      "profile_config": "capability",
       "incidents": [
         {
           "slug": "production-console-action-is-required",
@@ -66,70 +88,114 @@
           "requires": ["production-console"]
         }
       ],
+      "obligations": [],
       "projections": [],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": false,
-        "errors": ["missing_projection:production-console-action-is-required"]
+        "errors": [
+          "missing_obligation:production-console-action-is-required"
+        ]
       }
     },
     {
-      "id": "enabled-duplicate-human-projection",
-      "profile_config": {
-        "enabled": true,
-        "surface": "HANDOFF.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
+      "id": "enabled-missing-human-projection",
+      "profile_config": "capability",
       "incidents": [
         {
           "slug": "production-console-action-is-required",
           "open": true,
           "requires": ["production-console"]
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "production-console-action-is-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "missing_projection:production-console-action-is-required"
+        ]
+      }
+    },
+    {
+      "id": "enabled-divergent-duplicates-recompute",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "production-console-action-is-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "production-console-action-is-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "requested_action": "Perform the production console action."
         }
       ],
       "projections": [
         {
           "incident_slug": "production-console-action-is-required",
-          "state": "human_action_pending"
+          "state": "human_action_pending",
+          "obligation_revision": 1
         },
         {
           "incident_slug": "production-console-action-is-required",
-          "state": "verification_pending"
+          "state": "verification_pending",
+          "obligation_revision": 2
         }
       ],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": false,
-        "errors": ["duplicate_projection:production-console-action-is-required"]
+        "errors": [
+          "duplicate_projection:production-console-action-is-required"
+        ],
+        "reconciled_projection": {
+          "incident_slug": "production-console-action-is-required",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/production-console-action-is-required.md"
+        }
       }
     },
     {
       "id": "human-decision-awaits-verification",
-      "profile_config": {
-        "enabled": true,
-        "surface": "OPERATOR_QUEUE.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": [],
-        "human_only_decisions": ["production-release"]
-      },
+      "profile_config": "decision",
       "incidents": [
         {
           "slug": "production-release-needs-approval",
           "open": true,
-          "requires": ["decision:production-release"],
-          "human_action_complete": true,
-          "verification_pending": true
+          "requires": ["decision:production-release"]
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "verification_pending",
+          "revision": 2,
+          "requested_action": "Approve the production release."
         }
       ],
       "projections": [
         {
           "incident_slug": "production-release-needs-approval",
-          "state": "verification_pending"
+          "state": "verification_pending",
+          "obligation_revision": 2
         }
       ],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": true,
         "errors": []
@@ -137,87 +203,171 @@
     },
     {
       "id": "human-step-does-not-permit-early-removal",
-      "profile_config": {
-        "enabled": true,
-        "surface": "OPERATOR_QUEUE.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": [],
-        "human_only_decisions": ["production-release"]
-      },
+      "profile_config": "decision",
       "incidents": [
         {
           "slug": "production-release-needs-approval",
           "open": true,
-          "requires": ["decision:production-release"],
-          "human_action_complete": true,
-          "verification_pending": true
+          "requires": ["decision:production-release"]
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "verification_pending",
+          "revision": 2,
+          "requested_action": "Approve the production release."
         }
       ],
       "projections": [],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": false,
-        "errors": ["missing_projection:production-release-needs-approval"]
+        "errors": [
+          "missing_projection:production-release-needs-approval"
+        ]
       }
     },
     {
-      "id": "human-step-advances-existing-projection",
-      "profile_config": {
-        "enabled": true,
-        "surface": "OPERATOR_QUEUE.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": [],
-        "human_only_decisions": ["production-release"]
-      },
+      "id": "human-token-removed-after-action-retains-projection",
+      "profile_config": "decision",
       "incidents": [
         {
           "slug": "production-release-needs-approval",
           "open": true,
-          "requires": ["decision:production-release"],
-          "human_action_complete": true,
-          "verification_pending": true
+          "requires": ["ci-runner"]
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "verification_pending",
+          "revision": 2,
+          "requested_action": "Approve the production release."
         }
       ],
       "projections": [
         {
           "incident_slug": "production-release-needs-approval",
-          "state": "human_action_pending"
+          "state": "verification_pending",
+          "obligation_revision": 2
         }
       ],
-      "verified_closures": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "true-non-human-reassignment-releases-projection",
+      "profile_config": "decision",
+      "incidents": [
+        {
+          "slug": "production-release-needs-approval",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "reassigned_nonhuman",
+          "revision": 3,
+          "requested_action": "CI verifies the release."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "reassignment-with-stale-projection-fails",
+      "profile_config": "decision",
+      "incidents": [
+        {
+          "slug": "production-release-needs-approval",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "reassigned_nonhuman",
+          "revision": 3,
+          "requested_action": "CI verifies the release."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "verification_pending",
+          "obligation_revision": 2
+        }
+      ],
+      "closure_evidence": [],
       "expected": {
         "conformant": false,
         "errors": [
-          "projection_state_not_verification_pending:production-release-needs-approval"
+          "unexpected_projection:production-release-needs-approval"
         ]
       }
     },
     {
       "id": "verified-closure-permits-cleanup",
-      "profile_config": {
-        "enabled": true,
-        "surface": "HANDOFF.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
+      "profile_config": "capability",
       "incidents": [],
+      "obligations": [
+        {
+          "incident_slug": "production-console-action-is-required",
+          "state": "verified_closed",
+          "revision": 3,
+          "closure_evidence_ref": "closure-production-console-v1"
+        }
+      ],
       "projections": [],
-      "verified_closures": ["production-console-action-is-required"],
+      "closure_evidence": [
+        {
+          "id": "closure-production-console-v1",
+          "incident_slug": "production-console-action-is-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
       "expected": {
         "conformant": true,
         "errors": []
+      }
+    },
+    {
+      "id": "cleanup-without-closure-evidence-fails",
+      "profile_config": "capability",
+      "incidents": [],
+      "obligations": [
+        {
+          "incident_slug": "production-console-action-is-required",
+          "state": "verified_closed",
+          "revision": 3,
+          "closure_evidence_ref": "closure-production-console-v1"
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "missing_closure_evidence:production-console-action-is-required"
+        ]
       }
     },
     {
       "id": "non-human-action-has-no-human-projection",
-      "profile_config": {
-        "enabled": true,
-        "surface": "HANDOFF.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
+      "profile_config": "capability",
       "incidents": [
         {
           "slug": "ci-worker-must-rerun-verification",
@@ -225,50 +375,17 @@
           "requires": ["ci-runner"]
         }
       ],
+      "obligations": [],
       "projections": [],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": true,
         "errors": []
       }
     },
     {
-      "id": "human-to-non-human-reassignment-removes-projection",
-      "profile_config": {
-        "enabled": true,
-        "surface": "HANDOFF.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
-      "incidents": [
-        {
-          "slug": "ci-worker-must-rerun-verification",
-          "open": true,
-          "requires": ["ci-runner"]
-        }
-      ],
-      "projections": [
-        {
-          "incident_slug": "ci-worker-must-rerun-verification",
-          "state": "human_action_pending"
-        }
-      ],
-      "verified_closures": [],
-      "expected": {
-        "conformant": false,
-        "errors": ["unexpected_projection:ci-worker-must-rerun-verification"]
-      }
-    },
-    {
       "id": "wrong-slug-is-missing-plus-orphan",
-      "profile_config": {
-        "enabled": true,
-        "surface": "HANDOFF.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
+      "profile_config": "capability",
       "incidents": [
         {
           "slug": "production-console-action-is-required",
@@ -276,13 +393,22 @@
           "requires": ["production-console"]
         }
       ],
+      "obligations": [
+        {
+          "incident_slug": "production-console-action-is-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "requested_action": "Perform the production console action."
+        }
+      ],
       "projections": [
         {
           "incident_slug": "friendly-lc-alias",
-          "state": "human_action_pending"
+          "state": "human_action_pending",
+          "obligation_revision": 1
         }
       ],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": false,
         "errors": [
@@ -293,41 +419,52 @@
     },
     {
       "id": "orphan-with-verified-closure-must-be-cleaned",
-      "profile_config": {
-        "enabled": true,
-        "surface": "HANDOFF.md",
-        "authority": "incident-coordinator",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
+      "profile_config": "capability",
       "incidents": [],
+      "obligations": [
+        {
+          "incident_slug": "production-console-action-is-required",
+          "state": "verified_closed",
+          "revision": 3,
+          "closure_evidence_ref": "closure-production-console-v1"
+        }
+      ],
       "projections": [
         {
           "incident_slug": "production-console-action-is-required",
-          "state": "verification_pending"
+          "state": "verification_pending",
+          "obligation_revision": 2
         }
       ],
-      "verified_closures": ["production-console-action-is-required"],
+      "closure_evidence": [
+        {
+          "id": "closure-production-console-v1",
+          "incident_slug": "production-console-action-is-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
       "expected": {
         "conformant": false,
-        "errors": ["orphan_projection:verified-closure:production-console-action-is-required"]
+        "errors": [
+          "unexpected_projection:production-console-action-is-required"
+        ]
       }
     },
     {
       "id": "enabled-profile-needs-one-authority-surface",
-      "profile_config": {
-        "enabled": true,
-        "surface": "",
-        "authority": "",
-        "human_only_capabilities": ["production-console"],
-        "human_only_decisions": []
-      },
+      "profile_config": "invalid",
       "incidents": [],
+      "obligations": [],
       "projections": [],
-      "verified_closures": [],
+      "closure_evidence": [],
       "expected": {
         "conformant": false,
-        "errors": ["invalid_profile:authority", "invalid_profile:surface"]
+        "errors": [
+          "invalid_profile:authority",
+          "invalid_profile:surface"
+        ]
       }
     }
   ]

@@ -52,44 +52,87 @@ Formatting is consumer-defined. At minimum, the entry must convey:
 - canonical incident slug;
 - requested human action or decision;
 - whether human action is pending or coordinator verification is pending; and
+- the current obligation revision described below; and
 - enough location information to reach the canonical incident.
 
 The projection must not become a second incident record. Detailed evidence, containment, repair
 state, and closure authority remain with the incident.
 
+## Persisted obligation marker
+
+Schema 1 has no action-owner or verification-pending field. Therefore, an enabled profile must
+persist a small, machine-detectable obligation marker on the same designated surface (or in its
+project-governed configuration metadata) before reporting that human attention is durable. This
+marker is reconciliation metadata, not another incident.
+
+Each marker is keyed by canonical incident slug and carries:
+
+- `state`: `human_action_pending`, `verification_pending`, `reassigned_nonhuman`, or
+  `verified_closed`;
+- a monotonically increasing integer `revision`;
+- the requested action or stable decision/capability identifier while active; and
+- for `verified_closed`, a non-sensitive durable reference to the normal-path verification and
+  closure evidence.
+
+`human_action_pending` and `verification_pending` are active obligations and require exactly one
+visible projection. `reassigned_nonhuman` and `verified_closed` are release markers and require no
+human projection. Retain a release marker long enough for reconciliation and the project's normal
+audit policy to prove why the projection disappeared.
+
+When `requires` currently matches a declared human-only identifier, that canonical incident creates
+or refreshes an active marker; a release marker cannot override the current requirement. When the
+human step completes, advance the marker to `verification_pending` before changing or removing the
+matched `requires` token. The persisted marker then keeps the projection required even though
+schema 1 has no incident field for that phase.
+
+A true human-to-non-human reassignment is a separate coordinator event: first update the canonical
+incident so `requires` no longer matches a human-only identifier, then advance the marker to
+`reassigned_nonhuman`. Merely removing the token after a human action is not a reassignment.
+
 ## Idempotent lifecycle
 
 Reconciliation is an idempotent upsert by canonical incident slug:
 
-1. Read the enabled profile declaration and the canonical open incidents.
-2. Derive the set needing human action by exact matching against `requires`.
-3. Upsert one entry per member on the single designated surface.
-4. Collapse duplicate entries for the same slug without dropping the newest requested action or
-   verification state.
-5. Reconcile entries that no longer match an open human-action incident as described below.
-6. Re-read the surface and confirm the exactly-one invariant before reporting projection success.
+1. Read the enabled profile declaration, canonical open incidents, persisted obligation markers,
+   and referenced closure evidence.
+2. Match current `requires` values exactly and reconcile them with the markers using the rules
+   above.
+3. If marker history contains several revisions for a slug, select the greatest valid integer
+   revision. Divergent records with the same greatest revision are a hard conflict for the
+   designated authority; never choose by document order or prose.
+4. Deterministically render one projection for each active marker from the canonical slug,
+   marker state and revision, requested action, and canonical incident location.
+5. Replace all existing projections for that slug with the deterministic result. Do not merge
+   fields from duplicates or guess which entry is newest or most advanced.
+6. Reconcile entries that no longer match an active obligation as described below.
+7. Re-read the surface and confirm the exactly-one invariant and matching obligation revision
+   before reporting projection success.
 
 Human acknowledgment or completion of the requested action is progress, not closure. Update the
 same projection to `verification_pending` while the incident coordinator verifies the authoritative
-normal path. Keep it there if verification fails or containment remains. During this state, retain
-the matched human-only `requires` token (or an equivalent adapter-owned obligation snapshot) until
-closure. Removing the token merely because the human step finished must not masquerade as a
-non-human reassignment.
+normal path. Keep it there if verification fails or containment remains. The persisted
+`verification_pending` marker is the schema-1 obligation source if the matched `requires` token has
+already been removed. Removing the token merely because the human step finished must not
+masquerade as a non-human reassignment.
 
 Remove the projection only after verified closure. Verified closure means the LoopCompass
 coordinator has removed obsolete containment, exercised the authoritative normal path from clean
-preconditions, and completed the normal incident-closure process. The projection must not
-disappear merely because the human acknowledged, decided, or completed the requested step.
+preconditions, completed the normal incident-closure process, and advanced the marker to
+`verified_closed` with a durable evidence reference. The projection must not disappear merely
+because the human acknowledged, decided, or completed the requested step.
 
 ## Reassignment and reconciliation
 
 - **Human to human:** update the same slug-keyed entry. Do not create an entry per person.
-- **Non-human to human:** upsert the entry before treating the escalation as durably surfaced.
+- **Non-human to human:** persist or advance the active marker and then upsert the entry before
+  treating the escalation as durably surfaced.
 - **Human to non-human:** when the canonical incident no longer requires any declared human-only
-  capability or decision, remove its projection as a reassignment, not as incident closure. The
-  incident stays open under its coordinator.
-- **Duplicate:** reduce entries with the same canonical slug to one and preserve the most advanced
-  accurate state.
+  capability or decision, persist a greater-revision `reassigned_nonhuman` marker and
+  deterministically render no projection. This is reassignment, not incident closure; the incident
+  stays open under its coordinator.
+- **Duplicate:** discard the divergent presentation entries and deterministically render one from
+  the selected obligation revision and canonical incident. Do not compare prose timestamps or
+  treat one lifecycle state as inherently newer.
 - **Orphan with verified closure evidence:** remove it.
 - **Orphan without verified closure evidence:** do not guess that absence means closure. Retain or
   quarantine it on the designated surface and escalate reconciliation to that surface's declared
@@ -104,12 +147,16 @@ The incident and projection can be separate repository edits, so hosts must reco
 partial work:
 
 - If the incident exists and needs human action but the projection is absent, retry the idempotent
-  upsert.
-- If duplicates exist, collapse them and verify one remains.
+  marker/upsert sequence.
+- If the marker was written but the projection was not, render it from the marker.
+- If duplicates or a partially rewritten projection exist, discard them, render from the selected
+  marker revision, and verify one exact result remains.
 - If a crash occurs after human action but before verification, retain or restore
-  `verification_pending`.
-- If closure completed but projection cleanup did not, remove the orphan only after confirming
-  durable verified-closure evidence.
+  `verification_pending` from the persisted obligation marker.
+- If closure completed but projection cleanup did not, advance the marker to `verified_closed`
+  with a durable evidence reference, then remove the projection.
+- If a projection is absent but its marker has not reached `verified_closed` or
+  `reassigned_nonhuman`, restore it; absence alone is never closure evidence.
 - Never report a human escalation as complete until the projection can be re-read from the
   designated durable surface.
 
@@ -134,7 +181,12 @@ copy raw logs, private payloads, secrets, or unnecessary identity data into the 
 - Profile enabled, one human-action incident, zero or two matching entries: non-conformant.
 - Profile enabled, human action acknowledged, one `verification_pending` entry: conformant.
 - Human step complete, verification pending, entry removed: non-conformant.
-- Verified closure complete, entry removed: conformant.
+- Human token removed after action, active `verification_pending` marker and one projection:
+  conformant.
+- Human token removed by true reassignment, `reassigned_nonhuman` marker and no projection:
+  conformant.
+- `verified_closed` marker with durable closure evidence and no projection: conformant.
+- Projection removed with no durable closure evidence: non-conformant.
 - Open incident requiring only an agent capability, no entry: conformant.
 
 Deterministic cases live at `fixtures/human-attention/cases.json` in the source repository. They

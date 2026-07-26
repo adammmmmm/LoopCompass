@@ -39,6 +39,84 @@ function isHumanAction(incident, config) {
   );
 }
 
+const ACTIVE_OBLIGATIONS = new Set([
+  "human_action_pending",
+  "verification_pending",
+]);
+const RELEASED_OBLIGATIONS = new Set([
+  "reassigned_nonhuman",
+  "verified_closed",
+]);
+
+function resolveCase(fixture, testCase) {
+  return {
+    ...testCase,
+    profile_config: fixture.profiles[testCase.profile_config],
+  };
+}
+
+function obligationFingerprint(obligation) {
+  return JSON.stringify({
+    incident_slug: obligation.incident_slug,
+    state: obligation.state,
+    revision: obligation.revision,
+    requested_action: obligation.requested_action ?? null,
+    closure_evidence_ref: obligation.closure_evidence_ref ?? null,
+  });
+}
+
+function selectObligations(obligations, errors = []) {
+  const bySlug = new Map();
+  for (const obligation of obligations) {
+    const matches = bySlug.get(obligation.incident_slug) ?? [];
+    matches.push(obligation);
+    bySlug.set(obligation.incident_slug, matches);
+  }
+
+  const selected = new Map();
+  for (const [slug, matches] of bySlug) {
+    const valid = matches.filter(
+      (obligation) =>
+        Number.isInteger(obligation.revision) &&
+        obligation.revision > 0 &&
+        (ACTIVE_OBLIGATIONS.has(obligation.state) ||
+          RELEASED_OBLIGATIONS.has(obligation.state)),
+    );
+    if (valid.length !== matches.length) {
+      errors.push(`invalid_obligation:${slug}`);
+    }
+    if (valid.length === 0) continue;
+
+    const greatestRevision = Math.max(...valid.map((obligation) => obligation.revision));
+    const latest = valid.filter(
+      (obligation) => obligation.revision === greatestRevision,
+    );
+    const distinct = new Set(latest.map(obligationFingerprint));
+    if (distinct.size > 1) {
+      errors.push(`conflicting_obligation_revision:${slug}`);
+      continue;
+    }
+    selected.set(slug, latest[0]);
+  }
+  return selected;
+}
+
+function hasVerifiedClosure(testCase, obligation) {
+  if (obligation.state !== "verified_closed" || !obligation.closure_evidence_ref) {
+    return false;
+  }
+  const evidence = testCase.closure_evidence.find(
+    (candidate) => candidate.id === obligation.closure_evidence_ref,
+  );
+  return Boolean(
+    evidence &&
+      evidence.incident_slug === obligation.incident_slug &&
+      evidence.normal_path_verified === true &&
+      evidence.containment_removed === true &&
+      evidence.incident_closure_recorded === true,
+  );
+}
+
 function assessConformance(testCase) {
   const config = testCase.profile_config;
   if (!config.enabled) return [];
@@ -52,6 +130,7 @@ function assessConformance(testCase) {
       .filter((incident) => incident.open)
       .map((incident) => [incident.slug, incident]),
   );
+  const obligations = selectObligations(testCase.obligations, errors);
   const projectionsBySlug = new Map();
   for (const projection of testCase.projections) {
     const matches = projectionsBySlug.get(projection.incident_slug) ?? [];
@@ -60,30 +139,97 @@ function assessConformance(testCase) {
   }
 
   for (const incident of openIncidents.values()) {
-    const count = (projectionsBySlug.get(incident.slug) ?? []).length;
+    const obligation = obligations.get(incident.slug);
     if (isHumanAction(incident, config)) {
-      if (count === 0) errors.push(`missing_projection:${incident.slug}`);
-      if (count > 1) errors.push(`duplicate_projection:${incident.slug}`);
-      if (
-        count === 1 &&
-        incident.verification_pending &&
-        projectionsBySlug.get(incident.slug)[0].state !== "verification_pending"
-      ) {
-        errors.push(`projection_state_not_verification_pending:${incident.slug}`);
+      if (!obligation) {
+        errors.push(`missing_obligation:${incident.slug}`);
+      } else if (RELEASED_OBLIGATIONS.has(obligation.state)) {
+        errors.push(`obligation_conflicts_current_requires:${incident.slug}`);
       }
-    } else if (count > 0) {
-      errors.push(`unexpected_projection:${incident.slug}`);
     }
   }
 
-  const verifiedClosures = new Set(testCase.verified_closures);
+  for (const [slug, obligation] of obligations) {
+    const projections = projectionsBySlug.get(slug) ?? [];
+    if (ACTIVE_OBLIGATIONS.has(obligation.state)) {
+      if (projections.length === 0) {
+        errors.push(`missing_projection:${slug}`);
+      } else if (projections.length > 1) {
+        errors.push(`duplicate_projection:${slug}`);
+      } else {
+        const [projection] = projections;
+        if (projection.state !== obligation.state) {
+          errors.push(`projection_state_mismatch:${slug}`);
+        }
+        if (projection.obligation_revision !== obligation.revision) {
+          errors.push(`projection_revision_mismatch:${slug}`);
+        }
+      }
+      if (!openIncidents.has(slug)) {
+        errors.push(`missing_closure_evidence:${slug}`);
+      }
+    } else {
+      if (projections.length > 0) {
+        errors.push(`unexpected_projection:${slug}`);
+      }
+      if (
+        obligation.state === "verified_closed" &&
+        !hasVerifiedClosure(testCase, obligation)
+      ) {
+        errors.push(`missing_closure_evidence:${slug}`);
+      }
+    }
+  }
+
   for (const [slug] of projectionsBySlug) {
-    if (openIncidents.has(slug)) continue;
-    const closure = verifiedClosures.has(slug) ? "verified-closure" : "unknown-closure";
+    if (obligations.has(slug)) continue;
+    const closureKnown = testCase.closure_evidence.some(
+      (evidence) =>
+        evidence.incident_slug === slug &&
+        evidence.normal_path_verified === true &&
+        evidence.containment_removed === true &&
+        evidence.incident_closure_recorded === true,
+    );
+    const closure = closureKnown ? "verified-closure" : "unknown-closure";
     errors.push(`orphan_projection:${closure}:${slug}`);
   }
 
   return errors.sort();
+}
+
+function reconcileProjections(testCase) {
+  if (!testCase.profile_config.enabled) return testCase.projections;
+  const obligationErrors = [];
+  const obligations = selectObligations(testCase.obligations, obligationErrors);
+  assert.deepEqual(obligationErrors, [], "obligation conflict blocks reconciliation");
+  const deterministic = [];
+
+  for (const obligation of obligations.values()) {
+    if (!ACTIVE_OBLIGATIONS.has(obligation.state)) continue;
+    deterministic.push({
+      incident_slug: obligation.incident_slug,
+      state: obligation.state,
+      obligation_revision: obligation.revision,
+      requested_action: obligation.requested_action,
+      incident_path: `.loopcompass/incidents/${obligation.incident_slug}.md`,
+    });
+  }
+
+  for (const projection of testCase.projections) {
+    if (obligations.has(projection.incident_slug)) continue;
+    const hasClosure = testCase.closure_evidence.some(
+      (evidence) =>
+        evidence.incident_slug === projection.incident_slug &&
+        evidence.normal_path_verified === true &&
+        evidence.containment_removed === true &&
+        evidence.incident_closure_recorded === true,
+    );
+    if (!hasClosure) deterministic.push(projection);
+  }
+
+  return deterministic.sort((a, b) =>
+    a.incident_slug.localeCompare(b.incident_slug),
+  );
 }
 
 describe("optional human-attention profile", () => {
@@ -97,6 +243,13 @@ describe("optional human-attention profile", () => {
     assert.match(reference, /canonical incident slug as its durable join key/i);
     assert.match(reference, /owner` remains the lifecycle coordinator/i);
     assert.match(reference, /State schema 1 needs no new incident fields/i);
+    assert.match(reference, /persisted obligation marker/i);
+    assert.match(reference, /monotonically increasing integer `revision`/i);
+    assert.match(
+      reference,
+      /Divergent records with the same greatest revision are a hard conflict/i,
+    );
+    assert.match(reference, /deterministically render one projection/i);
     assert.match(reference, /verification_pending/);
     assert.match(reference, /Remove the projection only after verified closure/i);
     assert.match(integration, /\[human-attention\.md\]\(human-attention\.md\)/);
@@ -109,7 +262,8 @@ describe("optional human-attention profile", () => {
     assert.equal(fixture.profile, "loopcompass-human-attention-v1");
     assert.ok(fixture.cases.length >= 10);
 
-    for (const testCase of fixture.cases) {
+    for (const rawCase of fixture.cases) {
+      const testCase = resolveCase(fixture, rawCase);
       const errors = assessConformance(testCase);
       assert.deepEqual(errors, [...testCase.expected.errors].sort(), testCase.id);
       assert.equal(errors.length === 0, testCase.expected.conformant, testCase.id);
@@ -122,20 +276,36 @@ describe("optional human-attention profile", () => {
 
     for (const id of [
       "disabled-imposes-no-projection",
+      "enabled-needs-persisted-obligation",
       "enabled-missing-human-projection",
-      "enabled-duplicate-human-projection",
+      "enabled-divergent-duplicates-recompute",
       "human-decision-awaits-verification",
       "human-step-does-not-permit-early-removal",
-      "human-step-advances-existing-projection",
+      "human-token-removed-after-action-retains-projection",
+      "true-non-human-reassignment-releases-projection",
+      "reassignment-with-stale-projection-fails",
       "verified-closure-permits-cleanup",
+      "cleanup-without-closure-evidence-fails",
       "non-human-action-has-no-human-projection",
-      "human-to-non-human-reassignment-removes-projection",
       "wrong-slug-is-missing-plus-orphan",
       "orphan-with-verified-closure-must-be-cleaned",
       "enabled-profile-needs-one-authority-surface",
     ]) {
       assert.ok(ids.has(id), `missing human-attention fixture: ${id}`);
     }
+  });
+
+  it("recomputes divergent duplicates deterministically and survives crash replay", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "enabled-divergent-duplicates-recompute",
+    );
+    const testCase = resolveCase(fixture, rawCase);
+
+    const firstPass = reconcileProjections(testCase);
+    assert.deepEqual(firstPass, [testCase.expected.reconciled_projection]);
+    const replay = reconcileProjections({ ...testCase, projections: firstPass });
+    assert.deepEqual(replay, firstPass);
   });
 
   it("does not mutate a consumer-owned projection during install", () => {
