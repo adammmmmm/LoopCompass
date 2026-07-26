@@ -16,8 +16,8 @@ uses [Semantic Versioning](https://semver.org/).
 - Optional, disabled-by-default human-attention integration profile with durable obligation
   markers, typed authority-bound surfaces, fail-closed compare-and-swap reconciliation, and
   deterministic lifecycle fixtures.
-- Read-only schema-1 coordinator/action-owner compatibility probe with byte-identity evidence for
-  representative consumer incidents.
+- Read-only schema-1 ownership evidence probe with consumer byte-identity proof and explicit gaps
+  for receipt provenance, reassignment order, and current-actor authority.
 - A current-HEAD delivery gate for three independent model reviews, finding dispositions, and
   conditional human review, plus a scheduled remote-branch lifecycle audit.
 

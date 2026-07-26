@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Read-only compatibility probe for schema-1 incident coordination and receipt action ownership.
+ * Read-only inventory of schema-1 ownership evidence and its limits.
  *
  * Usage:
  *   node scripts/ownership-probe.mjs
@@ -12,14 +12,11 @@ import {
   lstatSync,
   readFileSync,
   realpathSync,
-  statSync,
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateCapsuleText } from "./lib/capsule.mjs";
 import { parseFrontmatter } from "./lib/frontmatter.mjs";
-import { validateTerminalReceipt } from "./lib/receipt.mjs";
-import { normalizeSignature } from "./lib/signature.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT_REAL = realpathSync(ROOT);
@@ -31,24 +28,16 @@ const DEFAULT_FIXTURE = path.join(
 );
 const EXACT_SHA256 = /^[0-9a-f]{64}$/;
 const SAFE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const CASE_FIELDS = new Set(["id", "incident_path", "expected", "events"]);
-const EXPECTED_FIELDS = new Set([
-  "coordinator",
-  "action_owners",
-  "current_action_owner",
-  "verification_owner",
-  "closure_owner",
-  "query_receipts_by_action_owner",
+const FIXTURE_FIELDS = new Set([
+  "schema",
+  "probe",
+  "expected_consumer_state_sha256",
+  "cases",
 ]);
-const EVENT_FIELDS = new Set([
-  "receipt_id",
-  "action_owner",
-  "action",
-  "evidence",
-]);
+const CASE_FIELDS = new Set(["id", "incident_path"]);
 
 function fail(message) {
-  throw new Error(`ownership probe: ${message}`);
+  throw new Error(`ownership evidence probe: ${message}`);
 }
 
 function sha256(value) {
@@ -102,7 +91,8 @@ function resolveRepositoryFile(relativePath, label) {
   ) {
     fail(`${label} escapes the repository`);
   }
-  if (lstatSync(absolute).isSymbolicLink() || !statSync(absolute).isFile()) {
+  const metadata = lstatSync(absolute);
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
     fail(`${label} must resolve to a regular file`);
   }
   const real = realpathSync(absolute);
@@ -140,18 +130,12 @@ function parseFixture(fixturePath) {
     fail(`cannot parse fixture: ${error.message}`);
   }
   requireObject(fixture, "fixture");
-  const fixtureFields = new Set([
-    "schema",
-    "probe",
-    "expected_consumer_state_sha256",
-    "cases",
-  ]);
-  requireExactFields(fixture, fixtureFields, "fixture");
+  requireExactFields(fixture, FIXTURE_FIELDS, "fixture");
   if (fixture.schema !== 1) {
     fail(`fixture.schema must be 1, got ${fixture.schema}`);
   }
-  if (fixture.probe !== "schema-1-ownership-compatibility") {
-    fail("fixture.probe must be schema-1-ownership-compatibility");
+  if (fixture.probe !== "schema-1-ownership-evidence") {
+    fail("fixture.probe must be schema-1-ownership-evidence");
   }
   if (!EXACT_SHA256.test(fixture.expected_consumer_state_sha256)) {
     fail("fixture.expected_consumer_state_sha256 must be 64 lowercase hex");
@@ -162,33 +146,6 @@ function parseFixture(fixturePath) {
   return fixture;
 }
 
-function buildReceipt(fields, event) {
-  return {
-    receipt_schema: 1,
-    receipt_id: event.receipt_id,
-    signature: normalizeSignature(fields.signature),
-    dedupe_key: `ownership-probe|${fields.id}|${event.receipt_id}`,
-    classification: "incident",
-    evidence: [event.evidence],
-    task_outcome: "incomplete",
-    mechanism_health: "broken",
-    containment: {
-      used: false,
-      summary: null,
-      verification_gate: null,
-    },
-    terminal_outcome: "persisted_artifact",
-    artifact_ref: fields.id,
-    no_artifact_reason: null,
-    proposed_artifact: null,
-    escalation: {
-      requires: fields.requires,
-      target: event.action_owner,
-      action: event.action,
-    },
-  };
-}
-
 function analyzeCase(caseValue, index) {
   const label = `fixture.cases[${index}]`;
   const scenario = requireObject(caseValue, label);
@@ -196,7 +153,6 @@ function analyzeCase(caseValue, index) {
   if (!SAFE_ID.test(requireNonemptyString(scenario.id, `${label}.id`))) {
     fail(`${label}.id must be a lowercase mechanical identifier`);
   }
-
   const resolved = resolveRepositoryFile(
     scenario.incident_path,
     `${label}.incident_path`,
@@ -208,114 +164,38 @@ function analyzeCase(caseValue, index) {
     today: new Date("2026-07-26T00:00:00.000Z"),
   });
   if (capsule.errors.length > 0) {
-    fail(`${label}.incident_path is not a valid schema-1 incident: ${capsule.errors.join("; ")}`);
+    fail(
+      `${label}.incident_path is not a valid schema-1 incident: ${capsule.errors.join("; ")}`,
+    );
   }
   const { fields } = parseFrontmatter(source);
   if (fields.schema !== "1") {
     fail(`${label}.incident_path must use schema 1`);
   }
-  requireStringArray(fields.requires, `${label}.incident.requires`);
-
-  const expected = requireObject(scenario.expected, `${label}.expected`);
-  requireExactFields(expected, EXPECTED_FIELDS, `${label}.expected`);
   const coordinator = requireNonemptyString(
-    expected.coordinator,
-    `${label}.expected.coordinator`,
+    fields.owner,
+    `${label}.incident.owner`,
   );
-  requireNonemptyString(
-    expected.current_action_owner,
-    `${label}.expected.current_action_owner`,
+  const requires = requireStringArray(
+    fields.requires,
+    `${label}.incident.requires`,
   );
-  requireNonemptyString(
-    expected.verification_owner,
-    `${label}.expected.verification_owner`,
-  );
-  requireNonemptyString(
-    expected.closure_owner,
-    `${label}.expected.closure_owner`,
-  );
-  if (fields.owner !== coordinator) {
-    fail(`${label} expected coordinator does not match incident owner`);
-  }
-  if (
-    expected.verification_owner !== coordinator
-    || expected.closure_owner !== coordinator
-  ) {
-    fail(`${label} verification and closure responsibility must remain with the coordinator`);
-  }
-
-  if (!Array.isArray(scenario.events) || scenario.events.length < 2) {
-    fail(`${label}.events must contain at least two action-owner observations`);
-  }
-  const receipts = scenario.events.map((eventValue, eventIndex) => {
-    const eventLabel = `${label}.events[${eventIndex}]`;
-    const event = requireObject(eventValue, eventLabel);
-    requireExactFields(event, EVENT_FIELDS, eventLabel);
-    if (!SAFE_ID.test(requireNonemptyString(event.receipt_id, `${eventLabel}.receipt_id`))) {
-      fail(`${eventLabel}.receipt_id must be a lowercase mechanical identifier`);
-    }
-    requireNonemptyString(event.action_owner, `${eventLabel}.action_owner`);
-    requireNonemptyString(event.action, `${eventLabel}.action`);
-    requireNonemptyString(event.evidence, `${eventLabel}.evidence`);
-    const receipt = buildReceipt(fields, event);
-    validateTerminalReceipt(receipt, `${eventLabel}.receipt`);
-    return receipt;
-  });
-
-  const actionOwners = receipts.map((receipt) => receipt.escalation.target);
-  if (
-    JSON.stringify(actionOwners)
-    !== JSON.stringify(
-      requireStringArray(
-        expected.action_owners,
-        `${label}.expected.action_owners`,
-      ),
-    )
-  ) {
-    fail(`${label} action-owner history does not match expected history`);
-  }
-  const currentActionOwner = actionOwners.at(-1);
-  if (currentActionOwner !== expected.current_action_owner) {
-    fail(`${label} current action owner does not match the final receipt`);
-  }
-
-  const queryIndex = {};
-  for (const receipt of receipts) {
-    const owner = receipt.escalation.target;
-    queryIndex[owner] ??= [];
-    queryIndex[owner].push(receipt.receipt_id);
-  }
-  requireObject(
-    expected.query_receipts_by_action_owner,
-    `${label}.expected.query_receipts_by_action_owner`,
-  );
-  if (
-    JSON.stringify(queryIndex)
-    !== JSON.stringify(expected.query_receipts_by_action_owner)
-  ) {
-    fail(`${label} action-owner receipt query does not match expected results`);
-  }
-
   return {
     id: scenario.id,
     incident_path: resolved.relative,
     incident_id: fields.id,
     source_sha256: sha256(Buffer.from(source)),
-    coordinator,
-    action_owners: actionOwners,
-    current_action_owner: currentActionOwner,
-    verification_owner: expected.verification_owner,
-    closure_owner: expected.closure_owner,
-    query_receipts_by_action_owner: queryIndex,
-    receipt_ids: receipts.map((receipt) => receipt.receipt_id),
+    observed_schema: 1,
+    observed_coordinator: coordinator,
+    observed_requires: requires,
+    structured_action_owner_present:
+      Object.hasOwn(fields, "action_owner")
+      || Object.hasOwn(fields, "coordinator"),
   };
 }
 
-export function runOwnershipProbe(
-  fixturePath = DEFAULT_FIXTURE,
-) {
-  const resolvedFixture = path.resolve(fixturePath);
-  const fixture = parseFixture(resolvedFixture);
+export function runOwnershipProbe(fixturePath = DEFAULT_FIXTURE) {
+  const fixture = parseFixture(path.resolve(fixturePath));
   const incidentPaths = fixture.cases.map((scenario) => scenario.incident_path);
   if (new Set(incidentPaths).size !== incidentPaths.length) {
     fail("fixture.cases must reference distinct representative incidents");
@@ -324,18 +204,14 @@ export function runOwnershipProbe(
   if (new Set(caseIds).size !== caseIds.length) {
     fail("fixture.cases must use unique ids");
   }
+
   const before = snapshotConsumerState(incidentPaths);
   if (before.sha256 !== fixture.expected_consumer_state_sha256) {
     fail(
       `consumer-state baseline drifted: expected ${fixture.expected_consumer_state_sha256}, got ${before.sha256}`,
     );
   }
-
   const cases = fixture.cases.map(analyzeCase);
-  const receiptIds = cases.flatMap((scenario) => scenario.receipt_ids);
-  if (new Set(receiptIds).size !== receiptIds.length) {
-    fail("fixture events must use globally unique receipt ids");
-  }
   const after = snapshotConsumerState(incidentPaths);
   const unchanged =
     before.sha256 === after.sha256
@@ -344,55 +220,54 @@ export function runOwnershipProbe(
     fail("consumer state changed during the read-only probe");
   }
 
-  const criteria = {
-    representative_incidents: {
-      pass: cases.length >= 3,
-      observed: cases.length,
-      required: 3,
-    },
-    coordinator_action_distinction: {
-      pass: cases.every((scenario) =>
-        scenario.action_owners.some((owner) => owner !== scenario.coordinator)),
-    },
-    action_owner_reassignment: {
-      pass: cases.every(
-        (scenario) => new Set(scenario.action_owners).size > 1,
-      ),
-    },
-    exact_action_owner_queryability: {
-      pass: cases.every(
-        (scenario) =>
-          scenario.query_receipts_by_action_owner[
-            scenario.current_action_owner
-          ]?.at(-1) === scenario.receipt_ids.at(-1),
-      ),
-    },
-    coordinator_verification_and_closure: {
-      pass: cases.every(
-        (scenario) =>
-          scenario.verification_owner === scenario.coordinator
-          && scenario.closure_owner === scenario.coordinator,
-      ),
-    },
-    consumer_state_byte_identity: {
-      pass: unchanged,
-    },
-  };
-  if (Object.values(criteria).some((criterion) => criterion.pass !== true)) {
-    fail("one or more schema-1 sufficiency criteria failed");
-  }
-
   return {
     schema: 1,
     probe: fixture.probe,
-    decision: "schema_1_plus_receipts_sufficient",
+    decision: "defer_schema_2_insufficient_evidence",
+    schema_v2_implementation_authorized: false,
     consumer_state: {
       before_sha256: before.sha256,
       after_sha256: after.sha256,
       unchanged,
       files: before.files,
     },
-    criteria,
+    observed_evidence: {
+      representative_incidents: cases.length,
+      schema_1_incidents: cases.filter(
+        (scenario) => scenario.observed_schema === 1,
+      ).length,
+      coordinator_fields: cases.filter(
+        (scenario) => scenario.observed_coordinator.length > 0,
+      ).length,
+      requires_lists: cases.filter(
+        (scenario) => scenario.observed_requires.length > 0,
+      ).length,
+      structured_action_owner_fields: cases.filter(
+        (scenario) => scenario.structured_action_owner_present,
+      ).length,
+    },
+    evidence_gaps: {
+      representative_receipt_provenance: {
+        proven: false,
+        reason:
+          "The representative consumer artifacts include no authorized receipt history.",
+      },
+      authoritative_reassignment_order: {
+        proven: false,
+        reason:
+          "No trusted receipt generation or host task order is present in the corpus.",
+      },
+      current_action_owner_authority: {
+        proven: false,
+        reason:
+          "No representative evidence binds a current action actor to an authoritative assignment.",
+      },
+      verification_and_closure_actor_observation: {
+        proven: false,
+        reason:
+          "The artifacts state coordinator responsibility but contain no observed actor history.",
+      },
+    },
     cases,
   };
 }

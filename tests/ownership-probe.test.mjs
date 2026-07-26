@@ -20,47 +20,84 @@ const fixturePath = path.join(
   "cases.json",
 );
 const probePath = path.join(root, "scripts", "ownership-probe.mjs");
+const decisionPath = path.join(
+  root,
+  "docs",
+  "decisions",
+  "schema-v2-ownership.md",
+);
 
 function fixture() {
   return JSON.parse(readFileSync(fixturePath, "utf8"));
 }
 
-describe("schema-1 ownership compatibility probe", () => {
-  it("preserves representative consumer incidents byte-for-byte", () => {
+describe("schema-1 ownership evidence probe", () => {
+  it("defers schema 2 without authorizing implementation", () => {
     const report = runOwnershipProbe();
-    assert.equal(report.decision, "schema_1_plus_receipts_sufficient");
+    assert.equal(report.decision, "defer_schema_2_insufficient_evidence");
+    assert.equal(report.schema_v2_implementation_authorized, false);
     assert.equal(report.consumer_state.unchanged, true);
     assert.equal(
       report.consumer_state.before_sha256,
       report.consumer_state.after_sha256,
     );
-    assert.equal(report.consumer_state.files.length, 3);
-    for (const criterion of Object.values(report.criteria)) {
-      assert.equal(criterion.pass, true);
-    }
+    assert.equal(report.observed_evidence.representative_incidents, 3);
+    assert.equal(report.observed_evidence.schema_1_incidents, 3);
+    assert.equal(report.observed_evidence.coordinator_fields, 3);
+    assert.equal(report.observed_evidence.requires_lists, 3);
+    assert.equal(report.observed_evidence.structured_action_owner_fields, 0);
   });
 
-  it("keeps coordination stable while action owners remain queryable across reassignment", () => {
+  it("keeps unsupported ownership conclusions explicit as evidence gaps", () => {
     const report = runOwnershipProbe();
+    assert.deepEqual(
+      Object.keys(report.evidence_gaps),
+      [
+        "representative_receipt_provenance",
+        "authoritative_reassignment_order",
+        "current_action_owner_authority",
+        "verification_and_closure_actor_observation",
+      ],
+    );
+    for (const gap of Object.values(report.evidence_gaps)) {
+      assert.equal(gap.proven, false);
+      assert.ok(gap.reason.length > 40);
+    }
     for (const scenario of report.cases) {
-      assert.ok(
-        scenario.action_owners.some(
-          (actionOwner) => actionOwner !== scenario.coordinator,
-        ),
-      );
-      assert.ok(new Set(scenario.action_owners).size > 1);
-      assert.equal(
-        scenario.query_receipts_by_action_owner[
-          scenario.current_action_owner
-        ].at(-1),
-        scenario.receipt_ids.at(-1),
-      );
-      assert.equal(scenario.verification_owner, scenario.coordinator);
-      assert.equal(scenario.closure_owner, scenario.coordinator);
+      assert.equal(Object.hasOwn(scenario, "action_owners"), false);
+      assert.equal(Object.hasOwn(scenario, "current_action_owner"), false);
+      assert.equal(Object.hasOwn(scenario, "receipt_ids"), false);
     }
   });
 
-  it("emits deterministic JSON closure evidence", () => {
+  it("rejects unsupported affirmative sufficiency assertions", () => {
+    const reportText = JSON.stringify(runOwnershipProbe());
+    const fixtureText = readFileSync(fixturePath, "utf8");
+    const decisionText = readFileSync(decisionPath, "utf8");
+    for (const text of [reportText, fixtureText, decisionText]) {
+      assert.doesNotMatch(text, /schema_1_plus_receipts_sufficient/i);
+      assert.doesNotMatch(text, /schema 1(?: plus receipts)? is sufficient/i);
+    }
+
+    const temp = mkdtempSync(path.join(os.tmpdir(), "lc-ownership-probe-"));
+    try {
+      const unsupported = fixture();
+      unsupported.schema_1_sufficient = true;
+      const unsupportedPath = path.join(temp, "unsupported.json");
+      writeFileSync(
+        unsupportedPath,
+        `${JSON.stringify(unsupported, null, 2)}\n`,
+      );
+      assert.throws(
+        () => runOwnershipProbe(unsupportedPath),
+        /schema_1_sufficient is not allowed/,
+      );
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("emits deterministic JSON and preserves consumer bytes", () => {
     const first = spawnSync(process.execPath, [probePath], {
       cwd: root,
       encoding: "utf8",
@@ -72,11 +109,10 @@ describe("schema-1 ownership compatibility probe", () => {
     assert.equal(first.status, 0, first.stderr || first.stdout);
     assert.equal(second.status, 0, second.stderr || second.stdout);
     assert.equal(first.stdout, second.stdout);
-    const report = JSON.parse(first.stdout);
-    assert.equal(report.consumer_state.unchanged, true);
+    assert.equal(JSON.parse(first.stdout).consumer_state.unchanged, true);
   });
 
-  it("fails closed on baseline drift and unsafe consumer paths", () => {
+  it("fails closed on baseline drift, unsafe paths, and schema-v2 input", () => {
     const temp = mkdtempSync(path.join(os.tmpdir(), "lc-ownership-probe-"));
     try {
       const drifted = fixture();
@@ -96,14 +132,7 @@ describe("schema-1 ownership compatibility probe", () => {
         () => runOwnershipProbe(escapedPath),
         /incident_path escapes the repository/,
       );
-    } finally {
-      rmSync(temp, { recursive: true, force: true });
-    }
-  });
 
-  it("rejects schema-v2 probe input and ambiguous action ownership", () => {
-    const temp = mkdtempSync(path.join(os.tmpdir(), "lc-ownership-probe-"));
-    try {
       const schemaTwo = fixture();
       schemaTwo.schema = 2;
       const schemaTwoPath = path.join(temp, "schema-two.json");
@@ -111,31 +140,6 @@ describe("schema-1 ownership compatibility probe", () => {
       assert.throws(
         () => runOwnershipProbe(schemaTwoPath),
         /fixture\.schema must be 1/,
-      );
-
-      const blankOwner = fixture();
-      blankOwner.cases[0].events[1].action_owner = "";
-      const blankOwnerPath = path.join(temp, "blank-owner.json");
-      writeFileSync(blankOwnerPath, `${JSON.stringify(blankOwner, null, 2)}\n`);
-      assert.throws(
-        () => runOwnershipProbe(blankOwnerPath),
-        /action_owner must be a non-empty string/,
-      );
-
-      const duplicateReceipt = fixture();
-      duplicateReceipt.cases[1].events[0].receipt_id =
-        duplicateReceipt.cases[0].events[0].receipt_id;
-      duplicateReceipt.cases[1].expected.query_receipts_by_action_owner[
-        "client-maintainer"
-      ][0] = duplicateReceipt.cases[0].events[0].receipt_id;
-      const duplicateReceiptPath = path.join(temp, "duplicate-receipt.json");
-      writeFileSync(
-        duplicateReceiptPath,
-        `${JSON.stringify(duplicateReceipt, null, 2)}\n`,
-      );
-      assert.throws(
-        () => runOwnershipProbe(duplicateReceiptPath),
-        /events must use globally unique receipt ids/,
       );
     } finally {
       rmSync(temp, { recursive: true, force: true });

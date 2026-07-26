@@ -1,4 +1,4 @@
-# Decision: keep schema 1 for ownership
+# Decision: defer schema 2 ownership fields
 
 Status: accepted
 
@@ -8,26 +8,16 @@ Issue: [#26](https://github.com/adammmmmm/LoopCompass/issues/26)
 
 ## Decision
 
-Keep capsule state schema 1. Stable incident `owner` plus validated terminal-receipt escalation is
-sufficient for the currently evidenced coordinator/action-owner requirements. Do not add
-`coordinator` or `action_owner` fields, do not rewrite consumer state, and do not open a schema-v2
-implementation issue.
+Current evidence is insufficient to justify capsule schema 2. Keep schema 1 unchanged and defer new
+`coordinator` or `action_owner` fields. Do not rewrite consumer state, implement schema 2, or open a
+schema-v2 implementation issue.
 
-This decision does not claim that action-owner state is durable inside a schema-1 capsule. The
-capsule keeps lifecycle coordination durable; a current action actor is queryable from the
-authorized host receipt or task record that assigned the action. Core LoopCompass intentionally
-does not create a receipt log, queue, database, or transcript.
+This is a conservative compatibility decision, not an affirmative claim that schema 1 and
+terminal receipts answer every ownership query. Schema 2 creates permanent read/write, update,
+rollback, and migration obligations. Those costs require representative evidence that the current
+contract causes a material accountability or query failure and that split fields solve it.
 
-## Measurable decision criteria
-
-Schema 1 is sufficient only when all of these conditions hold:
-
-1. A capsule's stable `owner` unambiguously identifies the lifecycle coordinator.
-2. A validated receipt's exact escalation target can differ from the coordinator.
-3. Sequential validated receipts can change that target without changing the capsule owner.
-4. Exact action-owner queries recover the current assignment from the authorized receipt sequence.
-5. Verification and closure remain the coordinator's responsibility after action completion.
-6. A read-only probe leaves every representative consumer incident byte-identical.
+## What the probe establishes
 
 Run:
 
@@ -35,46 +25,54 @@ Run:
 node scripts/ownership-probe.mjs
 ```
 
-The probe reads three existing redacted pilot incidents, constructs complete schema-1 terminal
-receipts in memory, validates them with the authoritative receipt validator, indexes them by exact
-action-owner role, and hashes the source files before and after. The committed baseline digest is
-`034b5154a77659cfe69542d70f7a0701eaa7333217e8a4d18596be8560b52f0d`. The report must select
-`schema_1_plus_receipts_sufficient`, show the same before/after digest, and pass every criterion.
+The read-only probe inventories three existing redacted pilot incidents. It validates their current
+schema-1 capsule structure, records the structured `owner` and `requires` values actually present,
+and hashes the source files before and after. The committed aggregate digest is
+`034b5154a77659cfe69542d70f7a0701eaa7333217e8a4d18596be8560b52f0d`.
 
-## Evidence
+The probe establishes only these facts:
 
-| Scenario | Stable coordinator | Action-owner sequence | Verification and closure |
-| --- | --- | --- | --- |
-| UTC mapping repair | `project-maintainer` | `runtime-maintainer` → `project-maintainer` | `project-maintainer` |
-| Identity refresh repair | `project-maintainer` | `client-maintainer` → `test-maintainer` | `project-maintainer` |
-| Neutral-root worktree repair | `operator` | `configuration-maintainer` → `operator` | `operator` |
+- all three representative inputs are valid schema-1 incidents;
+- each input contains one structured coordinator in `owner` and a nonempty `requires` list;
+- none contains a structured coordinator/action-owner split; and
+- the aggregate and per-file consumer bytes remain identical before and after inspection.
 
-The scenarios cover action-owner reassignment, stable coordination, exact role queryability, and
-coordinator-owned verification and closure. Each generated observation is a complete terminal
-receipt whose incident classification, artifact identity, escalation capabilities, target, and
-action pass `validateTerminalReceipt`.
+The fixture identifies source artifacts and their expected byte digest. It does not manufacture
+receipt events, assignment order, expected action-owner maps, or a current actor and then compare
+those values back to itself.
 
-No representative case needs a second durable capsule identity. The existing `requires` list names
-the missing capability, the receipt escalation names the actor handling the current action, and the
-schema-1 `owner` remains responsible for lifecycle state and normal-path verification.
+## Evidence gaps
 
-## Counterexamples and falsification conditions
+The representative corpus does not contain:
 
-The probe records three real limits rather than hiding them:
+- authorized receipt provenance tied to these consumer incidents;
+- a trusted receipt generation or host-task order for action-owner reassignment;
+- evidence that any observed escalation target is the authoritative current action owner; or
+- observed verification and closure actor history.
 
-- If a consumer requires durable current-action-owner queries after every authorized receipt and
-  host task record is unavailable, schema 1 cannot answer that query.
-- If one incident requires independently mutable, simultaneous action-owner identities rather than
-  capability requirements and sequential assignments, one scalar `action_owner` field would not be
-  sufficient either.
-- If a consumer must atomically recover both coordinator and current actor from the capsule alone
-  after host-state loss, the current receipt contract is insufficient by design.
+The accepted lifecycle contract states that schema-1 `owner` is responsible for coordination,
+verification, and closure. The terminal receipt contract can carry an escalation target. Those
+contracts describe allowed semantics, but prose plus synthetic examples cannot prove representative
+consumer provenance, authority, ordering, or current-owner queryability. The probe therefore reports
+each missing property as `proven: false`.
 
-None of those requirements appears in the representative corpus or the accepted lifecycle and
-receipt contracts. A later schema-v2 proposal is authorized only after a sanitized reproducible
-consumer case demonstrates one of these needs, shows that `owner` + `requires` + validated receipts
-cannot satisfy it, and establishes that the compatibility cost is proportional to the observed
-failure. A hypothetical preference for duplicate fields is not enough.
+## Decision gate for a later schema-v2 proposal
+
+Reconsider schema 2 only after sanitized, reproducible evidence supplies all of the following:
+
+1. Representative consumer state and its authoritative receipt or task provenance.
+2. A trusted ordering or generation mechanism that identifies reassignment and the current actor.
+3. A material query, accountability, verification, or closure failure that persists when
+   schema-1 `owner`, `requires`, and authorized receipts are used as documented.
+4. Evidence that durable split fields solve that failure without creating a second conflicting
+   source of truth.
+5. A compatibility design covering legacy interpretation, field mutability, structural list
+   parsing, one authoritative validator, manifest read/write compatibility, no-rewrite upgrade,
+   and rollback.
+
+Until that gate is met, neither schema-2 material usefulness nor schema-1 ownership completeness is
+proven. Deferral avoids speculative permanent compatibility scope while preserving a concrete,
+falsifiable path to revisit the decision.
 
 ## Compatibility, release, and rollback
 
@@ -82,8 +80,6 @@ failure. A hypothetical preference for duplicate fields is not enough.
 - Incident templates, capsule parsers, validators, update behavior, and rollback behavior are
   unchanged.
 - `skills/loop-compass/` is unchanged, so the shipped manifest and its digests remain unchanged.
-- No release is required. The probe, fixtures, tests, and this decision record are repository
+- No release is required. The probe, fixture, tests, and this decision record are repository
   evidence only.
-- Removing the probe and decision record rolls back this repository evidence without touching
-  consumer state. Superseding the decision requires new evidence under the falsification rule
-  above.
+- Removing this evidence rolls back the repository-only probe without touching consumer state.
