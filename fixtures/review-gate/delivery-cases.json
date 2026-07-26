@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "trusted-first-party",
+      "author": "maintainer",
+      "changed_files": ["README.md"],
+      "expected": {
+        "trusted": true,
+        "sensitive": false,
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "external-contributor",
+      "author": "external",
+      "changed_files": ["README.md"],
+      "expected": {
+        "trusted": false,
+        "sensitive": false,
+        "human_review_required": true
+      }
+    },
+    {
+      "id": "trusted-sensitive-path",
+      "author": "maintainer",
+      "changed_files": [".github/workflows/verify.yml"],
+      "expected": {
+        "trusted": true,
+        "sensitive": true,
+        "human_review_required": true
+      }
+    },
+    {
+      "id": "root-auth-boundary",
+      "author": "maintainer",
+      "changed_files": ["auth/session.mjs"],
+      "expected": {
+        "trusted": true,
+        "sensitive": true,
+        "human_review_required": true
+      }
+    }
+  ]
+}

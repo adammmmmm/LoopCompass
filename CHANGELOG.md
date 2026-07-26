@@ -13,6 +13,8 @@ uses [Semantic Versioning](https://semver.org/).
 - Automated GitHub Actions dependency updates.
 - A manifested, dependency-free committed-state redaction checker that consumers can invoke
   locally in non-mutating audit or enforce mode.
+- A current-HEAD delivery gate for three independent model reviews, finding dispositions, and
+  conditional human review, plus a scheduled remote-branch lifecycle audit.
 
 ### Changed
 
@@ -20,6 +22,10 @@ uses [Semantic Versioning](https://semver.org/).
 - GitHub Pages deploys only when the site, its brand asset, or its workflow changes.
 - Consumer verification admits only manifested skill scripts and verifies the complete installed
   skill inventory and digests.
+- Ordinary pull requests run only the meaningful `verify` job; tag verification and release
+  packaging now run in a separate `v*` release workflow.
+- Contributor delivery follows `Backlog → Todo → In Progress → Review → Done`, with squash-only
+  merging and automatic merged-branch cleanup.
 
 ## [0.3.0] - 2026-07-21
 

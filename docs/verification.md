@@ -29,6 +29,7 @@ Runs:
 | Example redaction denylist | `scripts/redact-check.mjs`, `examples/capsules/` |
 | Manifest digests and policy marker integrity | `scripts/release.mjs`, `tests/release-tooling.test.mjs` |
 | Persist, no-artifact, or exact-escalation policy contract | `tests/release-tooling.test.mjs` |
+| Repository delivery, review evidence, PR-scoped approval, status fencing, and branch/ruleset/settings audit | `scripts/lib/review-gate.mjs`, `tests/review-gate.test.mjs`, `tests/repository-health.test.mjs` |
 
 ## What remains host-level
 
