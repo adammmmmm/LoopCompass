@@ -7,7 +7,6 @@
     "adammmmmm"
   ],
   "required_model_reviews": 3,
-  "branch_pr_grace_minutes": 30,
   "implementation_branch_patterns": [
     "codex/**",
     "feature/**",
@@ -23,7 +22,9 @@
     "scripts/review-gate.mjs",
     "scripts/lib/review-gate.mjs",
     "scripts/release.mjs",
+    "scripts/verify.mjs",
     "tests/review-gate.test.mjs",
+    "tests/repository-health.test.mjs",
     "fixtures/review-gate/**",
     "**/auth/**",
     "**/*auth*",
@@ -35,5 +36,25 @@
     "**/*security*",
     "**/*credential*",
     "**/*secret*"
-  ]
+  ],
+  "desired_ruleset": {
+    "strict_required_status_checks": true,
+    "required_status_checks": [
+      "verify",
+      "model-review-gate",
+      "delivery-policy"
+    ],
+    "allowed_merge_methods": [
+      "squash"
+    ],
+    "required_review_thread_resolution": true,
+    "bypass_actors": []
+  },
+  "desired_repository_settings": {
+    "allow_auto_merge": true,
+    "allow_squash_merge": true,
+    "allow_merge_commit": false,
+    "allow_rebase_merge": false,
+    "delete_branch_on_merge": true
+  }
 }

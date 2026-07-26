@@ -43,6 +43,11 @@ test("community health files remain complete and discoverable", async () => {
   assert.doesNotMatch(featureForm, /does not require a daemon, database, or hosted service/);
   assert.match(security, /security\/advisories\/new/);
   assert.match(readme, /\.github\/CONTRIBUTING\.md/);
+  assert.match(pullRequestTemplate, /Trusted first-party, non-sensitive/);
+  assert.match(pullRequestTemplate, /External changes also require current human maintainer review/);
+  assert.match(pullRequestTemplate, /sensitive paths\s+always require it/i);
+  assert.match(pullRequestTemplate, /Squash is the only merge method/);
+  assert.match(pullRequestTemplate, /merged remote branches are deleted/);
 });
 
 test("GitHub workflows use immutable actions and bounded permissions", async () => {
@@ -85,7 +90,29 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.match(releaseWorkflow, /loopcompass-release-dist/);
   assert.match(reviewWorkflow, /statuses: write/);
   assert.match(reviewWorkflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+  assert.match(reviewWorkflow, /group: delivery-policy-/);
+  assert.match(reviewWorkflow, /cancel-in-progress: true/);
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs branches/);
   assert.match(workflows, /timeout-minutes: 10/);
   assert.match(dependabot, /package-ecosystem: github-actions/);
+});
+
+test("delivery policy records the exact desired live ruleset and settings", async () => {
+  const policy = JSON.parse(await read(".github/delivery-policy.json"));
+  assert.equal(policy.desired_ruleset.strict_required_status_checks, true);
+  assert.deepEqual(policy.desired_ruleset.required_status_checks, [
+    "verify",
+    "model-review-gate",
+    "delivery-policy",
+  ]);
+  assert.deepEqual(policy.desired_ruleset.allowed_merge_methods, ["squash"]);
+  assert.equal(policy.desired_ruleset.required_review_thread_resolution, true);
+  assert.deepEqual(policy.desired_ruleset.bypass_actors, []);
+  assert.deepEqual(policy.desired_repository_settings, {
+    allow_auto_merge: true,
+    allow_squash_merge: true,
+    allow_merge_commit: false,
+    allow_rebase_merge: false,
+    delete_branch_on_merge: true,
+  });
 });

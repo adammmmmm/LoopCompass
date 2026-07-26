@@ -29,7 +29,7 @@ be posted by a configured maintainer and use this shape:
 No blocking findings identified.
 
 <!-- loopcompass-review:v1
-{"schema":1,"head_sha":"<40-character commit SHA>","overall_verdict":"approved","previous_comment_id":null,"reviews":[{"seat":"R1","model":"<provider/model>","verdict":"approved","findings":[]},{"seat":"R2","model":"<provider/model>","verdict":"approved","findings":[]},{"seat":"R3","model":"<provider/model>","verdict":"approved","findings":[]}]}
+{"schema":1,"head_sha":"<40-character commit SHA>","overall_verdict":"approved","previous_comment_id":null,"reviews":[{"seat":"R1","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]},{"seat":"R2","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]},{"seat":"R3","model":"<provider/model>","execution_id":"<unique execution id>","evidence_digest":"<64-hex digest>","verdict":"approved","findings":[]}]}
 -->
 ```
 
@@ -49,10 +49,18 @@ contains `id`, `prefix`, `summary`, `impact`, `required_fix`, `verification`, an
 with `status`, `rationale`, and `evidence`. Disposition status is `fixed`, `accepted`, or
 `not_applicable`. All three verdicts must be `approved`; a changes-requested verdict cannot pass.
 Public summaries use declarative language and avoid first-person or anthropomorphic attribution.
+Each review record has a unique execution identifier and a SHA-256 digest of its compact source
+evidence. These fields are maintainer attestations that make accidental reuse detectable; they are
+not cryptographic proof that a provider ran or that execution was independent. Execution
+independence remains a process obligation verified before the maintainer records the evidence.
+
 Review evidence comments are immutable. Post a new reconciled comment after a new HEAD or verdict;
 set `previous_comment_id` to the preceding review comment's numeric identifier. Carry every earlier
 material finding into the new comment with its final disposition. The gate validates the immutable
 chain and rejects missing carried findings, so a fix push does not erase the review trail.
+The live comment API cannot prove that an authorized maintainer never deleted the entire chain.
+Repository credentials and maintainer comment integrity are therefore an explicit trust boundary;
+repository audit logs are the external evidence for destructive administrative changes.
 
 ## Layered merge policy
 
@@ -67,15 +75,21 @@ chain and rejects missing carried findings, so a fix push does not erase the rev
   Actions and workflows, authentication or permissions, migrations, release credentials, security
   boundaries, policy configuration, validator code and fixtures, and this policy.
 - Human review can be a native approval targeting the current HEAD or a `human_approval` object in
-  the canonical maintainer comment. The object contains `reviewer`, `head_sha`, and
-  `verdict: "approved"`; its reviewer must be the configured maintainer who posted the comment.
-  Automation validates this attestation but must never create it.
+  the canonical maintainer comment. The object contains `reviewer`, `head_sha`,
+  `verdict: "approved"`, `kind`, and `authorization_reference`; its reviewer must be the configured
+  human maintainer who posted the comment. Bot and App records are rejected. A different maintainer
+  uses `kind: "maintainer_review"`. A self-authored sensitive bootstrap uses
+  `kind: "operator_authorization"` and links the public issue or comment containing that explicit
+  authorization. Automation validates this attestation but must never create it.
 - Native approval clicks do not count as independent model records and cannot replace the structured
   three-review evidence.
 - Auto-merge is armed only after applicable checks and review are green. Squash is the only merge
   method, all review conversations must be resolved, and the remote branch is deleted after merge.
-- Every durable remote implementation branch receives a draft or open pull request within the
-  configured grace period. The scheduled branch audit reports exceptions.
+- Every durable remote implementation branch receives a draft or open pull request promptly. The
+  hourly read-only branch audit reports matching branches that lack a same-repository pull request;
+  a same-named fork branch does not satisfy the rule.
 
 The auditable repository policy is `.github/delivery-policy.json`. Changes to the policy or its
-enforcement are themselves sensitive.
+enforcement are themselves sensitive. It also records the desired live ruleset: strict required
+`verify`, `model-review-gate`, and `delivery-policy` contexts; squash-only merge; required review
+conversation resolution; and no bypass actors.

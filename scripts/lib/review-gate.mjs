@@ -1,4 +1,6 @@
 const REVIEW_MARKER = "loopcompass-review:v1";
+const REVIEW_OPEN = `<!-- ${REVIEW_MARKER}\n`;
+const REVIEW_CLOSE = "\n-->";
 
 export const ALLOWED_FINDING_PREFIXES = new Set([
   "Bug identified",
@@ -11,6 +13,7 @@ export const ALLOWED_FINDING_PREFIXES = new Set([
 
 const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0;
 const normalize = (value) => String(value ?? "").trim().toLowerCase();
+const exactSha = (value) => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 
 function globRegex(pattern) {
   let source = "^";
@@ -34,7 +37,7 @@ function globRegex(pattern) {
       source += character;
     }
   }
-  return new RegExp(`${source}$`);
+  return new RegExp(`${source}$`, "i");
 }
 
 export function matchesSensitivePath(file, patterns) {
@@ -46,37 +49,83 @@ export function classifyDelivery({ author, changedFiles, config }) {
   const sensitive = changedFiles.some((file) =>
     matchesSensitivePath(file, config.sensitive_paths),
   );
-  return {
-    trusted,
-    sensitive,
-    humanReviewRequired: !trusted || sensitive,
-  };
+  return { trusted, sensitive, humanReviewRequired: !trusted || sensitive };
+}
+
+function findingLines(review, finding) {
+  return [
+    `**${finding.prefix} (${review.seat}):** ${finding.summary}`,
+    `- Impact: ${finding.impact}`,
+    `- Required fix: ${finding.required_fix}`,
+    `- Verification: ${finding.verification}`,
+    `- Disposition: ${finding.disposition?.status} — ${finding.disposition?.rationale}; ${finding.disposition?.evidence}`,
+  ].join("\n");
+}
+
+export function renderVisibleReview(metadata) {
+  const overall =
+    metadata.overall_verdict === "approved" ? "Approved" : "Changes requested";
+  const reviews = Array.isArray(metadata.reviews) ? metadata.reviews : [];
+  const verdictLines = reviews.map((review) => {
+    const verdict = review.verdict === "approved" ? "Approved" : "Changes requested";
+    return `- ${review.seat} — ${review.model} — ${verdict}`;
+  });
+  const findings = reviews.flatMap((review) =>
+    Array.isArray(review.findings)
+      ? review.findings.map((finding) => findingLines(review, finding))
+      : [],
+  );
+  return [
+    "### Independent model reviews — 3/3 complete",
+    "",
+    `**Target:** \`${metadata.head_sha}\``,
+    "",
+    `**Verdict:** \`${overall}\``,
+    "",
+    ...verdictLines,
+    "",
+    findings.length > 0 ? findings.join("\n\n") : "No blocking findings identified.",
+  ].join("\n");
 }
 
 export function parseReviewComment(body) {
-  if (!nonEmpty(body)) return null;
-  const escaped = REVIEW_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = body.match(new RegExp(`<!--\\s*${escaped}\\s*\\n([\\s\\S]*?)\\n-->`));
-  if (!match) return null;
+  if (!nonEmpty(body) || !body.includes(REVIEW_MARKER)) return null;
+  const start = body.indexOf(REVIEW_OPEN);
+  if (start < 0 || body.indexOf(REVIEW_OPEN, start + REVIEW_OPEN.length) >= 0) {
+    return { error: "review comment must contain exactly one canonical metadata marker" };
+  }
+  const end = body.indexOf(REVIEW_CLOSE, start + REVIEW_OPEN.length);
+  if (end < 0) return { error: "review metadata marker is not closed" };
+  if (body.slice(end + REVIEW_CLOSE.length).trim().length > 0) {
+    return { error: "review comment contains text after the metadata marker" };
+  }
   try {
-    return { metadata: JSON.parse(match[1]), visible: body.slice(0, match.index).trim() };
+    return {
+      metadata: JSON.parse(body.slice(start + REVIEW_OPEN.length, end)),
+      visible: body.slice(0, start).trimEnd(),
+    };
   } catch {
     return { error: "review metadata is not valid JSON" };
   }
 }
 
+function validateKeys(value, allowed, required, label, reasons) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    reasons.push(`${label} must be an object`);
+    return;
+  }
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) reasons.push(`${label} has unknown field ${key}`);
+  }
+  for (const key of required) {
+    if (!(key in value)) reasons.push(`${label} is missing field ${key}`);
+  }
+}
+
 function validateVisibleContract(visible, metadata) {
   const errors = [];
-  if (!visible.startsWith("### Independent model reviews — 3/3 complete")) {
-    errors.push("visible review summary must use the canonical 3/3 heading");
-  }
-  if (!visible.includes(`**Target:** \`${metadata.head_sha}\``)) {
-    errors.push("visible review summary must identify the target current SHA");
-  }
-  const visibleVerdict =
-    metadata.overall_verdict === "approved" ? "Approved" : "Changes requested";
-  if (!visible.includes(`**Verdict:** \`${visibleVerdict}\``)) {
-    errors.push("visible review summary must state the structured verdict");
+  if (visible !== renderVisibleReview(metadata)) {
+    errors.push("visible review summary must exactly match the structured review record");
   }
   const privateName = ["pa", "nel"].join("");
   const privatePhrase = ["private", "orchestration"].join("[\\s-]+");
@@ -88,25 +137,90 @@ function validateVisibleContract(visible, metadata) {
   ) {
     errors.push("visible review summary must use attribution-neutral, declarative language");
   }
-  for (const review of metadata.reviews ?? []) {
-    const verdict = review.verdict === "approved" ? "Approved" : "Changes requested";
-    if (!visible.includes(`- ${review.seat} — ${review.model} — ${verdict}`)) {
-      errors.push(`visible review summary is missing the ${review.seat} verdict`);
-    }
-    for (const finding of review.findings ?? []) {
-      if (!visible.includes(`**${finding.prefix} (${review.seat}):** ${finding.summary}`)) {
-        errors.push(`visible review summary is missing finding ${finding.id}`);
-      }
-    }
-  }
-  const findingCount = (metadata.reviews ?? []).reduce(
-    (total, review) => total + (review.findings?.length ?? 0),
-    0,
-  );
-  if (findingCount === 0 && !visible.includes("No blocking findings identified.")) {
-    errors.push("a finding-free review summary must use the canonical no-blocker statement");
-  }
   return errors;
+}
+
+function latestEffectiveHumanApproval(nativeApprovals, maintainers, headSha) {
+  const allowed = new Set(maintainers.map(normalize));
+  const byMaintainer = new Map();
+  const ordered = [...nativeApprovals].sort((left, right) => {
+    const time = new Date(left.submitted_at ?? 0) - new Date(right.submitted_at ?? 0);
+    return time || Number(left.id ?? 0) - Number(right.id ?? 0);
+  });
+  for (const review of ordered) {
+    const login = normalize(review.user?.login);
+    if (
+      !allowed.has(login) ||
+      normalize(review.user?.type) === "bot" ||
+      review.performed_via_github_app
+    ) {
+      continue;
+    }
+    if (review.state === "APPROVED") {
+      byMaintainer.set(login, {
+        approved: review.commit_id === headSha,
+        commit: review.commit_id,
+      });
+    } else if (["CHANGES_REQUESTED", "DISMISSED"].includes(review.state)) {
+      byMaintainer.set(login, { approved: false, commit: review.commit_id });
+    }
+  }
+  return [...byMaintainer.values()].some((review) => review.approved);
+}
+
+function validHumanAttestation({ metadata, comment, author, headSha, maintainers }) {
+  const attestation = metadata?.human_approval;
+  if (!attestation) return false;
+  const reasons = [];
+  validateKeys(
+    attestation,
+    ["reviewer", "head_sha", "verdict", "kind", "authorization_reference"],
+    ["reviewer", "head_sha", "verdict", "kind", "authorization_reference"],
+    "human_approval",
+    reasons,
+  );
+  const commenterIsHuman =
+    normalize(comment?.author_type) === "user" && !comment?.performed_via_github_app;
+  const commenterIsMaintainer = maintainers.map(normalize).includes(normalize(comment?.author));
+  const selfAuthored = normalize(comment?.author) === normalize(author);
+  const expectedKind = selfAuthored ? "operator_authorization" : "maintainer_review";
+  return (
+    reasons.length === 0 &&
+    commenterIsHuman &&
+    commenterIsMaintainer &&
+    normalize(attestation.reviewer) === normalize(comment.author) &&
+    attestation.head_sha === headSha &&
+    attestation.verdict === "approved" &&
+    attestation.kind === expectedKind &&
+    /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/(?:issues|pull)\/\d+(?:#issuecomment-\d+)?$/.test(
+      attestation.authorization_reference,
+    )
+  );
+}
+
+function deliveryEvaluation({
+  parsed,
+  comment,
+  author,
+  headSha,
+  delivery,
+  config,
+  nativeApprovals,
+}) {
+  if (!delivery.humanReviewRequired) return [];
+  const nativeApproval = latestEffectiveHumanApproval(
+    nativeApprovals,
+    config.human_maintainers,
+    headSha,
+  );
+  const attestation = validHumanAttestation({
+    metadata: parsed?.metadata,
+    comment,
+    author,
+    headSha,
+    maintainers: config.human_maintainers,
+  });
+  return nativeApproval || attestation ? [] : ["current human maintainer review is required"];
 }
 
 export function validateReviewRecord({
@@ -120,143 +234,191 @@ export function validateReviewRecord({
   expectedPreviousCommentId = null,
   historyErrors = [],
 }) {
-  const modelReasons = [];
-  const deliveryReasons = [];
   const delivery = classifyDelivery({ author, changedFiles, config });
   const parsed = parseReviewComment(comment?.body);
+  const deliveryReasons = deliveryEvaluation({
+    parsed,
+    comment,
+    author,
+    headSha,
+    delivery,
+    config,
+    nativeApprovals,
+  });
+  const modelReasons = [];
   if (!parsed) {
-    return {
-      ok: false,
-      modelOk: false,
-      deliveryOk: false,
-      modelReasons: ["missing structured review summary"],
-      deliveryReasons: ["missing structured review summary"],
-      reasons: ["missing structured review summary"],
-      delivery,
-    };
-  }
-  if (parsed.error) {
-    return {
-      ok: false,
-      modelOk: false,
-      deliveryOk: false,
-      modelReasons: [parsed.error],
-      deliveryReasons: [parsed.error],
-      reasons: [parsed.error],
-      delivery,
-    };
-  }
-  const metadata = parsed.metadata;
-  if (!/^[0-9a-f]{40}$/.test(headSha) || !/^[0-9a-f]{40}$/.test(metadata.head_sha ?? "")) {
-    modelReasons.push("current HEAD and review target must be exact 40-hex SHAs");
-  }
-  if (metadata.schema !== 1) modelReasons.push("review metadata schema must be 1");
-  if (metadata.head_sha !== headSha) {
-    modelReasons.push("review evidence does not target the current HEAD");
-  }
-  if (!["approved", "changes_requested"].includes(metadata.overall_verdict)) {
-    modelReasons.push("overall verdict must be approved or changes_requested");
-  } else if (metadata.overall_verdict !== "approved") {
-    modelReasons.push("overall verdict must be approved");
-  }
-  if ((metadata.previous_comment_id ?? null) !== expectedPreviousCommentId) {
-    modelReasons.push("review history must link to the preceding immutable review comment");
-  }
-  if (
-    nonEmpty(comment.created_at) &&
-    nonEmpty(comment.updated_at) &&
-    comment.created_at !== comment.updated_at
-  ) {
-    modelReasons.push("review evidence comments are immutable; post a new reconciled comment");
-  }
-  modelReasons.push(...historyErrors);
+    modelReasons.push("missing structured review summary");
+  } else if (parsed.error) {
+    modelReasons.push(parsed.error);
+  } else {
+    const metadata = parsed.metadata;
+    validateKeys(
+      metadata,
+      [
+        "schema",
+        "head_sha",
+        "overall_verdict",
+        "previous_comment_id",
+        "reviews",
+        "human_approval",
+      ],
+      ["schema", "head_sha", "overall_verdict", "previous_comment_id", "reviews"],
+      "review metadata",
+      modelReasons,
+    );
+    if (!exactSha(headSha) || !exactSha(metadata.head_sha)) {
+      modelReasons.push("current HEAD and review target must be exact 40-hex SHAs");
+    }
+    if (metadata.schema !== 1) modelReasons.push("review metadata schema must be 1");
+    if (metadata.head_sha !== headSha) {
+      modelReasons.push("review evidence does not target the current HEAD");
+    }
+    if (!["approved", "changes_requested"].includes(metadata.overall_verdict)) {
+      modelReasons.push("overall verdict must be approved or changes_requested");
+    }
+    if ("human_approval" in metadata) {
+      validateKeys(
+        metadata.human_approval,
+        ["reviewer", "head_sha", "verdict", "kind", "authorization_reference"],
+        ["reviewer", "head_sha", "verdict", "kind", "authorization_reference"],
+        "human_approval",
+        modelReasons,
+      );
+    }
+    if ((metadata.previous_comment_id ?? null) !== expectedPreviousCommentId) {
+      modelReasons.push("review history must link to the preceding immutable review comment");
+    }
+    if (
+      nonEmpty(comment.created_at) &&
+      nonEmpty(comment.updated_at) &&
+      comment.created_at !== comment.updated_at
+    ) {
+      modelReasons.push("review evidence comments are immutable; post a new reconciled comment");
+    }
+    modelReasons.push(...historyErrors);
 
-  const reviews = Array.isArray(metadata.reviews) ? metadata.reviews : [];
-  if (reviews.length !== config.required_model_reviews) {
-    modelReasons.push(`exactly ${config.required_model_reviews} model reviews are required`);
-  }
-  const seats = new Set();
-  const models = new Set();
-  const findingIds = new Set();
-  for (const review of reviews) {
-    if (!nonEmpty(review.seat)) modelReasons.push("every review requires a seat");
-    if (!nonEmpty(review.model)) modelReasons.push("every review requires a model identity");
-    if (seats.has(normalize(review.seat))) modelReasons.push("review seats must be unique");
-    if (models.has(normalize(review.model))) {
-      modelReasons.push("model identities must be independent");
+    const allowedCommenters = config.human_maintainers.map(normalize);
+    if (
+      !allowedCommenters.includes(normalize(comment.author)) ||
+      normalize(comment.author_type) !== "user" ||
+      comment.performed_via_github_app
+    ) {
+      modelReasons.push("review summary must be recorded by a configured human maintainer");
     }
-    seats.add(normalize(review.seat));
-    models.add(normalize(review.model));
-    if (!["approved", "changes_requested"].includes(review.verdict)) {
-      modelReasons.push(`${review.seat || "review"} has an unsupported verdict`);
-    } else if (review.verdict !== "approved") {
-      modelReasons.push(`${review.seat || "review"} has not approved the current HEAD`);
+
+    const reviews = Array.isArray(metadata.reviews) ? metadata.reviews : [];
+    if (reviews.length !== config.required_model_reviews) {
+      modelReasons.push(`exactly ${config.required_model_reviews} model reviews are required`);
     }
-    if (!Array.isArray(review.findings)) {
-      modelReasons.push(`${review.seat || "review"} findings must be an array`);
-      continue;
-    }
-    for (const finding of review.findings) {
-      if (!nonEmpty(finding.id) || findingIds.has(finding.id)) {
-        modelReasons.push("finding identifiers must be present and unique");
+    const seats = new Set();
+    const models = new Set();
+    const executionIds = new Set();
+    const evidenceDigests = new Set();
+    const findingIds = new Set();
+    for (const review of reviews) {
+      validateKeys(
+        review,
+        ["seat", "model", "execution_id", "evidence_digest", "verdict", "findings"],
+        ["seat", "model", "execution_id", "evidence_digest", "verdict", "findings"],
+        "review",
+        modelReasons,
+      );
+      if (!nonEmpty(review.seat)) modelReasons.push("every review requires a seat");
+      if (!nonEmpty(review.model)) modelReasons.push("every review requires a model identity");
+      if (!nonEmpty(review.execution_id)) modelReasons.push("every review requires an execution ID");
+      if (!/^[0-9a-f]{64}$/.test(review.evidence_digest ?? "")) {
+        modelReasons.push("every review requires a 64-hex evidence digest");
       }
-      findingIds.add(finding.id);
-      if (!ALLOWED_FINDING_PREFIXES.has(finding.prefix)) {
-        modelReasons.push(`${finding.id || "finding"} uses an unsupported finding prefix`);
+      for (const [value, set, message] of [
+        [normalize(review.seat), seats, "review seats must be unique"],
+        [normalize(review.model), models, "model identities must be independent"],
+        [normalize(review.execution_id), executionIds, "review execution IDs must be unique"],
+        [normalize(review.evidence_digest), evidenceDigests, "review evidence digests must be unique"],
+      ]) {
+        if (set.has(value)) modelReasons.push(message);
+        set.add(value);
       }
-      for (const field of ["summary", "impact", "required_fix", "verification"]) {
-        if (!nonEmpty(finding[field])) {
-          modelReasons.push(`${finding.id || "finding"} needs ${field}`);
+      if (!["approved", "changes_requested"].includes(review.verdict)) {
+        modelReasons.push(`${review.seat || "review"} has an unsupported verdict`);
+      }
+      if (!Array.isArray(review.findings)) {
+        modelReasons.push(`${review.seat || "review"} findings must be an array`);
+        continue;
+      }
+      for (const finding of review.findings) {
+        validateKeys(
+          finding,
+          [
+            "id",
+            "prefix",
+            "summary",
+            "impact",
+            "required_fix",
+            "verification",
+            "disposition",
+          ],
+          [
+            "id",
+            "prefix",
+            "summary",
+            "impact",
+            "required_fix",
+            "verification",
+            "disposition",
+          ],
+          "finding",
+          modelReasons,
+        );
+        if (!nonEmpty(finding.id) || findingIds.has(finding.id)) {
+          modelReasons.push("finding identifiers must be present and unique");
+        }
+        findingIds.add(finding.id);
+        if (!ALLOWED_FINDING_PREFIXES.has(finding.prefix)) {
+          modelReasons.push(`${finding.id || "finding"} uses an unsupported finding prefix`);
+        }
+        for (const field of ["summary", "impact", "required_fix", "verification"]) {
+          if (!nonEmpty(finding[field])) {
+            modelReasons.push(`${finding.id || "finding"} needs ${field}`);
+          }
+        }
+        validateKeys(
+          finding.disposition,
+          ["status", "rationale", "evidence"],
+          ["status", "rationale", "evidence"],
+          "finding disposition",
+          modelReasons,
+        );
+        if (
+          !["fixed", "accepted", "not_applicable"].includes(finding.disposition?.status) ||
+          !nonEmpty(finding.disposition?.rationale) ||
+          !nonEmpty(finding.disposition?.evidence)
+        ) {
+          modelReasons.push(`${finding.id || "finding"} needs an evidence-backed disposition`);
         }
       }
-      const disposition = finding.disposition;
-      if (
-        !disposition ||
-        !["fixed", "accepted", "not_applicable"].includes(disposition.status) ||
-        !nonEmpty(disposition.rationale) ||
-        !nonEmpty(disposition.evidence)
-      ) {
-        modelReasons.push(`${finding.id || "finding"} needs an evidence-backed disposition`);
-      }
     }
-  }
-  for (const priorId of priorFindingIds) {
-    if (!findingIds.has(priorId)) {
-      modelReasons.push(`prior material finding ${priorId} is missing from the current disposition`);
-    }
-  }
-
-  const allowedCommenters = config.human_maintainers.map(normalize);
-  if (!allowedCommenters.includes(normalize(comment.author))) {
-    deliveryReasons.push("review summary must be recorded by a configured maintainer");
-  }
-
-  if (delivery.humanReviewRequired) {
-    const latestReviews = new Map();
-    for (const review of nativeApprovals) {
-      const login = normalize(review.user?.login);
-      if (!allowedCommenters.includes(login)) continue;
-      const timestamp = new Date(review.submitted_at ?? 0).getTime();
-      const previous = latestReviews.get(login);
-      if (!previous || timestamp >= previous.timestamp) {
-        latestReviews.set(login, { review, timestamp });
-      }
-    }
-    const nativeCurrentApproval = [...latestReviews.values()].some(
-      ({ review }) => review.state === "APPROVED" && review.commit_id === headSha,
+    const anyChangesRequested = reviews.some(
+      (review) => review.verdict === "changes_requested",
     );
-    const attestation = metadata.human_approval;
-    const currentAttestation =
-      attestation?.verdict === "approved" &&
-      attestation?.head_sha === headSha &&
-      allowedCommenters.includes(normalize(attestation?.reviewer)) &&
-      normalize(attestation?.reviewer) === normalize(comment.author);
-    if (!nativeCurrentApproval && !currentAttestation) {
-      deliveryReasons.push("current human maintainer review is required");
+    if (
+      (anyChangesRequested && metadata.overall_verdict !== "changes_requested") ||
+      (!anyChangesRequested && metadata.overall_verdict !== "approved")
+    ) {
+      modelReasons.push("overall verdict must truthfully summarize the per-seat verdicts");
     }
+    if (metadata.overall_verdict !== "approved") {
+      modelReasons.push("overall verdict must be approved");
+    }
+    for (const priorId of priorFindingIds) {
+      if (!findingIds.has(priorId)) {
+        modelReasons.push(
+          `prior material finding ${priorId} is missing from the current disposition`,
+        );
+      }
+    }
+    modelReasons.push(...validateVisibleContract(parsed.visible, metadata));
   }
 
-  modelReasons.push(...validateVisibleContract(parsed.visible, metadata));
   const uniqueModelReasons = [...new Set(modelReasons)];
   const uniqueDeliveryReasons = [...new Set(deliveryReasons)];
   const modelOk = uniqueModelReasons.length === 0;
@@ -272,14 +434,17 @@ export function validateReviewRecord({
   };
 }
 
-export function selectCurrentReviewComment(comments, headSha, maintainers = []) {
+export function selectReviewComment(comments, maintainers = []) {
   const allowed = new Set(maintainers.map(normalize));
-  const candidates = comments
-    .filter((comment) => allowed.has(normalize(comment.author)))
-    .map((comment) => ({ comment, parsed: parseReviewComment(comment.body) }))
-    .filter(({ parsed }) => parsed?.metadata?.head_sha === headSha)
-    .sort((left, right) => new Date(right.comment.updated_at) - new Date(left.comment.updated_at));
-  return candidates[0]?.comment ?? null;
+  return comments
+    .filter(
+      (comment) =>
+        allowed.has(normalize(comment.author)) && comment.body?.includes(REVIEW_MARKER),
+    )
+    .sort((left, right) => {
+      const time = new Date(right.created_at) - new Date(left.created_at);
+      return time || Number(right.id ?? 0) - Number(left.id ?? 0);
+    })[0] ?? null;
 }
 
 export function analyzeReviewHistory(comments, currentComment, maintainers = []) {
@@ -289,14 +454,18 @@ export function analyzeReviewHistory(comments, currentComment, maintainers = [])
   const errors = [];
   for (const comment of comments) {
     if (comment === currentComment) continue;
-    if (!allowed.has(normalize(comment.author))) continue;
-    const parsed = parseReviewComment(comment.body);
-    if (!parsed?.metadata) continue;
     if (
-      nonEmpty(comment.created_at) &&
-      nonEmpty(comment.updated_at) &&
-      comment.created_at !== comment.updated_at
+      !allowed.has(normalize(comment.author)) ||
+      !comment.body?.includes(REVIEW_MARKER)
     ) {
+      continue;
+    }
+    const parsed = parseReviewComment(comment.body);
+    if (!parsed?.metadata) {
+      errors.push(`review history comment ${comment.id} has malformed metadata`);
+      continue;
+    }
+    if (comment.created_at !== comment.updated_at) {
       errors.push(`review history comment ${comment.id} was edited`);
     }
     prior.push({ comment, metadata: parsed.metadata });
@@ -323,19 +492,61 @@ export function analyzeReviewHistory(comments, currentComment, maintainers = [])
   };
 }
 
-export function auditBranches({
-  branches,
-  openPullRequests,
-  now,
-  graceMinutes,
-  branchPatterns = ["codex/**", "feature/**", "fix/**"],
-}) {
-  const covered = new Set(openPullRequests.map((pull) => pull.head.ref));
-  const cutoff = new Date(now).getTime() - graceMinutes * 60_000;
+export function resolvePullRequestNumber(event) {
+  const candidate =
+    event.pull_request?.number ??
+    (event.issue?.pull_request ? event.issue.number : null) ??
+    event.review?.pull_request_url?.split("/").at(-1);
+  const number = Number(candidate);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new Error("event does not identify a pull request");
+  }
+  return number;
+}
+
+export function buildStatusPayloads({ state, result, targetUrl }) {
+  const definitions = [
+    {
+      context: "model-review-gate",
+      ok: result?.modelOk,
+      reasons: result?.modelReasons ?? [],
+      success: "Three independent model reviews satisfied",
+      pending: "Evaluating independent model review evidence",
+    },
+    {
+      context: "delivery-policy",
+      ok: result?.deliveryOk,
+      reasons: result?.deliveryReasons ?? [],
+      success: "Conditional delivery policy satisfied",
+      pending: "Evaluating conditional delivery policy",
+    },
+  ];
+  return definitions.map((definition) => {
+    const statusState = state === "pending" ? "pending" : definition.ok ? "success" : "failure";
+    const description =
+      state === "pending"
+        ? definition.pending
+        : definition.ok
+          ? definition.success
+          : definition.reasons.join("; ") || "Policy evaluation failed";
+    return {
+      state: statusState,
+      context: definition.context,
+      description: description.slice(0, 140),
+      target_url: targetUrl,
+    };
+  });
+}
+
+export function auditBranches({ branches, openPullRequests, repository, branchPatterns }) {
+  const covered = new Set(
+    openPullRequests
+      .filter((pull) => normalize(pull.head.repo?.full_name) === normalize(repository))
+      .map((pull) => pull.head.ref),
+  );
   return branches
     .filter((branch) => branch.name !== "main")
     .filter((branch) => matchesSensitivePath(branch.name, branchPatterns))
-    .filter((branch) => new Date(branch.commit.committed_at).getTime() <= cutoff)
     .filter((branch) => !covered.has(branch.name))
     .map((branch) => branch.name);
 }

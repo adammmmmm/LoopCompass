@@ -4,7 +4,12 @@ import test from "node:test";
 import {
   analyzeReviewHistory,
   auditBranches,
+  buildStatusPayloads,
   classifyDelivery,
+  matchesSensitivePath,
+  renderVisibleReview,
+  resolvePullRequestNumber,
+  selectReviewComment,
   validateReviewRecord,
 } from "../scripts/lib/review-gate.mjs";
 
@@ -17,6 +22,9 @@ const config = {
 };
 const deliveryCases = JSON.parse(
   await readFile(new URL("../fixtures/review-gate/delivery-cases.json", import.meta.url), "utf8"),
+);
+const repositoryConfig = JSON.parse(
+  await readFile(new URL("../.github/delivery-policy.json", import.meta.url), "utf8"),
 );
 
 function finding(overrides = {}) {
@@ -43,52 +51,44 @@ function metadata(overrides = {}) {
     overall_verdict: "approved",
     previous_comment_id: null,
     reviews: [
-      { seat: "R1", model: "provider-a/model-a", verdict: "approved", findings: [] },
-      { seat: "R2", model: "provider-b/model-b", verdict: "approved", findings: [] },
-      { seat: "R3", model: "provider-c/model-c", verdict: "approved", findings: [] },
+      {
+        seat: "R1",
+        model: "provider-a/model-a",
+        execution_id: "run-a",
+        evidence_digest: "1".repeat(64),
+        verdict: "approved",
+        findings: [],
+      },
+      {
+        seat: "R2",
+        model: "provider-b/model-b",
+        execution_id: "run-b",
+        evidence_digest: "2".repeat(64),
+        verdict: "approved",
+        findings: [],
+      },
+      {
+        seat: "R3",
+        model: "provider-c/model-c",
+        execution_id: "run-c",
+        evidence_digest: "3".repeat(64),
+        verdict: "approved",
+        findings: [],
+      },
     ],
     ...overrides,
   };
 }
 
 function comment(data = metadata(), author = "maintainer") {
-  const verdicts = data.reviews
-    .map(
-      (review) =>
-        `- ${review.seat} — ${review.model} — ${
-          review.verdict === "approved" ? "Approved" : "Changes requested"
-        }`,
-    )
-    .join("\n");
-  const findings = data.reviews
-    .flatMap((review) =>
-      review.findings.map(
-        (item) => {
-          const disposition = item.disposition ?? {
-            status: "missing",
-            rationale: "missing",
-            evidence: "missing",
-          };
-          return (
-            `**${item.prefix} (${review.seat}):** ${item.summary}\n` +
-            `- Impact: ${item.impact}\n- Required fix: ${item.required_fix}\n` +
-            `- Verification: ${item.verification}\n` +
-            `- Disposition: ${disposition.status} — ${disposition.rationale}; ${disposition.evidence}`
-          );
-        },
-      ),
-    )
-    .join("\n");
   return {
     id: 100,
     author,
+    author_type: "User",
+    performed_via_github_app: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
-    body:
-      "### Independent model reviews — 3/3 complete\n\n" +
-      `**Target:** \`${data.head_sha}\`\n\n**Verdict:** \`Approved\`\n\n${verdicts}\n\n` +
-      `${findings || "No blocking findings identified."}\n\n` +
-      `<!-- loopcompass-review:v1\n${JSON.stringify(data)}\n-->`,
+    body: `${renderVisibleReview(data)}\n\n<!-- loopcompass-review:v1\n${JSON.stringify(data)}\n-->`,
   };
 }
 
@@ -174,11 +174,60 @@ test("external and sensitive changes require current human maintainer review", (
   ]) {
     assert.match(evaluate(input).reasons.join(" "), /human maintainer review/);
   }
-  const data = metadata({
-    human_approval: { reviewer: "maintainer", head_sha: sha, verdict: "approved" },
+  const selfAuthorized = metadata({
+    human_approval: {
+      reviewer: "maintainer",
+      head_sha: sha,
+      verdict: "approved",
+      kind: "operator_authorization",
+      authorization_reference: "https://github.com/example/project/issues/1#issuecomment-2",
+    },
   });
-  assert.equal(evaluate({ data, author: "external" }).ok, true);
-  assert.equal(evaluate({ data, changedFiles: [".github/workflows/verify.yml"] }).ok, true);
+  const maintainerReviewed = metadata({
+    human_approval: {
+      reviewer: "maintainer",
+      head_sha: sha,
+      verdict: "approved",
+      kind: "maintainer_review",
+      authorization_reference: "https://github.com/example/project/pull/1",
+    },
+  });
+  assert.equal(evaluate({ data: maintainerReviewed, author: "external" }).ok, true);
+  assert.equal(
+    evaluate({ data: selfAuthorized, changedFiles: [".github/workflows/verify.yml"] }).ok,
+    true,
+  );
+});
+
+test("delivery policy is independent of missing or malformed model evidence", () => {
+  const trusted = validateReviewRecord({
+    comment: null,
+    headSha: sha,
+    author: "maintainer",
+    changedFiles: ["README.md"],
+    config,
+  });
+  assert.equal(trusted.modelOk, false);
+  assert.equal(trusted.deliveryOk, true);
+
+  const nativeApproval = {
+    id: 1,
+    state: "APPROVED",
+    commit_id: sha,
+    submitted_at: "2026-01-01T00:00:00Z",
+    user: { login: "maintainer", type: "User" },
+    performed_via_github_app: null,
+  };
+  const sensitive = validateReviewRecord({
+    comment: { ...comment(metadata()), body: "<!-- loopcompass-review:v1\n{" },
+    headSha: sha,
+    author: "maintainer",
+    changedFiles: [".github/workflows/verify.yml"],
+    config,
+    nativeApprovals: [nativeApproval],
+  });
+  assert.equal(sensitive.modelOk, false);
+  assert.equal(sensitive.deliveryOk, true);
 });
 
 test("native human approval must target the current SHA", () => {
@@ -187,14 +236,16 @@ test("native human approval must target the current SHA", () => {
     state: "APPROVED",
     commit_id: "b".repeat(40),
     submitted_at: "2026-01-01T00:00:00Z",
-    user: { login: "maintainer" },
+    user: { login: "maintainer", type: "User" },
+    performed_via_github_app: null,
   }];
   assert.equal(evaluate({ changedFiles, nativeApprovals: stale }).ok, false);
   const current = [{
     state: "APPROVED",
     commit_id: sha,
     submitted_at: "2026-01-01T00:00:00Z",
-    user: { login: "maintainer" },
+    user: { login: "maintainer", type: "User" },
+    performed_via_github_app: null,
   }];
   assert.equal(evaluate({ changedFiles, nativeApprovals: current }).ok, true);
 });
@@ -205,17 +256,87 @@ test("latest maintainer review invalidates an earlier approval", () => {
     state: "APPROVED",
     commit_id: sha,
     submitted_at: "2026-01-01T00:00:00Z",
-    user: { login: "maintainer" },
+    user: { login: "maintainer", type: "User" },
+    performed_via_github_app: null,
   };
   for (const state of ["CHANGES_REQUESTED", "DISMISSED"]) {
     const later = {
       state,
       commit_id: sha,
       submitted_at: "2026-01-01T00:01:00Z",
-      user: { login: "maintainer" },
+      user: { login: "maintainer", type: "User" },
+      performed_via_github_app: null,
     };
     assert.equal(evaluate({ changedFiles, nativeApprovals: [approval, later] }).ok, false);
   }
+});
+
+test("a later COMMENTED review preserves the latest current approval", () => {
+  const approval = {
+    id: 1,
+    state: "APPROVED",
+    commit_id: sha,
+    submitted_at: "2026-01-01T00:00:00Z",
+    user: { login: "maintainer", type: "User" },
+    performed_via_github_app: null,
+  };
+  const commented = {
+    ...approval,
+    id: 2,
+    state: "COMMENTED",
+    submitted_at: "2026-01-01T00:01:00Z",
+  };
+  assert.equal(
+    evaluate({
+      changedFiles: [".github/workflows/verify.yml"],
+      nativeApprovals: [approval, commented],
+    }).deliveryOk,
+    true,
+  );
+});
+
+test("Bot and App records cannot satisfy human review", () => {
+  const base = {
+    id: 1,
+    state: "APPROVED",
+    commit_id: sha,
+    submitted_at: "2026-01-01T00:00:00Z",
+    user: { login: "maintainer", type: "User" },
+    performed_via_github_app: null,
+  };
+  for (const review of [
+    { ...base, user: { login: "maintainer", type: "Bot" } },
+    { ...base, performed_via_github_app: { id: 1 } },
+  ]) {
+    assert.equal(
+      evaluate({
+        changedFiles: [".github/workflows/verify.yml"],
+        nativeApprovals: [review],
+      }).deliveryOk,
+      false,
+    );
+  }
+  const data = metadata({
+    human_approval: {
+      reviewer: "maintainer",
+      head_sha: sha,
+      verdict: "approved",
+      kind: "operator_authorization",
+      authorization_reference: "https://github.com/example/project/issues/1",
+    },
+  });
+  const botComment = comment(data);
+  botComment.author_type = "Bot";
+  assert.equal(
+    validateReviewRecord({
+      comment: botComment,
+      headSha: sha,
+      author: "maintainer",
+      changedFiles: [".github/workflows/verify.yml"],
+      config,
+    }).deliveryOk,
+    false,
+  );
 });
 
 test("prior material findings must remain in the current reconciled disposition", () => {
@@ -231,7 +352,10 @@ test("prior material findings must remain in the current reconciled disposition"
 });
 
 test("review summary must be maintainer-authored and attribution-neutral", () => {
-  assert.match(evaluate({ commentAuthor: "external" }).reasons.join(" "), /configured maintainer/);
+  assert.match(
+    evaluate({ commentAuthor: "external" }).reasons.join(" "),
+    /configured human maintainer/,
+  );
   const forbidden = [
     "I found no blockers.",
     "We found no blockers.",
@@ -252,6 +376,46 @@ test("review summary must be maintainer-authored and attribution-neutral", () =>
     });
     assert.match(result.modelReasons.join(" "), /attribution-neutral/, phrase);
   }
+});
+
+test("visible review body rejects omitted finding lines, contradictions, and trailing prose", () => {
+  const data = metadata();
+  data.reviews[0].findings = [finding()];
+  const canonical = comment(data);
+  for (const mutate of [
+    (body) => body.replace("- Impact: The gate could accept obsolete evidence.\n", ""),
+    (body) => body.replace(
+      "- Verification: The stale-SHA fixture fails.",
+      "- Verification: An unrelated check passes.",
+    ),
+    (body) => body.replace("\n\n<!-- loopcompass", "\n\nExtra conclusion.\n\n<!-- loopcompass"),
+    (body) => `${body}\nExtra trailing prose.`,
+  ]) {
+    const value = { ...canonical, body: mutate(canonical.body) };
+    assert.equal(
+      validateReviewRecord({
+        comment: value,
+        headSha: sha,
+        author: "maintainer",
+        changedFiles: ["README.md"],
+        config,
+      }).modelOk,
+      false,
+    );
+  }
+});
+
+test("review schema rejects unknown fields and weak or duplicate provenance", () => {
+  const unknown = metadata({ unexpected: true });
+  assert.match(evaluate({ data: unknown }).modelReasons.join(" "), /unknown field unexpected/);
+  const weak = metadata();
+  weak.reviews[0].evidence_digest = "short";
+  assert.match(evaluate({ data: weak }).modelReasons.join(" "), /64-hex evidence digest/);
+  const duplicate = metadata();
+  duplicate.reviews[2].execution_id = duplicate.reviews[0].execution_id;
+  duplicate.reviews[2].evidence_digest = duplicate.reviews[0].evidence_digest;
+  assert.match(evaluate({ data: duplicate }).modelReasons.join(" "), /execution IDs must be unique/);
+  assert.match(evaluate({ data: duplicate }).modelReasons.join(" "), /digests must be unique/);
 });
 
 test("visible Target and Verdict fields use the canonical bold format", () => {
@@ -337,6 +501,61 @@ test("review evidence is immutable and links to the preceding comment", () => {
   );
 });
 
+test("history rejects malformed markers, edited records, broken chains, and deletion gaps", () => {
+  const first = { ...comment(metadata()), id: 10 };
+  const secondData = metadata({
+    head_sha: "b".repeat(40),
+    previous_comment_id: 10,
+  });
+  const second = {
+    ...comment(secondData),
+    id: 11,
+    created_at: "2026-01-01T00:01:00Z",
+    updated_at: "2026-01-01T00:01:00Z",
+  };
+  const currentData = metadata({ previous_comment_id: 11 });
+  const current = {
+    ...comment(currentData),
+    id: 12,
+    created_at: "2026-01-01T00:02:00Z",
+    updated_at: "2026-01-01T00:02:00Z",
+  };
+  assert.deepEqual(analyzeReviewHistory([first, second, current], current, ["maintainer"]).historyErrors, []);
+
+  const edited = { ...first, updated_at: "2026-01-01T00:00:01Z" };
+  assert.match(
+    analyzeReviewHistory([edited, second, current], current, ["maintainer"]).historyErrors.join(" "),
+    /was edited/,
+  );
+  const malformed = { ...first, body: "<!-- loopcompass-review:v1\n{" };
+  assert.match(
+    analyzeReviewHistory([malformed, second, current], current, ["maintainer"]).historyErrors.join(" "),
+    /malformed metadata/,
+  );
+  assert.match(
+    analyzeReviewHistory([second, current], current, ["maintainer"]).historyErrors.join(" "),
+    /broken predecessor link/,
+  );
+});
+
+test("selector fails forward to the latest maintainer marker and ignores foreign comments", () => {
+  const older = { ...comment(metadata()), id: 10 };
+  const latest = {
+    ...comment(metadata()),
+    id: 11,
+    body: "<!-- loopcompass-review:v1\n{",
+    created_at: "2026-01-01T00:01:00Z",
+    updated_at: "2026-01-01T00:01:00Z",
+  };
+  const foreign = {
+    ...comment(metadata(), "external"),
+    id: 12,
+    created_at: "2026-01-01T00:02:00Z",
+    updated_at: "2026-01-01T00:02:00Z",
+  };
+  assert.equal(selectReviewComment([older, latest, foreign], ["maintainer"]), latest);
+});
+
 test("delivery classification distinguishes first-party, external, and sensitive changes", () => {
   const fixtureConfig = {
     ...config,
@@ -360,20 +579,71 @@ test("delivery classification distinguishes first-party, external, and sensitive
   }
 });
 
-test("durable remote branches need an open pull request after the grace period", () => {
+test("real sensitive-path policy is case-insensitive and covers gate boundaries", () => {
+  for (const path of [
+    "AUTH/session.mjs",
+    "lib/Permissions/check.mjs",
+    "db/MIGRATIONS/001.sql",
+    "src/SECURITY/boundary.mjs",
+    "scripts/verify.mjs",
+    "tests/repository-health.test.mjs",
+    ".github/workflows/review-gate.yml",
+  ]) {
+    assert.equal(matchesSensitivePath(path, repositoryConfig.sensitive_paths), true, path);
+  }
+});
+
+test("durable remote implementation branches need a same-repository pull request", () => {
   const branches = [
-    { name: "main", commit: { committed_at: "2026-01-01T00:00:00Z" } },
-    { name: "codex/covered", commit: { committed_at: "2026-01-01T00:00:00Z" } },
-    { name: "codex/orphaned", commit: { committed_at: "2026-01-01T00:00:00Z" } },
-    { name: "codex/new", commit: { committed_at: "2026-01-01T01:50:00Z" } },
+    { name: "main" },
+    { name: "codex/covered" },
+    { name: "codex/orphaned" },
+    { name: "feature/fork-collision" },
+    { name: "release/ignored" },
   ];
   assert.deepEqual(
     auditBranches({
       branches,
-      openPullRequests: [{ head: { ref: "codex/covered" } }],
-      now: "2026-01-01T02:00:00Z",
-      graceMinutes: 30,
+      openPullRequests: [
+        { head: { ref: "codex/covered", repo: { full_name: "owner/project" } } },
+        { head: { ref: "feature/fork-collision", repo: { full_name: "fork/project" } } },
+      ],
+      repository: "owner/project",
+      branchPatterns: ["codex/**", "feature/**"],
     }),
-    ["codex/orphaned"],
+    ["codex/orphaned", "feature/fork-collision"],
   );
+});
+
+test("event resolution and layered status payloads are deterministic", () => {
+  assert.equal(resolvePullRequestNumber({ pull_request: { number: 7 } }), 7);
+  assert.equal(
+    resolvePullRequestNumber({ issue: { number: 8, pull_request: { url: "x" } } }),
+    8,
+  );
+  assert.equal(
+    resolvePullRequestNumber({ review: { pull_request_url: "https://api.github.com/pulls/9" } }),
+    9,
+  );
+  assert.throws(() => resolvePullRequestNumber({ issue: { number: 10 } }));
+  const pending = buildStatusPayloads({
+    state: "pending",
+    targetUrl: "https://github.com/example/project/actions/runs/1",
+  });
+  assert.deepEqual(pending.map((item) => item.state), ["pending", "pending"]);
+  assert.deepEqual(
+    pending.map((item) => item.context),
+    ["model-review-gate", "delivery-policy"],
+  );
+  const terminal = buildStatusPayloads({
+    state: "terminal",
+    result: {
+      modelOk: true,
+      deliveryOk: false,
+      modelReasons: [],
+      deliveryReasons: ["human review missing"],
+    },
+    targetUrl: "https://github.com/example/project/actions/runs/1",
+  });
+  assert.deepEqual(terminal.map((item) => item.state), ["success", "failure"]);
 });

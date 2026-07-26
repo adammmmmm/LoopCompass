@@ -22,6 +22,10 @@ Before Done, attach one compact review summary for the current HEAD using
 docs/maintainer-delivery-policy.md. A later push invalidates that evidence.
 -->
 
+Trusted first-party, non-sensitive changes require green `verify`, `model-review-gate`, and
+`delivery-policy`. External changes also require current human maintainer review; sensitive paths
+always require it. Squash is the only merge method, and merged remote branches are deleted.
+
 ## Checklist
 
 - [ ] The change is the smallest coherent solution to the stated problem.
