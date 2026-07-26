@@ -53,9 +53,21 @@ function evaluateAlias(candidate) {
 
 describe("conversational incident aliases", () => {
   it("evaluates dual display, ambiguity, compaction, durable, and namespaced cases", () => {
-    assert.ok(cases.length >= 10);
+    assert.ok(cases.length >= 12);
     for (const candidate of cases) {
       assert.equal(evaluateAlias(candidate), candidate.expected, candidate.id);
+    }
+  });
+
+  it("rejects both forms of durable alias identity", () => {
+    for (const id of [
+      "durable-alias-only-reference",
+      "durable-canonical-reference-alias-join-key",
+    ]) {
+      const candidate = cases.find((item) => item.id === id);
+      assert.ok(candidate, id);
+      assert.equal(candidate.durable_target, true);
+      assert.equal(evaluateAlias(candidate), "reject", id);
     }
   });
 
