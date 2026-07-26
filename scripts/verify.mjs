@@ -31,6 +31,7 @@ const testFiles = [
   "tests/repository-health.test.mjs",
   "tests/site.test.mjs",
   "tests/artifact-schema.test.mjs",
+  "tests/pii-sanitation-contract.test.mjs",
   "tests/capsule-validate.test.mjs",
   "tests/install-update-dry-run.test.mjs",
   "tests/stage-install.test.mjs",

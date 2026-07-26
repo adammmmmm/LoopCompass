@@ -16,6 +16,7 @@ supersedes: null
 
 <!-- status: candidate | verified | stale | superseded -->
 <!-- id and filename must be the mechanical slug of signature (see SKILL.md) -->
+<!-- sanitize every field and section before deriving signature, id, or filename -->
 
 # <Correct path in one line>
 
@@ -29,7 +30,7 @@ supersedes: null
 
 ## Verification
 
-<Evidence that the recovery caused the intended outcome, or "Pending" while status is candidate.>
+<Sanitized evidence that the recovery caused the intended outcome, or "Pending" while candidate.>
 
 ## Limits
 

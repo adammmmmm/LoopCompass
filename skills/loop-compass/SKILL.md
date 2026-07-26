@@ -62,6 +62,14 @@ does not prove that the documented mechanism is healthy.
 
 **A workaround may complete the task; it does not complete the classification.**
 
+## Sanitize before persistence
+
+Read [pii-sanitation.md](references/pii-sanitation.md) before creating durable LoopCompass state.
+Sanitize prose, commands, evidence, frontmatter, filenames, receipts, projections, and diagnostics
+before normalizing the signature or deriving a dedupe key, ID, or filename. Replace identities
+with functional roles and retain only the minimum mechanism-level evidence. Automated checks are
+defense in depth, not proof that no PII remains.
+
 ## Create a recovery
 
 Create one small file under `.loopcompass/recoveries/`. A `candidate` may preserve a proposal for
@@ -69,7 +77,8 @@ review, but agents must not apply or inject it. Promote it to `verified` only af
 causally supported and verified within its stated scope.
 
 1. Copy [recovery-template.md](assets/recovery-template.md).
-2. Normalize the signature by removing volatile paths, IDs, timestamps, and secret-bearing values.
+2. Normalize the signature only after sanitation, removing volatile paths, IDs, timestamps, and
+   secret-bearing values.
 3. Derive the slug mechanically from the exact normalized signature: lowercase it, replace each
    maximal run outside ASCII `a-z` and `0-9` with one hyphen, trim leading and trailing hyphens,
    truncate to 96 characters, then trim any trailing hyphen again. Use `failure` if the result is
@@ -78,7 +87,7 @@ causally supported and verified within its stated scope.
    writing. Update or supersede an existing artifact instead of creating a duplicate.
 5. Keep the operative recovery near the top.
 6. Include short verification evidence and explicit limits.
-7. Remove secrets, private payloads, raw logs, and narrative history.
+7. Confirm the artifact contains no secrets, private payloads, raw logs, or narrative history.
 8. Persist the recovery automatically when current repository authority permits it. An explicit
    read-only instruction, safety boundary, or missing filesystem permission overrides this
    default. In that case, return the proposed artifact and the exact permission or operator action

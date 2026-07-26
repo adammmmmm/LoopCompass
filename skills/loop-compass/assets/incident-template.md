@@ -14,6 +14,7 @@ consulted: []
 <!-- blocked is metadata on an open incident, not a terminal archive -->
 <!-- id and filename must be the mechanical slug of signature (see SKILL.md) -->
 <!-- in schema 1, owner is the lifecycle coordinator; the action actor may differ -->
+<!-- sanitize every field and section before deriving signature, id, or filename -->
 <!-- containment_expires past today on an open incident is invalid; renew, clear, or close -->
 <!-- after verified repair: delete this live file; do not keep closed incidents as folklore -->
 
@@ -23,7 +24,7 @@ consulted: []
 
 Normal path: <The intended operation that failed.>
 
-Evidence: <Expected behavior, observed behavior, and minimal reproduction.>
+Evidence: <Sanitized expected behavior, observed behavior, and minimal reproduction; no raw logs.>
 
 ## Repair
 

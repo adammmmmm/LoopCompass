@@ -20,6 +20,9 @@ const PID_RE = /\bpid[=:\s]+\d+\b/gi;
 /**
  * Normalize a failure signature by stripping volatile paths, IDs, timestamps,
  * and secret-bearing values. Collapses whitespace.
+ *
+ * Privacy sanitation is a separate prerequisite. Callers must remove or
+ * generalize identities and private content before using this helper.
  * @param {string} raw
  * @returns {string}
  */
@@ -57,7 +60,7 @@ export function slugFromSignature(normalized) {
 }
 
 /**
- * Normalize then slug in one step.
+ * Normalize an already-sanitized input, then slug it in one step.
  * @param {string} raw
  * @returns {{ normalized: string, slug: string }}
  */

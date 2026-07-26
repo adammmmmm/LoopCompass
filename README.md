@@ -101,6 +101,12 @@ Repository-local Markdown. Human-reviewable. Never loaded wholesale into context
 
 Agents search first, then read only the top one to three matches.
 
+Sanitize state before its first write and before deriving signatures, dedupe keys, IDs, filenames,
+receipts, or projections. Use functional roles instead of identities and keep raw logs, private
+payloads, personal paths, and secrets out of durable state. See the shipped
+[PII sanitation contract](skills/loop-compass/references/pii-sanitation.md). Automated checks are
+defense in depth, not proof that no PII remains.
+
 ---
 
 ## Install

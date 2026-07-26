@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "sanitized-role-based-evidence",
+      "proposed_artifact": {
+        "signature": "deployment wrapper returns authorization denied for Customer",
+        "evidence": "Customer role lacks the required capability; response content omitted."
+      },
+      "content_facts": {
+        "contains_private_payload": false,
+        "contains_raw_log": false
+      },
+      "expected": {
+        "valid": true,
+        "diagnostic_codes": []
+      }
+    },
+    {
+      "id": "unsafe-private-payload",
+      "proposed_artifact": {
+        "signature": "deployment wrapper returns authorization denied for Customer",
+        "evidence": "SYNTHETIC_PRIVATE_PAYLOAD_FIXTURE"
+      },
+      "content_facts": {
+        "contains_private_payload": true,
+        "contains_raw_log": false
+      },
+      "expected": {
+        "valid": false,
+        "diagnostic_codes": ["private_payload"]
+      }
+    },
+    {
+      "id": "unsafe-raw-log",
+      "proposed_artifact": {
+        "signature": "deployment wrapper exits before the requested operation",
+        "evidence": "SYNTHETIC_RAW_LOG_FIXTURE"
+      },
+      "content_facts": {
+        "contains_private_payload": false,
+        "contains_raw_log": true
+      },
+      "expected": {
+        "valid": false,
+        "diagnostic_codes": ["raw_log"]
+      }
+    }
+  ]
+}

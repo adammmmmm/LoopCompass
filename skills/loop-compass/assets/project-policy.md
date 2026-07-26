@@ -19,6 +19,11 @@ authority or escalate by required capability. If consultation or storage is unav
 fail-open. Report skipped consultation when retrieval was unavailable. When persistence storage is
 unavailable, return the proposed artifact and exact missing permission or capability.
 
+Before writing LoopCompass state, receipts, projections, or diagnostics, sanitize every durable
+field and replace identities with functional roles. Sanitize before signature normalization,
+dedupe-key construction, or ID and filename derivation. Never persist secrets, personal paths,
+private payloads, or raw logs. Automated checks are defense in depth, not proof of no PII.
+
 Treat task outcome and mechanism health as separate facts. A successful task or validation command
 does not prove that the documented mechanism is healthy.
 **A workaround may complete the task; it does not complete the classification.**
