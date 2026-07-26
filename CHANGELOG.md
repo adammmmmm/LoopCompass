@@ -11,6 +11,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 - Community health policies, structured issue forms, and a pull request template.
 - Automated GitHub Actions dependency updates.
+- A manifested, dependency-free committed-state redaction checker that consumers can invoke
+  locally in non-mutating audit or enforce mode.
 - Host-neutral terminal and parent receipt contracts, strict validators, and evaluation metrics for
   classification completeness, semantic accuracy, and worker-to-parent closure.
 - Optional, disabled-by-default human-attention integration profile with durable obligation
@@ -30,6 +32,8 @@ uses [Semantic Versioning](https://semver.org/).
   normalizes Unicode to NFC with explicit legacy-state migration guidance.
 - GitHub Actions use current immutable releases, least-privilege permissions, and bounded jobs.
 - GitHub Pages deploys only when the site, its brand asset, or its workflow changes.
+- Consumer verification admits only manifested skill scripts and verifies the complete installed
+  skill inventory and digests.
 - Ordinary pull requests run only the meaningful `verify` job; tag verification and release
   packaging now run in a separate `v*` release workflow.
 - Contributor delivery follows `Backlog → Todo → In Progress → Review → Done`, with squash-only
