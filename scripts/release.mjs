@@ -23,6 +23,7 @@ import {
   fstatSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -30,6 +31,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { constants as fsConstants } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -219,7 +221,7 @@ function cmdGenerate() {
   console.log(`files   ${Object.keys(files).length}`);
 }
 
-function cmdValidate() {
+function cmdValidate({ quiet = false } = {}) {
   const version = readVersion();
   if (!existsSync(MANIFEST_PATH)) {
     die(`missing ${path.relative(ROOT, MANIFEST_PATH)}; run generate first`);
@@ -283,6 +285,7 @@ function cmdValidate() {
   }
 
   if (errors.length) {
+    if (quiet) throw new Error("source manifest validation failed");
     console.error("validate failed:");
     for (const err of errors) {
       console.error(`- ${err}`);
@@ -290,11 +293,13 @@ function cmdValidate() {
     process.exit(1);
   }
 
-  console.log("validate ok");
-  console.log(`version ${version}`);
-  console.log(`commit  ${manifest.commit}`);
-  console.log(`files   ${manifestPaths.size}`);
-  console.log(`policy  ${policyVersion}`);
+  if (!quiet) {
+    console.log("validate ok");
+    console.log(`version ${version}`);
+    console.log(`commit  ${manifest.commit}`);
+    console.log(`files   ${manifestPaths.size}`);
+    console.log(`policy  ${policyVersion}`);
+  }
 }
 
 /**
@@ -656,10 +661,47 @@ function cmdStageInstall(args) {
   };
   for (const h of hosts) {
     if (!map[h]) die(`unknown host token: ${h} (use agents, claude, skills)`);
-    const dest = path.join(project, map[h]);
-    rmSync(dest, { recursive: true, force: true });
-    copyTree(SKILL_DIR, dest, { canonicalizeText: true });
-    console.log(`staged ${path.relative(project, dest)}`);
+  }
+
+  // Validate and stage a complete immutable-enough source snapshot before any
+  // destination is removed. The second typed inventory catches source changes
+  // during canonical copying and keeps malformed source trees non-mutating.
+  cmdValidate({ quiet: true });
+  const sourceManifestRaw = readStableRegularFile(MANIFEST_PATH).raw;
+  parseManifest(sourceManifestRaw.toString("utf8"));
+  const temporary = mkdtempSync(path.join(os.tmpdir(), "lc-stage-install-"));
+  const stagedSource = path.join(temporary, "loop-compass");
+  try {
+    copyTree(SKILL_DIR, stagedSource, { canonicalizeText: true });
+    const manifestRaw = readStableRegularFile(
+      path.join(stagedSource, "manifest.yaml"),
+    ).raw;
+    const manifest = parseManifest(manifestRaw.toString("utf8"));
+    if (!installedPayloadMatchesManifest(stagedSource, manifest, manifestRaw)) {
+      throw new Error("staged source failed manifest validation");
+    }
+    const finalDigests = collectDigests();
+    if (
+      JSON.stringify(Object.keys(finalDigests).sort()) !==
+        JSON.stringify(Object.keys(manifest.files).sort()) ||
+      !Object.keys(finalDigests).every(
+        (relative) => finalDigests[relative] === manifest.files[relative],
+      )
+    ) {
+      throw new Error("source changed during staging");
+    }
+    if (!readStableRegularFile(MANIFEST_PATH).raw.equals(sourceManifestRaw)) {
+      throw new Error("source manifest changed during staging");
+    }
+
+    for (const h of hosts) {
+      const dest = path.join(project, map[h]);
+      rmSync(dest, { recursive: true, force: true });
+      copyTree(stagedSource, dest);
+      console.log(`staged ${path.relative(project, dest)}`);
+    }
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
   }
   console.log("stage-install ok (state and policy untouched)");
 }

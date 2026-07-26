@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  copyFileSync,
+  cpSync,
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -20,6 +23,23 @@ function runRelease(args, cwd = root) {
     cwd,
     encoding: "utf8",
   });
+}
+
+function runReleaseAt(releaseRoot, args, cwd = releaseRoot) {
+  return spawnSync(
+    process.execPath,
+    [path.join(releaseRoot, "scripts", "release.mjs"), ...args],
+    { cwd, encoding: "utf8" },
+  );
+}
+
+function copyReleaseFixture(destination) {
+  for (const name of ["scripts", "skills", "docs"]) {
+    cpSync(path.join(root, name), path.join(destination, name), { recursive: true });
+  }
+  for (const name of ["VERSION", "LICENSE", "CHANGELOG.md", "README.md"]) {
+    copyFileSync(path.join(root, name), path.join(destination, name));
+  }
 }
 
 describe("stage-install dual host", () => {
@@ -96,5 +116,62 @@ describe("stage-install dual host", () => {
     assert.equal(installedCheck.status, 0, installedCheck.stderr || installedCheck.stdout);
     assert.match(installedCheck.stdout, /loopcompass-redaction audit/);
     assert.ok(existsSync(path.join(stateRec, "keep-me.md")));
+  });
+
+  it("leaves both host destinations untouched when the source is invalid", () => {
+    for (const scenario of ["invalid-name", "byte-drift"]) {
+      const fixture = path.join(tmp, `release-${scenario}`);
+      const project = path.join(tmp, `project-${scenario}`);
+      mkdirSync(fixture);
+      mkdirSync(project);
+      copyReleaseFixture(fixture);
+
+      const destinations = [
+        path.join(project, ".agents", "skills", "loop-compass"),
+        path.join(project, ".claude", "skills", "loop-compass"),
+      ];
+      for (const destination of destinations) {
+        mkdirSync(destination, { recursive: true });
+        writeFileSync(path.join(destination, "sentinel.txt"), `${scenario}\n`);
+      }
+
+      if (scenario === "invalid-name") {
+        writeFileSync(
+          path.join(
+            fixture,
+            "skills",
+            "loop-compass",
+            "references",
+            "unsafe # comment.md",
+          ),
+          "payload\n",
+        );
+      } else {
+        writeFileSync(
+          path.join(fixture, "skills", "loop-compass", "SKILL.md"),
+          "drifted source\n",
+        );
+      }
+
+      const result = runReleaseAt(fixture, [
+        "stage-install",
+        "--project",
+        project,
+        "--hosts",
+        "agents,claude",
+      ]);
+      assert.notEqual(result.status, 0);
+      assert.doesNotMatch(result.stderr, /unsafe|comment|SKILL\.md/);
+      for (const destination of destinations) {
+        assert.equal(
+          readFileSync(path.join(destination, "sentinel.txt"), "utf8"),
+          `${scenario}\n`,
+        );
+        assert.deepEqual(
+          readdirSync(destination),
+          ["sentinel.txt"],
+        );
+      }
+    }
   });
 });
