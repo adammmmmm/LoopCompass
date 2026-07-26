@@ -1,0 +1,31 @@
+name: branch-lifecycle
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Find durable branches without pull requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/review-gate.mjs branches
+      - name: Record privileged policy audit boundary
+        run: >-
+          echo '{"live_settings_audit":"unverifiable","reason":"scheduled
+          GITHUB_TOKEN cannot read administrator-only repository delivery settings;
+          run the documented manual audit with a least-privilege administrator token"}'

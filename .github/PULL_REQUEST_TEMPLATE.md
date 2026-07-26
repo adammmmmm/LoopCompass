@@ -14,6 +14,21 @@
 
 <!-- Note compatibility, release, documentation, or deployment impact. Write "None" when absent. -->
 
+## Review evidence
+
+<!--
+Enter Review only after implementation, tests, green verify, and closure evidence are complete.
+Before Done, attach one compact summary of three independent model reviews for the current HEAD and
+head generation using docs/maintainer-delivery-policy.md. A later push invalidates that evidence,
+including when the branch later returns to an earlier SHA.
+-->
+
+Trusted first-party, non-sensitive changes require green `verify`, `model-review-gate`, and
+`delivery-policy`. External changes also require current human maintainer review; sensitive paths
+always require it. The delivery automation approval is separate from the three independent model
+reviews and becomes stale after a push.
+Squash is the only merge method, and merged remote branches are deleted.
+
 ## Checklist
 
 - [ ] The change is the smallest coherent solution to the stated problem.
@@ -22,3 +37,6 @@
 - [ ] `git diff --check` passes.
 - [ ] Documentation and `CHANGELOG.md` are updated when behavior changes.
 - [ ] Examples and logs contain no secrets, private paths, or personal data.
+- [ ] Three independent model reviews approve the current HEAD.
+- [ ] Every material finding is dispositioned with evidence and blocker fixes are re-verified.
+- [ ] Review conversations are resolved.
