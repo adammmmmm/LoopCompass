@@ -66,6 +66,19 @@ Place the marked canonical policy in the host's inherited project-instruction su
 has no such surface, include the compact reminder in every tool-using delegation and provide a
 resolvable path to the installed skill or repository `.loopcompass` directories.
 
+## Optional human-attention profile
+
+Human participation is not part of the portable-core requirement. The human-attention integration
+profile is **disabled by default** and must be enabled by an explicit project declaration. A
+project that does not enable it has no `HANDOFF.md` or other human-projection requirement.
+
+When a project enables the profile, follow
+[human-attention.md](human-attention.md). The project declares its human-only capabilities and
+decisions, one durable attention surface, and the authority responsible for that surface. The
+incident remains canonical; each human-attention entry is only a resumable projection keyed by the
+canonical incident slug. Install and update flows must not create, rewrite, or reconcile that
+consumer-owned surface.
+
 ## Version and updates
 
 Distributed skill installs include `manifest.yaml` next to `SKILL.md`. That file is the
