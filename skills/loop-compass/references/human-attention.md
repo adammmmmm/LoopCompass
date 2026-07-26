@@ -6,7 +6,8 @@ projects that deliberately reserve particular actions or decisions for humans.
 
 The profile is **optional and disabled by default**. Nothing in LoopCompass enables it implicitly.
 A project without an enabled declaration has no `HANDOFF.md`, operator-queue, or other
-human-projection requirement.
+human-projection requirement. An absent or null declaration is the default-off state, not a
+configuration error.
 
 ## Project declaration
 
@@ -157,6 +158,10 @@ validation is an exact no-op: it must not leave a synthetic revision 1 behind.
 Projection representation does not gate marker/registry crash repair. First make the valid
 marker/registry repair atomically, then run deterministic projection reconciliation to replace
 stale, incomplete, or divergent entries from the repaired canonical state.
+Projection-scoped malformation likewise does not suppress marker/registry repair diagnostics.
+Incident, marker, or registry corruption can block the affected canonical repair authority;
+projection corruption remains byte-identical while independent repair proceeds, then blocks
+projection reconciliation until repaired or quarantined.
 Reconciliation must preserve the full marker history, sibling and unknown records, unknown fields,
 pending metadata, and configured retention metadata; mutate only the targeted registry record or
 append the missing revision-1 marker.

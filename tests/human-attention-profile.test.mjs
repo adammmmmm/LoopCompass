@@ -173,6 +173,9 @@ function isStableIdentifier(value) {
 
 function parseProfileDeclaration(value) {
   const errors = [];
+  if (value === null || value === undefined) {
+    return { config: null, enabled: false, errors };
+  }
   if (!isPlainRecord(value)) {
     return {
       config: null,
@@ -412,6 +415,7 @@ function registryBySlug(testCase, errors) {
   const registry = new Map();
   const failed = new Set();
   const duplicateReported = new Set();
+  const invalidReported = new Set();
   const canonicalSlugCounts = new Map();
   let unscopedInvalid = false;
   if (!Array.isArray(testCase.known_obligations)) {
@@ -451,7 +455,10 @@ function registryBySlug(testCase, errors) {
       record.last_known_revision < 0
     ) {
       const diagnosticSlug = slugIsCanonical ? slug : "invalid-slug";
-      errors.push(`invalid_registry_record:${diagnosticSlug}`);
+      if (!slugIsCanonical || !invalidReported.has(slug)) {
+        errors.push(`invalid_registry_record:${diagnosticSlug}`);
+        if (slugIsCanonical) invalidReported.add(slug);
+      }
       if (slugIsCanonical) {
         failed.add(slug);
         registry.delete(slug);
@@ -713,7 +720,6 @@ function assessConformance(testCase) {
   } = registryBySlug(testCase, errors);
   const {
     projections: projectionRecords,
-    failed: failedProjections,
     unscopedInvalid: unscopedProjection,
   } = projectionsBySlug(
     testCase,
@@ -735,7 +741,6 @@ function assessConformance(testCase) {
   const failedState = new Set([
     ...failedObligations,
     ...failedRegistry,
-    ...failedProjections,
   ]);
   for (const [slug, record] of registry) {
     if (failedState.has(slug) || failedIncidents.has(slug)) continue;
@@ -1386,6 +1391,11 @@ describe("optional human-attention profile", () => {
           "invalid_projection_revision:console-action-required",
         ),
       );
+      assert.ok(
+        assessConformance(testCase).includes(
+          "recoverable_registry_lag:console-action-required",
+        ),
+      );
       const repaired = repairRegistryCrash(testCase);
       assert.equal(repaired.known_obligations[0].last_known_revision, 2);
       assert.deepEqual(repaired.projections, original.projections);
@@ -1396,6 +1406,43 @@ describe("optional human-attention profile", () => {
         /obligation conflict blocks reconciliation/,
       );
     }
+
+    const firstMarkerRaw = fixture.cases.find(
+      (testCase) => testCase.id === "first-marker-write-crash-is-recoverable",
+    );
+    const firstMarker = resolveCase(
+      fixture,
+      structuredClone(firstMarkerRaw),
+    );
+    firstMarker.projections.push({
+      incident_slug: "console-action-required",
+      obligation_revision: 0,
+    });
+    const firstMarkerOriginal = structuredClone(firstMarker);
+    const firstMarkerErrors = assessConformance(firstMarker);
+    assert.ok(
+      firstMarkerErrors.includes(
+        "invalid_projection_revision:console-action-required",
+      ),
+    );
+    assert.ok(
+      firstMarkerErrors.includes(
+        "recoverable_first_marker_gap:console-action-required",
+      ),
+    );
+    const repairedFirstMarker = repairRegistryCrash(firstMarker);
+    assert.equal(
+      repairedFirstMarker.known_obligations[0].last_known_revision,
+      1,
+    );
+    assert.deepEqual(
+      repairedFirstMarker.projections,
+      firstMarkerOriginal.projections,
+    );
+    assert.throws(
+      () => reconcileProjections(repairedFirstMarker),
+      /obligation conflict blocks reconciliation/,
+    );
   });
 
   it("accepts a 97-character schema-1 capability identifier end to end", () => {
@@ -2105,6 +2152,44 @@ describe("optional human-attention profile", () => {
     ]);
   });
 
+  it("reports repeated invalid registry siblings once per canonical slug", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    testCase.known_obligations = [
+      {
+        incident_slug: "console-action-required",
+        last_known_revision: "invalid",
+      },
+      {
+        incident_slug: "console-action-required",
+        last_known_revision: -1,
+      },
+      {
+        incident_slug: "console-action-required",
+        last_known_revision: Number.MAX_SAFE_INTEGER + 1,
+      },
+    ];
+
+    const errors = assessConformance(testCase);
+    assert.equal(
+      errors.filter(
+        (error) =>
+          error === "invalid_registry_record:console-action-required",
+      ).length,
+      1,
+    );
+    assert.equal(
+      errors.filter(
+        (error) =>
+          error === "duplicate_registry_record:console-action-required",
+      ).length,
+      1,
+    );
+  });
+
   it("counts duplicate registry slugs even when a sibling record is malformed", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     const rawCase = fixture.cases.find(
@@ -2184,6 +2269,26 @@ describe("optional human-attention profile", () => {
     }
   });
 
+  it("treats absent and null profile declarations as default-off", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const valid = resolveCase(fixture, structuredClone(rawCase));
+
+    for (const profile_config of [undefined, null]) {
+      const testCase = {
+        ...structuredClone(valid),
+        profile_config,
+      };
+      const original = structuredClone(testCase);
+      assert.deepEqual(assessConformance(testCase), []);
+      assert.deepEqual(repairRegistryCrash(testCase), original);
+      assert.deepEqual(reconcileProjections(testCase), original.projections);
+      assert.deepEqual(testCase, original);
+    }
+  });
+
   it("parses malformed profile declarations totally and suppresses lifecycle diagnostics", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     const rawCase = fixture.cases.find(
@@ -2213,10 +2318,6 @@ describe("optional human-attention profile", () => {
           enabled: "true",
         },
         errors: ["invalid_profile:enabled"],
-      },
-      {
-        profile_config: null,
-        errors: ["invalid_profile:declaration"],
       },
       {
         profile_config: {
