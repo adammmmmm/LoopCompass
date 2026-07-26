@@ -154,4 +154,19 @@ describe("classification completion fixtures", () => {
     assert.equal(c.normal_path_verified, false);
     assert.equal(completionResult(c), false);
   });
+
+  it("does not infer credential failure from a restricted-network auth status", () => {
+    const c = doc.cases.find(
+      (item) => item.id === "restricted-network-credential-diagnosis",
+    );
+    assert.ok(c);
+    assert.deepEqual(c.network_reachability, {
+      restricted_probe: "unavailable",
+      supported_probe: "reachable",
+    });
+    assert.equal(c.credential_validity, "valid");
+    assert.equal(c.git_commit_identity, "configured_separately");
+    assert.equal(c.credential_mutation_recommended, false);
+    assert.equal(completionResult(c), true);
+  });
 });
