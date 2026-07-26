@@ -261,6 +261,25 @@ describe("release tooling", () => {
         compatibility.stderr || compatibility.stdout,
       );
       assert.match(compatibility.stdout, /status: up to date/);
+      const installedManifest = path.join(installedSkill, "manifest.yaml");
+      const mismatchedRelease = path.join(fixtureRoot, "same-commit-mismatch.yaml");
+      writeFileSync(
+        mismatchedRelease,
+        readFileSync(installedManifest, "utf8").replace(
+          /^policy_version:\s*.+$/m,
+          "policy_version: 999",
+        ),
+      );
+      const sameCommitMismatch = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        mismatchedRelease,
+      );
+      assert.notEqual(sameCommitMismatch.status, 0);
+      assert.match(sameCommitMismatch.stdout, /status: version match, payload differs/);
       writeFileSync(
         path.join(
           installedSkill,

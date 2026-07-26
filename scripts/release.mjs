@@ -530,10 +530,7 @@ function cmdCheck(args) {
   );
 
   const cmp = compareSemver(installed.version, release.version);
-  if (
-    cmp === 0 &&
-    (installed.commit === release.commit || sameManifestPayload(installed, release))
-  ) {
+  if (cmp === 0 && sameManifestPayload(installed, release)) {
     console.log("status: up to date");
     process.exit(0);
   }
@@ -549,7 +546,7 @@ function cmdCheck(args) {
     );
     process.exit(3);
   }
-  console.log("status: version match, commit differs");
+  console.log("status: version match, payload differs");
   process.exit(4);
 }
 

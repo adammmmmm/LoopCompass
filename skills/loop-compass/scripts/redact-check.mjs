@@ -19,6 +19,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  readdirSync,
   realpathSync,
 } from "node:fs";
 import { constants as fsConstants } from "node:fs";
@@ -535,6 +536,38 @@ function committedEntries(projectRoot, repository) {
     });
 }
 
+function laneFilesystemEntries(stateRoot) {
+  const files = [];
+  function visit(candidate, relative) {
+    const before = lstatSync(candidate);
+    if (before.isSymbolicLink() || before.isFile()) {
+      files.push(relative.replaceAll("\\", "/"));
+      return;
+    }
+    if (!before.isDirectory()) return;
+    for (const name of readdirSync(candidate).sort()) {
+      visit(path.join(candidate, name), `${relative}/${name}`);
+    }
+    assertStableDirectory(candidate, before);
+  }
+
+  for (const name of SCAN_DIRS) {
+    const candidate = path.join(stateRoot, name);
+    if (existsSync(candidate)) visit(candidate, `.loopcompass/${name}`);
+  }
+  const config = path.join(stateRoot, "redaction.yaml");
+  if (existsSync(config)) files.push(".loopcompass/redaction.yaml");
+  return files.sort();
+}
+
+function assertExactStateInventory(stateRoot, entries) {
+  const tracked = entries.map((entry) => entry.name).sort();
+  const actual = stateRoot ? laneFilesystemEntries(stateRoot) : [];
+  if (JSON.stringify(actual) !== JSON.stringify(tracked)) {
+    throw new Error("state inventory differs from HEAD");
+  }
+}
+
 function gitBlobId(raw, objectFormat) {
   return createHash(objectFormat)
     .update(`blob ${raw.length}\0`)
@@ -646,6 +679,7 @@ function main() {
     const repository = repositoryContext(projectRoot);
     assertCleanState(projectRoot, repository);
     const entries = committedEntries(projectRoot, repository);
+    assertExactStateInventory(stateRoot, entries);
     const trackedConfig = entries.find(
       (entry) => entry.name === ".loopcompass/redaction.yaml",
     );
@@ -671,6 +705,7 @@ function main() {
       );
     }
     assertCleanState(projectRoot, repository);
+    assertExactStateInventory(stateRoot, entries);
     assertStableDirectory(projectRoot, projectBefore);
     if (stateRoot) assertStableDirectory(statePath, stateBefore);
     assertStableDirectory(repository.gitDir, repository.gitDirStat);

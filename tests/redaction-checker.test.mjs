@@ -535,6 +535,64 @@ describe("shipped redaction checker", () => {
     assert.doesNotMatch(result.stdout + result.stderr, /untracked@|untracked-private/);
   });
 
+  it("rejects ignored lane content hidden by repository ignore rules", () => {
+    writeState(project, "incidents", "clean.md", "role: Operator\n");
+    run(project, "audit");
+    writeFileSync(
+      path.join(project, ".gitignore"),
+      ".loopcompass/incidents/ignored.md\n",
+    );
+    git(project, "add", ".gitignore");
+    git(project, "commit", "-m", "ignore fixture");
+    writeState(
+      project,
+      "incidents",
+      "ignored.md",
+      "contact ignored@private-company.com\n",
+    );
+    const result = runHead(project);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    assert.doesNotMatch(result.stdout + result.stderr, /ignored@|ignored\.md/);
+  });
+
+  it("rejects lane content hidden by info exclude rules", () => {
+    writeState(project, "incidents", "clean.md", "role: Operator\n");
+    run(project, "audit");
+    writeFileSync(
+      path.join(project, ".git", "info", "exclude"),
+      ".loopcompass/incidents/info-hidden.md\n",
+    );
+    writeState(
+      project,
+      "incidents",
+      "info-hidden.md",
+      "contact hidden@private-company.com\n",
+    );
+    const result = runHead(project);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    assert.doesNotMatch(result.stdout + result.stderr, /hidden@|info-hidden/);
+  });
+
+  it("rejects lane content hidden by a configured global exclude file", () => {
+    writeState(project, "incidents", "clean.md", "role: Operator\n");
+    run(project, "audit");
+    const excludes = path.join(tmp, `global-excludes-${Date.now()}`);
+    writeFileSync(excludes, ".loopcompass/incidents/global-hidden.md\n");
+    git(project, "config", "core.excludesFile", excludes);
+    writeState(
+      project,
+      "incidents",
+      "global-hidden.md",
+      "contact hidden@private-company.com\n",
+    );
+    const result = runHead(project);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    assert.doesNotMatch(result.stdout + result.stderr, /hidden@|global-hidden|global-excludes/);
+  });
+
   it("does not let a dirty or deleted config hide a committed project rule", () => {
     writeFileSync(
       path.join(project, ".loopcompass", "redaction.yaml"),
