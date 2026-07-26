@@ -67,7 +67,9 @@ Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and 
 blank, malformed, or outcome-inconsistent fields stop evaluation rather than being scored as
 partial success. `expected.parent_terminal_action` requires a linked parent receipt with that
 action. `expected.terminal_receipt_semantics` separately scores `task_outcome`,
-`mechanism_health`, and `containment.used`; structural validity alone does not earn semantic credit.
+`mechanism_health`, and `containment.used`; it is required whenever
+`expected.terminal_receipt_required` is true, so a fixture cannot opt out of semantic scoring.
+Structural validity alone does not earn semantic credit.
 
 The paired validator-workaround cases distinguish task completion from mechanism health. Passing
 validation in an unrelated runtime is containment while the documented runtime remains broken;

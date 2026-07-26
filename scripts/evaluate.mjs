@@ -371,6 +371,14 @@ function validateFixture(doc) {
     if (hasField(expected, "terminal_receipt_required")) {
       requireBoolean(expected, "terminal_receipt_required", `${label}.expected`);
     }
+    if (
+      expected.terminal_receipt_required === true
+      && !hasField(expected, "terminal_receipt_semantics")
+    ) {
+      throw new Error(
+        `${label}.expected.terminal_receipt_semantics is required when terminal_receipt_required is true`,
+      );
+    }
     if (hasField(expected, "terminal_receipt_semantics")) {
       const semantics = expected.terminal_receipt_semantics;
       requireObject(semantics, `${label}.expected.terminal_receipt_semantics`);

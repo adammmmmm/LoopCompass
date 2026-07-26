@@ -241,6 +241,22 @@ describe("evaluation benchmark report", () => {
     );
   });
 
+  it("requires semantic expectations for every required terminal receipt", () => {
+    const doc = readFixture();
+    const receiptCase = doc.cases.find(
+      (c) => c.id === "lc-eval-012-workaround-is-containment",
+    );
+    delete receiptCase.expected.terminal_receipt_semantics;
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /terminal_receipt_semantics is required when terminal_receipt_required is true/,
+    );
+  });
+
   it("rejects a parent receipt that does not preserve a propagated payload", () => {
     const doc = readFixture();
     const receiptCase = doc.cases.find(
