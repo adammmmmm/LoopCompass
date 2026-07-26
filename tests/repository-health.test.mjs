@@ -60,6 +60,10 @@ test("community health files remain complete and discoverable", async () => {
   assert.match(maintainerPolicy, /cooperative repository quality policy/);
   assert.match(maintainerPolicy, /GitHub statuses remain SHA-scoped/);
   assert.match(maintainerPolicy, /outside the v0\.1\s+threat model/);
+  assert.match(
+    maintainerPolicy,
+    /expected policy denial[\s\S]*evaluator job itself succeeds[\s\S]*operational failures still fail/,
+  );
 });
 
 test("GitHub workflows use immutable actions and bounded permissions", async () => {
@@ -132,6 +136,14 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.match(
     reviewGateScript,
     /\/repos\/\$\{repo\}\/pulls\/\$\{number\}\/reviews/,
+  );
+  assert.doesNotMatch(
+    reviewGateScript,
+    /outcome\.outcome\s*===\s*["']fail["'][^\n]*process\.exitCode/,
+  );
+  assert.match(
+    reviewGateScript,
+    /A policy denial is a successfully evaluated, fail-closed result/,
   );
   assert.match(
     reviewGateScript,

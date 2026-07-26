@@ -1527,16 +1527,25 @@ export async function runPolicyEvaluation({
     return failPolicy(reason);
   };
   const failUntrustedAssociation = async (afterTerminal = false) => {
-    let reason;
+    let pullRequests;
     try {
-      reason = exclusivePullAssociationError({
-        pullRequests: await loadAssociatedPullRequests(originalHead),
-        pullNumber,
-        headSha: originalHead,
-      });
-    } catch {
-      reason = "pull request association is unverifiable";
+      pullRequests = await loadAssociatedPullRequests(originalHead);
+    } catch (error) {
+      if (afterTerminal) {
+        try {
+          await cleanupOwnershipLoss();
+        } catch (cleanupError) {
+          error.cleanupError = cleanupError;
+        }
+        error.cleanupAttempted = true;
+      }
+      throw error;
     }
+    const reason = exclusivePullAssociationError({
+      pullRequests,
+      pullNumber,
+      headSha: originalHead,
+    });
     if (!reason) return null;
     if (afterTerminal) {
       await cleanupOwnershipLoss();

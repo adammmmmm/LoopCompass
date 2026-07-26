@@ -93,6 +93,9 @@ repository audit logs are the external evidence for destructive administrative c
   against the exact current HEAD.
 - `delivery-policy` independently validates the trusted, external, sensitive-path, and human-review
   conditions.
+- An expected policy denial is reported by those required commit statuses and the automation
+  review; the evaluator job itself succeeds after publishing them. API, driver, or other
+  operational failures still fail the workflow job.
 - Trusted first-party, non-sensitive pull requests need both checks. After both pass, the trusted
   workflow posts a pull-request-scoped GitHub Actions approval for the exact HEAD. If either fails,
   it posts changes requested instead. The latest automation review is a delivery attestation and
