@@ -4,7 +4,8 @@
 
 LoopCompass v1 uses explicit, agent-assisted updates from immutable GitHub releases. An update
 replaces the installed skill, updates only the managed LoopCompass project-policy block, preserves
-all project recovery and incident state, validates the result, and reports exactly what changed.
+all project recovery and incident state plus every project-owned human-attention projection,
+marker, and registry surface, validates the result, and reports exactly what changed.
 
 V1 does not silently check for or install updates during normal use. The update flow becomes
 executable only after LoopCompass publishes the release metadata and managed policy markers defined
@@ -18,6 +19,8 @@ below.
 - Update global and project installations safely.
 - Never overwrite host instructions outside the managed LoopCompass block.
 - Never modify recovery or incident artifacts during a software update.
+- Never create or modify an optional human-attention surface, obligation marker, or
+  known-obligation registry during install or update.
 - Stop before applying incompatible schema or policy changes.
 - Leave plugin-managed and automatic updates as optional future delivery paths.
 
@@ -168,14 +171,19 @@ Software updates must not create, edit, move, migrate, or delete:
 └── incidents/
 ```
 
+When the optional human-attention profile is enabled, the same protection covers the
+project-designated attention surface and its structurally separate obligation marker and
+known-obligation registry metadata, wherever the project declaration places them. When the profile
+is disabled, install or update must not create a default `HANDOFF.md`, queue, marker, or registry.
+
 State migration is a separate, explicit operation. A release whose `state_schema` differs from the
 installed manifest must stop before update and present its migration instructions and rollback plan
 to the operator.
 
-A project update requires a quiescent LoopCompass state directory with no agent writing recoveries
-or incidents. Snapshot state hashes immediately before mutation and after validation. Any change is
-reported as concurrent activity and blocks the success claim; the updater never tries to reverse or
-merge that state change.
+A project update requires quiescent LoopCompass state with no agent writing recoveries, incidents,
+or enabled human-attention surfaces. Snapshot hashes for all protected paths immediately before
+mutation and after validation. Any change is reported as concurrent activity and blocks the
+success claim; the updater never tries to reverse or merge that state change.
 
 ## Installation scopes
 
@@ -216,8 +224,8 @@ The updating agent must perform these steps in order:
 9. Stop for operator approval on a major version change, state-schema change, missing migration,
    malformed policy markers, unexpected source, local skill modifications, or any added permission,
    hook, network, tool, command-execution, or external-service surface.
-10. For a project update, confirm that no agent is writing `.loopcompass` state and snapshot its
-    hashes.
+10. For a project update, confirm that no agent is writing `.loopcompass` state or enabled
+    human-attention surfaces and snapshot every protected path.
 11. Stage the complete new skill in a temporary sibling directory on the same filesystem.
 12. Validate the staged skill and verify every file against the pinned release manifest.
 13. Create a transaction journal containing scope, paths, old and new manifests, policy snapshot,
@@ -228,8 +236,8 @@ The updating agent must perform these steps in order:
 16. For `project` scope only, replace the marked LoopCompass policy block. A global update does
     not modify project policy.
 17. Run skill validation and host discovery checks.
-18. For a project update, compare the final state snapshot and report any concurrent change without
-    modifying that state.
+18. For a project update, compare the final protected-path snapshot and report any concurrent
+    change without modifying that state.
 19. Report old and new versions, release commit, policy change, validation, preserved state, and any
     follow-up migration requirement.
 
@@ -259,8 +267,9 @@ after the updated or restored installation validates successfully.
 > Update the project LoopCompass installation in this project from the latest stable release at
 > https://github.com/adammmmmm/LoopCompass. Follow `docs/update-strategy-v1.md`: replace the
 > installed skill as one validated unit, update only the managed LoopCompass policy block, preserve
-> `.loopcompass/recoveries` and `.loopcompass/incidents` byte-for-byte, stop on compatibility or
-> local-modification conflicts, and report the old and new versions plus validation evidence.
+> `.loopcompass/recoveries`, `.loopcompass/incidents`, and every project-declared human-attention
+> projection/marker/registry surface byte-for-byte, stop on compatibility or local-modification
+> conflicts, and report the old and new versions plus validation evidence.
 
 ### Update a global skill
 
@@ -348,17 +357,19 @@ when no plugin is installed.
 1. A patch update replaces the complete skill and only the managed policy block.
 2. Project instructions outside the managed block remain byte-for-byte unchanged.
 3. Recovery and incident artifacts remain byte-for-byte unchanged.
-4. A malformed or duplicated marker stops the update without mutation.
-5. A locally modified installed skill stops the update and shows the conflict.
-6. A state-schema change stops and requests an explicit migration.
-7. A staged skill that fails validation never replaces the installed skill.
-8. A failed replacement restores the previous skill and policy.
-9. A global skill update reports repositories with stale policies without editing them.
-10. Rollback reinstalls a prior immutable release without rolling back project state.
-11. A project update cannot replace a global installation.
-12. A global update does not enumerate or edit projects outside explicitly provided roots.
-13. An expanded permission or execution surface stops for approval.
-14. A rollback failure preserves its journal, backup, staging paths, and manual recovery steps.
+4. Human-attention projection, marker, registry, and configured queue paths remain byte-for-byte
+   unchanged; a disabled profile creates none.
+5. A malformed or duplicated marker stops the update without mutation.
+6. A locally modified installed skill stops the update and shows the conflict.
+7. A state-schema change stops and requests an explicit migration.
+8. A staged skill that fails validation never replaces the installed skill.
+9. A failed replacement restores the previous skill and policy.
+10. A global skill update reports repositories with stale policies without editing them.
+11. Rollback reinstalls a prior immutable release without rolling back project state.
+12. A project update cannot replace a global installation.
+13. A global update does not enumerate or edit projects outside explicitly provided roots.
+14. An expanded permission or execution surface stops for approval.
+15. A rollback failure preserves its journal, backup, staging paths, and manual recovery steps.
 
 ## Decision audit
 

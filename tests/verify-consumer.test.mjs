@@ -67,4 +67,45 @@ describe("verify-consumer", () => {
     assert.equal(r.status, 0, r.stderr || r.stdout);
     assert.match(r.stdout, /verify-consumer ok/);
   });
+
+  it("requires the shipped human-attention profile", () => {
+    const project = path.join(tmp, "missing-human-profile");
+    mkdirSync(project, { recursive: true });
+
+    const stage = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts", "release.mjs"),
+        "stage-install",
+        "--project",
+        project,
+        "--hosts",
+        "agents",
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(stage.status, 0, stage.stderr || stage.stdout);
+
+    rmSync(
+      path.join(
+        project,
+        ".agents",
+        "skills",
+        "loop-compass",
+        "references",
+        "human-attention.md",
+      ),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts", "verify-consumer.mjs"),
+        "--project",
+        project,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /missing .*references\/human-attention\.md/);
+  });
 });

@@ -13,6 +13,9 @@ uses [Semantic Versioning](https://semver.org/).
 - Automated GitHub Actions dependency updates.
 - Host-neutral terminal and parent receipt contracts, strict validators, and evaluation metrics for
   classification completeness, semantic accuracy, and worker-to-parent closure.
+- Optional, disabled-by-default human-attention integration profile with durable obligation
+  markers, typed authority-bound surfaces, fail-closed compare-and-swap reconciliation, and
+  deterministic lifecycle fixtures.
 - A current-HEAD delivery gate for three independent model reviews, finding dispositions, and
   conditional human review, plus a scheduled remote-branch lifecycle audit.
 

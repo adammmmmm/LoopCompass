@@ -14,6 +14,10 @@ Use the canonical [project policy](assets/project-policy.md) to make consultatio
 for parents and subagents. See [integration.md](references/integration.md) for host-specific
 placement.
 
+Projects may explicitly enable the optional, default-off
+[human-attention profile](references/human-attention.md). Its projection and reconciliation
+requirements do not apply unless the project declaration enables it.
+
 Consult once per normalized failure signature per agent task:
 
 - For a distinctive deterministic failure, consult before the first substantially equivalent

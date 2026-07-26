@@ -63,6 +63,7 @@ describe("release tooling", () => {
       "assets/recovery-template.md",
       "assets/incident-template.md",
       "references/classification.md",
+      "references/human-attention.md",
       "references/integration.md",
       "references/pii-sanitation.md",
       "references/terminal-receipts.md",

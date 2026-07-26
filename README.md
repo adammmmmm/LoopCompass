@@ -107,6 +107,11 @@ payloads, personal paths, and secrets out of durable state. See the shipped
 [PII sanitation contract](skills/loop-compass/references/pii-sanitation.md). Automated checks are
 defense in depth, not proof that no PII remains.
 
+Projects may optionally enable the
+[human-attention integration profile](skills/loop-compass/references/human-attention.md) for durable
+visibility when an incident requires human action. It is disabled by default; projects that do not
+enable it have no human-attention projection requirement.
+
 ---
 
 ## Install
