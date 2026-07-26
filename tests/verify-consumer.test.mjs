@@ -19,6 +19,36 @@ describe("verify-consumer", () => {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "lc-consumer-"));
   after(() => rmSync(tmp, { recursive: true, force: true }));
 
+  function stageOne(project) {
+    mkdirSync(project, { recursive: true });
+    const stage = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts", "release.mjs"),
+        "stage-install",
+        "--project",
+        project,
+        "--hosts",
+        "agents",
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(stage.status, 0, stage.stderr || stage.stdout);
+    return path.join(project, ".agents", "skills", "loop-compass");
+  }
+
+  function verify(project, timeout = undefined) {
+    return spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts", "verify-consumer.mjs"),
+        "--project",
+        project,
+      ],
+      { encoding: "utf8", timeout },
+    );
+  }
+
   it("passes a dual-host staged project with policy and empty state", () => {
     const project = path.join(tmp, "consumer");
     mkdirSync(project, { recursive: true });
@@ -68,10 +98,9 @@ describe("verify-consumer", () => {
     assert.match(r.stdout, /verify-consumer ok/);
   });
 
-  it("requires the shipped human-attention profile", () => {
-    const project = path.join(tmp, "missing-human-profile");
+  it("rejects an unexpected execution surface even when other files are valid", () => {
+    const project = path.join(tmp, "consumer-unexpected-script");
     mkdirSync(project, { recursive: true });
-
     const stage = spawnSync(
       process.execPath,
       [
@@ -85,17 +114,16 @@ describe("verify-consumer", () => {
       { encoding: "utf8" },
     );
     assert.equal(stage.status, 0, stage.stderr || stage.stdout);
-
-    rmSync(
-      path.join(
-        project,
-        ".agents",
-        "skills",
-        "loop-compass",
-        "references",
-        "human-attention.md",
-      ),
+    const unexpected = path.join(
+      project,
+      ".agents",
+      "skills",
+      "loop-compass",
+      "scripts",
+      "unexpected.mjs",
     );
+    writeFileSync(unexpected, "process.exit(0);\n");
+
     const result = spawnSync(
       process.execPath,
       [
@@ -106,6 +134,89 @@ describe("verify-consumer", () => {
       { encoding: "utf8" },
     );
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /missing .*references\/human-attention\.md/);
+    assert.match(result.stderr, /inventory does not match manifest/);
+    assert.doesNotMatch(result.stderr, /unexpected\.mjs|consumer-unexpected-script/);
+  });
+
+  it("rejects a required file replaced by a directory and an extra empty directory", () => {
+    const project = path.join(tmp, "consumer-typed-tree");
+    const skill = stageOne(project);
+    rmSync(path.join(skill, "SKILL.md"));
+    mkdirSync(path.join(skill, "SKILL.md"));
+    let result = verify(project);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /typed-tree|inventory|required regular file/);
+    assert.doesNotMatch(result.stderr, /consumer-typed-tree|SKILL\.md/);
+
+    rmSync(path.join(skill, "SKILL.md"), { recursive: true });
+    writeFileSync(
+      path.join(skill, "SKILL.md"),
+      readFileSync(path.join(root, "skills", "loop-compass", "SKILL.md")),
+    );
+    mkdirSync(path.join(skill, "empty-extra"));
+    result = verify(project);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /inventory/);
+    assert.doesNotMatch(result.stderr, /empty-extra|consumer-typed-tree/);
+  });
+
+  it("rejects a manifest with comment or unknown-field byte drift", () => {
+    const project = path.join(tmp, "consumer-manifest-drift");
+    const skill = stageOne(project);
+    const manifest = path.join(skill, "manifest.yaml");
+    const original = readFileSync(manifest, "utf8");
+    for (const suffix of ["# comment\n", "unknown_field: value\n"]) {
+      writeFileSync(manifest, `${original}${suffix}`);
+      const result = verify(project);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /manifest failed canonical validation/);
+      assert.doesNotMatch(result.stderr, /comment|unknown_field|consumer-manifest-drift/);
+    }
+  });
+
+  it("rejects a FIFO before attempting to read it", (context) => {
+    const project = path.join(tmp, "consumer-fifo");
+    const skill = stageOne(project);
+    const target = path.join(skill, "SKILL.md");
+    rmSync(target);
+    const created = spawnSync("mkfifo", [target], { encoding: "utf8" });
+    if (created.status !== 0) {
+      context.skip("mkfifo unavailable on this host");
+      return;
+    }
+    const result = verify(project, 3000);
+    assert.notEqual(result.signal, "SIGTERM", "verification must not block on FIFO");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /typed-tree/);
+    assert.doesNotMatch(result.stderr, /consumer-fifo|SKILL\.md/);
+  });
+
+  it("rejects a FIFO in state before validation without blocking", (context) => {
+    const project = path.join(tmp, "consumer-state-fifo");
+    stageOne(project);
+    const incidents = path.join(project, ".loopcompass", "incidents");
+    mkdirSync(incidents, { recursive: true });
+    const target = path.join(incidents, "candidate.md");
+    const created = spawnSync("mkfifo", [target], { encoding: "utf8" });
+    if (created.status !== 0) {
+      context.skip("mkfifo unavailable on this host");
+      return;
+    }
+    const result = verify(project, 3000);
+    assert.notEqual(result.signal, "SIGTERM", "verification must not block on FIFO");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /regular-tree validation/);
+    assert.doesNotMatch(result.stderr, /consumer-state-fifo|candidate\.md/);
+  });
+
+  it("requires the shipped human-attention profile", () => {
+    const project = path.join(tmp, "missing-human-profile");
+    const skill = stageOne(project);
+    rmSync(path.join(skill, "references", "human-attention.md"));
+
+    const result = verify(project);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /skill install inventory does not match manifest/);
+    assert.doesNotMatch(result.stderr, /human-attention\.md|missing-human-profile/);
   });
 });

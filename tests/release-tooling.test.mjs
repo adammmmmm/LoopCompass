@@ -4,14 +4,16 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -52,6 +54,98 @@ describe("release tooling", () => {
     assert.match(result.stdout, /validate ok/);
   });
 
+  it("rejects noncanonical manifest grammar", () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-manifest-grammar-"));
+    try {
+      for (const name of ["scripts", "skills", "docs"]) {
+        cpSync(path.join(root, name), path.join(fixtureRoot, name), { recursive: true });
+      }
+      for (const name of ["VERSION", "LICENSE", "CHANGELOG.md", "README.md"]) {
+        copyFileSync(path.join(root, name), path.join(fixtureRoot, name));
+      }
+      const manifestPath = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "manifest.yaml",
+      );
+      const canonical = readFileSync(manifestPath, "utf8");
+      const cases = [
+        `${canonical}# extra comment\n`,
+        `${canonical}unknown_field: value\n`,
+        canonical.replace(
+          /^version: (.+)$/m,
+          "version: $1\nversion: $1",
+        ),
+        canonical.replace(
+          /^(version: .+)\n(source: .+)$/m,
+          "$2\n$1",
+        ),
+      ];
+      for (const candidate of cases) {
+        writeFileSync(manifestPath, candidate);
+        const result = runReleaseAt(fixtureRoot, "validate");
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /release operation failed stable filesystem validation/);
+        assert.doesNotMatch(result.stderr, /extra comment|unknown_field/);
+      }
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects YAML-significant filenames in generation and validation", () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-manifest-paths-"));
+    try {
+      for (const name of ["scripts", "skills", "docs"]) {
+        cpSync(path.join(root, name), path.join(fixtureRoot, name), { recursive: true });
+      }
+      for (const name of ["VERSION", "LICENSE", "CHANGELOG.md", "README.md"]) {
+        copyFileSync(path.join(root, name), path.join(fixtureRoot, name));
+      }
+      const references = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "references",
+      );
+      const manifestPath = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "manifest.yaml",
+      );
+      for (const name of ["unsafe # comment.md", "tag!anchor.md", "colon:key.md"]) {
+        const candidate = path.join(references, name);
+        writeFileSync(candidate, "payload\n");
+        const generated = runReleaseAt(fixtureRoot, "generate");
+        assert.notEqual(generated.status, 0);
+        assert.match(
+          generated.stderr,
+          /release operation failed stable filesystem validation/,
+        );
+        assert.doesNotMatch(generated.stderr, /unsafe|comment|anchor|colon/);
+        rmSync(candidate);
+      }
+
+      const canonical = readFileSync(manifestPath, "utf8");
+      const digest = "a".repeat(64);
+      writeFileSync(
+        manifestPath,
+        canonical.replace(/^files:$/m, `files:\n  unsafe # comment.md: ${digest}`),
+      );
+      const validated = runReleaseAt(fixtureRoot, "validate");
+      assert.notEqual(validated.status, 0);
+      assert.match(
+        validated.stderr,
+        /release operation failed stable filesystem validation/,
+      );
+      assert.doesNotMatch(validated.stderr, /unsafe|comment/);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("manifest lists every required skill file with sha256 digests", () => {
     const manifestPath = path.join(root, "skills", "loop-compass", "manifest.yaml");
     assert.ok(existsSync(manifestPath));
@@ -66,6 +160,8 @@ describe("release tooling", () => {
       "references/human-attention.md",
       "references/integration.md",
       "references/pii-sanitation.md",
+      "references/redaction-audit.md",
+      "scripts/redact-check.mjs",
       "references/terminal-receipts.md",
     ]) {
       assert.match(text, new RegExp(`^\\s+${rel.replace(".", "\\.")}:\\s+[0-9a-f]{64}$`, "m"));
@@ -189,6 +285,16 @@ describe("release tooling", () => {
         "utf8",
       );
       writeFileSync(skillYaml, crlf);
+      const nestedManifest = path.join(
+        fixtureRoot,
+        "skills",
+        "loop-compass",
+        "references",
+        "manifest.yaml",
+      );
+      writeFileSync(nestedManifest, "nested payload\n");
+      const generated = runReleaseAt(fixtureRoot, "generate");
+      assert.equal(generated.status, 0, generated.stderr || generated.stdout);
 
       const result = runReleaseAt(fixtureRoot, "package");
       assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -204,6 +310,11 @@ describe("release tooling", () => {
       const man = parseManifestFiles(
         readFileSync(path.join(staged, "manifest.yaml"), "utf8"),
       );
+      assert.ok(man["references/manifest.yaml"]);
+      assert.equal(
+        readFileSync(path.join(staged, "references", "manifest.yaml"), "utf8"),
+        "nested payload\n",
+      );
       for (const [rel, expected] of Object.entries(man)) {
         const raw = readFileSync(path.join(staged, rel));
         assert.equal(
@@ -214,6 +325,313 @@ describe("release tooling", () => {
         const actual = createHash("sha256").update(raw).digest("hex");
         assert.equal(actual, expected, `raw digest mismatch for ${rel}`);
       }
+      assert.equal(
+        readFileSync(path.join(staged, "scripts", "redact-check.mjs"), "utf8"),
+        readFileSync(
+          path.join(root, "skills", "loop-compass", "scripts", "redact-check.mjs"),
+          "utf8",
+        ),
+      );
+      const stagedManifest = path.join(staged, "manifest.yaml");
+      writeFileSync(
+        stagedManifest,
+        readFileSync(stagedManifest, "utf8").replace(
+          /^commit:\s*.+$/m,
+          `commit: ${"f".repeat(40)}`,
+        ),
+      );
+      const consumer = path.join(fixtureRoot, "consumer");
+      mkdirSync(consumer);
+      const stagedInstall = runReleaseAt(
+        fixtureRoot,
+        "stage-install",
+        "--project",
+        consumer,
+        "--hosts",
+        "agents",
+      );
+      assert.equal(stagedInstall.status, 0, stagedInstall.stderr || stagedInstall.stdout);
+      const installedSkill = path.join(
+        consumer,
+        ".agents",
+        "skills",
+        "loop-compass",
+      );
+      const compatibility = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.equal(
+        compatibility.status,
+        0,
+        compatibility.stderr || compatibility.stdout,
+      );
+      assert.match(compatibility.stdout, /status: up to date/);
+      const installedManifest = path.join(installedSkill, "manifest.yaml");
+      const originalInstalledManifest = readFileSync(installedManifest, "utf8");
+      for (const suffix of ["# comment\n", "unknown_field: value\n"]) {
+        writeFileSync(installedManifest, `${originalInstalledManifest}${suffix}`);
+        const drift = runReleaseAt(
+          fixtureRoot,
+          "check",
+          "--installed",
+          installedSkill,
+          "--release-manifest",
+          stagedManifest,
+        );
+        assert.notEqual(drift.status, 0);
+        assert.match(drift.stderr, /release operation failed stable filesystem validation/);
+        assert.doesNotMatch(drift.stderr, /comment|unknown_field/);
+      }
+      writeFileSync(installedManifest, originalInstalledManifest);
+
+      const bothDrift = `${originalInstalledManifest}# identical drift\n`;
+      writeFileSync(installedManifest, bothDrift);
+      const driftedRelease = path.join(fixtureRoot, "both-drift.yaml");
+      writeFileSync(driftedRelease, bothDrift);
+      const sameInvalidBytes = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        driftedRelease,
+      );
+      assert.notEqual(sameInvalidBytes.status, 0);
+      assert.match(
+        sameInvalidBytes.stderr,
+        /release operation failed stable filesystem validation/,
+      );
+      assert.doesNotMatch(sameInvalidBytes.stderr, /identical drift/);
+      writeFileSync(installedManifest, originalInstalledManifest);
+
+      const unsafePathManifest = originalInstalledManifest.replace(
+        /^files:$/m,
+        `files:\n  unsafe # comment.md: ${"a".repeat(64)}`,
+      );
+      writeFileSync(installedManifest, unsafePathManifest);
+      const unsafeInstall = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.notEqual(unsafeInstall.status, 0);
+      assert.match(
+        unsafeInstall.stderr,
+        /release operation failed stable filesystem validation/,
+      );
+      assert.doesNotMatch(unsafeInstall.stderr, /unsafe|comment/);
+      writeFileSync(installedManifest, originalInstalledManifest);
+
+      writeFileSync(path.join(installedSkill, ".hidden-payload"), "unexpected\n");
+      let unexpected = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.notEqual(unexpected.status, 0);
+      assert.match(unexpected.stderr, /payload does not match its manifest/);
+      assert.doesNotMatch(unexpected.stderr, /hidden-payload/);
+      rmSync(path.join(installedSkill, ".hidden-payload"));
+
+      symlinkSync("SKILL.md", path.join(installedSkill, "unexpected-link"));
+      unexpected = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.notEqual(unexpected.status, 0);
+      assert.match(unexpected.stderr, /payload does not match its manifest/);
+      assert.doesNotMatch(unexpected.stderr, /unexpected-link/);
+      rmSync(path.join(installedSkill, "unexpected-link"));
+
+      const mismatchedRelease = path.join(fixtureRoot, "same-commit-mismatch.yaml");
+      writeFileSync(
+        mismatchedRelease,
+        readFileSync(installedManifest, "utf8").replace(
+          /^policy_version:\s*.+$/m,
+          "policy_version: 999",
+        ).replace(
+          /^minimum_policy_version:\s*.+$/m,
+          "minimum_policy_version: 999",
+        ),
+      );
+      const sameCommitMismatch = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        mismatchedRelease,
+      );
+      assert.notEqual(sameCommitMismatch.status, 0);
+      assert.match(
+        sameCommitMismatch.stderr,
+        /manifest bytes do not match release payload/,
+      );
+      writeFileSync(
+        path.join(
+          installedSkill,
+          "scripts",
+          "redact-check.mjs",
+        ),
+        "// payload drift\n",
+      );
+      const drifted = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        path.join(fixtureRoot, "skills", "loop-compass"),
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.notEqual(drifted.status, 0);
+      assert.match(drifted.stderr, /payload does not match its manifest/);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not replace an archive when source inventory changes during staging", async () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-package-race-"));
+    try {
+      for (const name of ["scripts", "skills", "docs"]) {
+        cpSync(path.join(root, name), path.join(fixtureRoot, name), { recursive: true });
+      }
+      for (const name of ["VERSION", "LICENSE", "CHANGELOG.md", "README.md"]) {
+        copyFileSync(path.join(root, name), path.join(fixtureRoot, name));
+      }
+      writeFileSync(
+        path.join(fixtureRoot, "skills", "loop-compass", "references", "slow-copy.md"),
+        "x".repeat(16 * 1024 * 1024),
+      );
+      assert.equal(runReleaseAt(fixtureRoot, "generate").status, 0);
+      const archive = path.join(
+        fixtureRoot,
+        "dist",
+        `loopcompass-v${readFileSync(path.join(fixtureRoot, "VERSION"), "utf8").trim()}.tar.gz`,
+      );
+      mkdirSync(path.dirname(archive), { recursive: true });
+      writeFileSync(archive, "existing archive\n");
+
+      const child = spawn(
+        process.execPath,
+        [path.join(fixtureRoot, "scripts", "release.mjs"), "package"],
+        { cwd: fixtureRoot, encoding: "utf8" },
+      );
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+      const staging = path.join(fixtureRoot, "dist", "staging");
+      const deadline = Date.now() + 10_000;
+      while (!existsSync(staging) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      assert.ok(existsSync(staging), "package staging did not begin");
+      writeFileSync(
+        path.join(fixtureRoot, "skills", "loop-compass", "references", "late.md"),
+        "late addition\n",
+      );
+      const status = await new Promise((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", resolve);
+      });
+      assert.notEqual(status, 0, stderr);
+      assert.equal(readFileSync(archive, "utf8"), "existing archive\n");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("never accepts substituted installed bytes during an interleaved integrity walk", async () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-check-race-"));
+    try {
+      const project = path.join(fixtureRoot, "consumer");
+      mkdirSync(project);
+      const stage = runRelease(
+        "stage-install",
+        "--project",
+        project,
+        "--hosts",
+        "agents",
+      );
+      assert.equal(stage.status, 0, stage.stderr || stage.stdout);
+      const installed = path.join(
+        project,
+        ".agents",
+        "skills",
+        "loop-compass",
+      );
+      const target = path.join(installed, "SKILL.md");
+      const held = path.join(installed, "SKILL.held");
+      const alternate = path.join(fixtureRoot, "alternate");
+      writeFileSync(alternate, "outside-marker\n");
+      const swapper = spawn(
+        process.execPath,
+        [
+          "-e",
+          `
+            const fs = require("node:fs");
+            const [target, held, alternate] = process.argv.slice(1);
+            const until = Date.now() + 1200;
+            while (Date.now() < until) {
+              try {
+                fs.renameSync(target, held);
+                fs.copyFileSync(alternate, target);
+                fs.rmSync(target);
+                fs.renameSync(held, target);
+              } catch {}
+            }
+            try {
+              if (!fs.existsSync(target) && fs.existsSync(held)) fs.renameSync(held, target);
+            } catch {}
+          `,
+          target,
+          held,
+          alternate,
+        ],
+        { stdio: "ignore" },
+      );
+      const done = new Promise((resolve, reject) => {
+        swapper.once("error", reject);
+        swapper.once("exit", (code) =>
+          code === 0 ? resolve() : reject(new Error(`swapper exited ${code}`)),
+        );
+      });
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const check = runRelease(
+          "check",
+          "--installed",
+          installed,
+          "--release-manifest",
+          path.join(root, "skills", "loop-compass", "manifest.yaml"),
+        );
+        assert.ok([0, 1].includes(check.status), check.stderr || check.stdout);
+        assert.doesNotMatch(check.stdout + check.stderr, /outside-marker|SKILL\.held/);
+      }
+      await done;
+      const finalCheck = runRelease(
+        "check",
+        "--installed",
+        installed,
+        "--release-manifest",
+        path.join(root, "skills", "loop-compass", "manifest.yaml"),
+      );
+      assert.equal(finalCheck.status, 0, finalCheck.stderr || finalCheck.stdout);
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
