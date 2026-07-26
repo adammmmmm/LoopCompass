@@ -1489,8 +1489,7 @@
         "conformant": false,
         "errors": [
           "invalid_orphan_projection:friendly-alias",
-          "missing_projection:console-action-required",
-          "orphan_projection:unknown-closure:friendly-alias"
+          "missing_projection:console-action-required"
         ]
       }
     },

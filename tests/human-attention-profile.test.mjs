@@ -41,6 +41,7 @@ const skillPath = path.join(root, "skills", "loop-compass", "SKILL.md");
 const updateStrategyPath = path.join(root, "docs", "update-strategy-v1.md");
 const verificationPath = path.join(root, "docs", "verification.md");
 const designPath = path.join(root, "docs", "design.md");
+const readmePath = path.join(root, "README.md");
 
 function isHumanAction(incident, config) {
   const capabilities = new Set(config.human_only_capabilities ?? []);
@@ -841,6 +842,7 @@ function assessConformance(testCase) {
         .some((projection) => !intrinsicProjectionIsValid(projection))
     ) {
       errors.push(`invalid_orphan_projection:${slug}`);
+      continue;
     }
     const closureKnown = hasCompleteClosureEvidence(testCase, slug);
     const closure = closureKnown ? "verified-closure" : "unknown-closure";
@@ -1128,8 +1130,13 @@ describe("optional human-attention profile", () => {
     const updateStrategy = readFileSync(updateStrategyPath, "utf8");
     const verification = readFileSync(verificationPath, "utf8");
     const design = readFileSync(designPath, "utf8");
+    const readme = readFileSync(readmePath, "utf8");
 
     assert.match(reference, /optional and disabled by default/i);
+    assert.match(
+      readme,
+      /\[human-attention integration profile\]\(skills\/loop-compass\/references\/human-attention\.md\)[\s\S]*disabled by default/i,
+    );
     assert.match(reference, /has no `HANDOFF\.md`[\s\S]*human-projection requirement/i);
     assert.match(reference, /exactly once on[\s\S]*designated durable attention surface/i);
     assert.match(reference, /canonical incident slug as its durable join key/i);
@@ -1360,30 +1367,35 @@ describe("optional human-attention profile", () => {
     }
   });
 
-  it("repairs registry state independently while preserving an unsafe projection", () => {
+  it("repairs registry state independently while preserving invalid projection revisions", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     const rawCase = fixture.cases.find(
       (testCase) => testCase.id === "registry-lag-repairable",
     );
-    const testCase = resolveCase(fixture, structuredClone(rawCase));
-    testCase.projections[0].obligation_revision =
-      Number.MAX_SAFE_INTEGER + 1;
-    const original = structuredClone(testCase);
+    for (const invalidRevision of [
+      0,
+      -1,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      const testCase = resolveCase(fixture, structuredClone(rawCase));
+      testCase.projections[0].obligation_revision = invalidRevision;
+      const original = structuredClone(testCase);
 
-    assert.ok(
-      assessConformance(testCase).includes(
-        "invalid_projection_revision:console-action-required",
-      ),
-    );
-    const repaired = repairRegistryCrash(testCase);
-    assert.equal(repaired.known_obligations[0].last_known_revision, 2);
-    assert.deepEqual(repaired.projections, original.projections);
-    assert.deepEqual(repaired.obligations, original.obligations);
-    assert.deepEqual(testCase, original);
-    assert.throws(
-      () => reconcileProjections(repaired),
-      /obligation conflict blocks reconciliation/,
-    );
+      assert.ok(
+        assessConformance(testCase).includes(
+          "invalid_projection_revision:console-action-required",
+        ),
+      );
+      const repaired = repairRegistryCrash(testCase);
+      assert.equal(repaired.known_obligations[0].last_known_revision, 2);
+      assert.deepEqual(repaired.projections, original.projections);
+      assert.deepEqual(repaired.obligations, original.obligations);
+      assert.deepEqual(testCase, original);
+      assert.throws(
+        () => reconcileProjections(repaired),
+        /obligation conflict blocks reconciliation/,
+      );
+    }
   });
 
   it("accepts a 97-character schema-1 capability identifier end to end", () => {
@@ -2296,10 +2308,12 @@ describe("optional human-attention profile", () => {
     });
     const originalBytes = JSON.stringify(testCase);
 
+    const errors = assessConformance(testCase);
     assert.ok(
-      assessConformance(testCase).includes(
-        "orphan_projection:unknown-closure:unresolved-orphan",
-      ),
+      errors.includes("invalid_orphan_projection:unresolved-orphan"),
+    );
+    assert.ok(
+      !errors.some((error) => error.startsWith("orphan_projection:")),
     );
     assert.throws(
       () => reconcileProjections(testCase),
@@ -2331,10 +2345,11 @@ describe("optional human-attention profile", () => {
     });
     const originalBytes = JSON.stringify(testCase);
 
-    assert.ok(
-      assessConformance(testCase).includes(
-        "invalid_orphan_projection:closed-orphan",
-      ),
+    const errors = assessConformance(testCase);
+    assert.ok(errors.includes("invalid_orphan_projection:closed-orphan"));
+    assert.doesNotMatch(
+      errors.join("\n"),
+      /orphan_projection:verified-closure:closed-orphan/,
     );
     assert.throws(
       () => reconcileProjections(testCase),
