@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -262,6 +262,24 @@ describe("release tooling", () => {
         compatibility.stderr || compatibility.stdout,
       );
       assert.match(compatibility.stdout, /status: up to date/);
+      const installedManifest = path.join(installedSkill, "manifest.yaml");
+      const originalInstalledManifest = readFileSync(installedManifest, "utf8");
+      for (const suffix of ["# comment\n", "unknown_field: value\n"]) {
+        writeFileSync(installedManifest, `${originalInstalledManifest}${suffix}`);
+        const drift = runReleaseAt(
+          fixtureRoot,
+          "check",
+          "--installed",
+          installedSkill,
+          "--release-manifest",
+          stagedManifest,
+        );
+        assert.notEqual(drift.status, 0);
+        assert.match(drift.stderr, /manifest bytes do not match release payload/);
+        assert.doesNotMatch(drift.stderr, /comment|unknown_field/);
+      }
+      writeFileSync(installedManifest, originalInstalledManifest);
+
       writeFileSync(path.join(installedSkill, ".hidden-payload"), "unexpected\n");
       let unexpected = runReleaseAt(
         fixtureRoot,
@@ -290,7 +308,6 @@ describe("release tooling", () => {
       assert.doesNotMatch(unexpected.stderr, /unexpected-link/);
       rmSync(path.join(installedSkill, "unexpected-link"));
 
-      const installedManifest = path.join(installedSkill, "manifest.yaml");
       const mismatchedRelease = path.join(fixtureRoot, "same-commit-mismatch.yaml");
       writeFileSync(
         mismatchedRelease,
@@ -308,7 +325,10 @@ describe("release tooling", () => {
         mismatchedRelease,
       );
       assert.notEqual(sameCommitMismatch.status, 0);
-      assert.match(sameCommitMismatch.stdout, /status: version match, payload differs/);
+      assert.match(
+        sameCommitMismatch.stderr,
+        /manifest bytes do not match release payload/,
+      );
       writeFileSync(
         path.join(
           installedSkill,
@@ -327,6 +347,86 @@ describe("release tooling", () => {
       );
       assert.notEqual(drifted.status, 0);
       assert.match(drifted.stderr, /payload does not match its manifest/);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("never accepts substituted installed bytes during an interleaved integrity walk", async () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-check-race-"));
+    try {
+      const project = path.join(fixtureRoot, "consumer");
+      mkdirSync(project);
+      const stage = runRelease(
+        "stage-install",
+        "--project",
+        project,
+        "--hosts",
+        "agents",
+      );
+      assert.equal(stage.status, 0, stage.stderr || stage.stdout);
+      const installed = path.join(
+        project,
+        ".agents",
+        "skills",
+        "loop-compass",
+      );
+      const target = path.join(installed, "SKILL.md");
+      const held = path.join(installed, "SKILL.held");
+      const alternate = path.join(fixtureRoot, "alternate");
+      writeFileSync(alternate, "outside-marker\n");
+      const swapper = spawn(
+        process.execPath,
+        [
+          "-e",
+          `
+            const fs = require("node:fs");
+            const [target, held, alternate] = process.argv.slice(1);
+            const until = Date.now() + 1200;
+            while (Date.now() < until) {
+              try {
+                fs.renameSync(target, held);
+                fs.copyFileSync(alternate, target);
+                fs.rmSync(target);
+                fs.renameSync(held, target);
+              } catch {}
+            }
+            try {
+              if (!fs.existsSync(target) && fs.existsSync(held)) fs.renameSync(held, target);
+            } catch {}
+          `,
+          target,
+          held,
+          alternate,
+        ],
+        { stdio: "ignore" },
+      );
+      const done = new Promise((resolve, reject) => {
+        swapper.once("error", reject);
+        swapper.once("exit", (code) =>
+          code === 0 ? resolve() : reject(new Error(`swapper exited ${code}`)),
+        );
+      });
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const check = runRelease(
+          "check",
+          "--installed",
+          installed,
+          "--release-manifest",
+          path.join(root, "skills", "loop-compass", "manifest.yaml"),
+        );
+        assert.ok([0, 1].includes(check.status), check.stderr || check.stdout);
+        assert.doesNotMatch(check.stdout + check.stderr, /outside-marker|SKILL\.held/);
+      }
+      await done;
+      const finalCheck = runRelease(
+        "check",
+        "--installed",
+        installed,
+        "--release-manifest",
+        path.join(root, "skills", "loop-compass", "manifest.yaml"),
+      );
+      assert.equal(finalCheck.status, 0, finalCheck.stderr || finalCheck.stdout);
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }

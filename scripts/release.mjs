@@ -18,14 +18,18 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  copyFileSync,
+  closeSync,
   existsSync,
+  fstatSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,18 +59,53 @@ function die(message) {
   process.exit(1);
 }
 
+function sameFile(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+function readStableRegularFile(filePath) {
+  const before = lstatSync(filePath);
+  if (!before.isFile() || before.isSymbolicLink()) {
+    throw new Error("non-regular release file");
+  }
+  const descriptor = openSync(
+    filePath,
+    fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0),
+  );
+  try {
+    const opened = fstatSync(descriptor);
+    if (!opened.isFile() || !sameFile(before, opened)) {
+      throw new Error("release file changed");
+    }
+    const raw = readFileSync(descriptor);
+    const afterRead = fstatSync(descriptor);
+    const afterPath = lstatSync(filePath);
+    if (
+      !sameFile(opened, afterRead) ||
+      opened.size !== afterRead.size ||
+      !sameFile(before, afterPath) ||
+      afterPath.isSymbolicLink()
+    ) {
+      throw new Error("release file changed");
+    }
+    return { raw, mode: before.mode };
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 function sha256File(filePath) {
   // Hash LF-normalized bytes so Windows working trees and Linux CI agree.
   // Git stores these skill files as LF (see git ls-files --eol); digests must match
   // the canonical text form, not platform checkout line endings.
-  return sha256Buffer(canonicalTextBytes(readFileSync(filePath)));
+  return sha256Buffer(canonicalTextBytes(readStableRegularFile(filePath).raw));
 }
 
 function readVersion() {
   if (!existsSync(VERSION_PATH)) {
     die(`missing ${path.relative(ROOT, VERSION_PATH)}`);
   }
-  const version = readFileSync(VERSION_PATH, "utf8").trim();
+  const version = readStableRegularFile(VERSION_PATH).raw.toString("utf8").trim();
   if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
     die(`VERSION must be semver, got: ${JSON.stringify(version)}`);
   }
@@ -85,20 +124,30 @@ function gitCommit() {
 }
 
 function listSkillFiles(dir = SKILL_DIR, prefix = "") {
-  const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const before = lstatSync(dir);
+  if (!before.isDirectory() || before.isSymbolicLink()) {
+    throw new Error("unsafe skill directory");
+  }
+  const entries = readdirSync(dir).sort((a, b) => a.localeCompare(b));
   const files = [];
-  for (const entry of entries) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      files.push(...listSkillFiles(path.join(dir, entry.name), rel));
+  for (const name of entries) {
+    const rel = prefix ? `${prefix}/${name}` : name;
+    const full = path.join(dir, name);
+    const stat = lstatSync(full);
+    if (name.startsWith(".")) throw new Error("hidden skill entry");
+    if (stat.isDirectory() && !stat.isSymbolicLink()) {
+      const nested = listSkillFiles(full, rel);
+      if (!nested.length) throw new Error("empty skill directory");
+      files.push(...nested);
       continue;
     }
-    if (!entry.isFile() || entry.name === "manifest.yaml" || entry.name.startsWith(".")) {
-      continue;
-    }
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("non-regular skill entry");
+    if (name === "manifest.yaml") continue;
     files.push(rel.replaceAll("\\", "/"));
+  }
+  const after = lstatSync(dir);
+  if (!sameFile(before, after) || after.isSymbolicLink()) {
+    throw new Error("skill directory changed");
   }
   return files;
 }
@@ -239,7 +288,9 @@ function collectDigests() {
 function cmdGenerate() {
   const version = readVersion();
   const commit = gitCommit();
-  const policyVersion = readPolicyVersion(readFileSync(POLICY_PATH, "utf8"));
+  const policyVersion = readPolicyVersion(
+    readStableRegularFile(POLICY_PATH).raw.toString("utf8"),
+  );
   const files = collectDigests();
   writeFileSync(
     MANIFEST_PATH,
@@ -257,8 +308,12 @@ function cmdValidate() {
   if (!existsSync(MANIFEST_PATH)) {
     die(`missing ${path.relative(ROOT, MANIFEST_PATH)}; run generate first`);
   }
-  const manifest = parseManifest(readFileSync(MANIFEST_PATH, "utf8"));
-  const policyVersion = readPolicyVersion(readFileSync(POLICY_PATH, "utf8"));
+  const manifest = parseManifest(
+    readStableRegularFile(MANIFEST_PATH).raw.toString("utf8"),
+  );
+  const policyVersion = readPolicyVersion(
+    readStableRegularFile(POLICY_PATH).raw.toString("utf8"),
+  );
   const treeFiles = collectDigests();
   const errors = [];
 
@@ -348,19 +403,27 @@ function sha256Buffer(buf) {
  * Windows worktrees may have CRLF even when git blobs are LF.
  */
 function copyTree(src, dest, { canonicalizeText = false } = {}) {
+  const before = lstatSync(src);
+  if (!before.isDirectory() || before.isSymbolicLink()) {
+    throw new Error("unsafe copy source");
+  }
   mkdirSync(dest, { recursive: true });
-  for (const entry of readdirSync(src, { withFileTypes: true })) {
-    const from = path.join(src, entry.name);
-    const to = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
+  for (const name of readdirSync(src).sort()) {
+    const from = path.join(src, name);
+    const to = path.join(dest, name);
+    const stat = lstatSync(from);
+    if (stat.isDirectory() && !stat.isSymbolicLink()) {
       copyTree(from, to, { canonicalizeText });
-    } else if (entry.isFile()) {
-      if (canonicalizeText) {
-        writeFileSync(to, canonicalTextBytes(readFileSync(from)));
-      } else {
-        copyFileSync(from, to);
-      }
+    } else if (stat.isFile() && !stat.isSymbolicLink()) {
+      const raw = readStableRegularFile(from).raw;
+      writeFileSync(to, canonicalizeText ? canonicalTextBytes(raw) : raw);
+    } else {
+      throw new Error("non-regular copy source");
     }
+  }
+  const after = lstatSync(src);
+  if (!sameFile(before, after) || after.isSymbolicLink()) {
+    throw new Error("copy source changed");
   }
 }
 
@@ -382,7 +445,7 @@ function cmdPackage() {
 
   writeFileSync(
     path.join(releaseRoot, "VERSION"),
-    canonicalTextBytes(readFileSync(VERSION_PATH)),
+    canonicalTextBytes(readStableRegularFile(VERSION_PATH).raw),
   );
   // Canonicalize skill text so archive members match manifest digests as raw
   // bytes (consumer tools often hash files without LF normalization).
@@ -393,7 +456,7 @@ function cmdPackage() {
   // requiring a second git commit just to rewrite skills/.../manifest.yaml.
   const stagedManifest = path.join(releaseRoot, "skills", "loop-compass", "manifest.yaml");
   if (existsSync(stagedManifest) && head !== "unknown") {
-    const text = readFileSync(stagedManifest, "utf8").replace(
+    const text = readStableRegularFile(stagedManifest).raw.toString("utf8").replace(
       /^commit:\s*.+$/m,
       `commit: ${head}`,
     );
@@ -403,7 +466,7 @@ function cmdPackage() {
     if (doc.endsWith(".md")) {
       writeFileSync(
         path.join(releaseRoot, "docs", doc),
-        canonicalTextBytes(readFileSync(path.join(ROOT, "docs", doc))),
+        canonicalTextBytes(readStableRegularFile(path.join(ROOT, "docs", doc)).raw),
       );
     }
   }
@@ -412,16 +475,20 @@ function cmdPackage() {
     if (existsSync(p)) {
       writeFileSync(
         path.join(releaseRoot, name),
-        canonicalTextBytes(readFileSync(p)),
+        canonicalTextBytes(readStableRegularFile(p).raw),
       );
     }
   }
 
   // Fail closed: staged skill files must match manifest digests as raw bytes.
   const stagedSkill = path.join(releaseRoot, "skills", "loop-compass");
-  const stagedMan = parseManifest(readFileSync(stagedManifest, "utf8"));
+  const stagedMan = parseManifest(
+    readStableRegularFile(stagedManifest).raw.toString("utf8"),
+  );
   for (const [rel, expected] of Object.entries(stagedMan.files)) {
-    const actual = sha256Buffer(readFileSync(path.join(stagedSkill, rel)));
+    const actual = sha256Buffer(
+      readStableRegularFile(path.join(stagedSkill, rel)).raw,
+    );
     if (actual !== expected) {
       die(
         `package staging digest mismatch for ${rel}\n  manifest: ${expected}\n  staged:   ${actual}\n` +
@@ -443,7 +510,7 @@ function cmdPackage() {
   }
 
   // SHA256SUMS for the archive uses raw bytes of the tarball (not text-normalized).
-  const archiveRaw = readFileSync(archivePath);
+  const archiveRaw = readStableRegularFile(archivePath).raw;
   const digest = sha256Buffer(archiveRaw);
   const sumsPath = path.join(distDir, "SHA256SUMS");
   writeFileSync(sumsPath, `${digest}  ${archiveName}\n`, "utf8");
@@ -491,33 +558,64 @@ function installedPayloadMatchesManifest(installedDir, manifest) {
       directory = path.posix.dirname(directory);
     }
   }
-  const actualFiles = [];
-  let valid = true;
-  let manifestSeen = false;
-  function visit(directory, prefix = "") {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const full = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (!expectedDirectories.has(relative)) valid = false;
-        visit(full, relative);
-      } else if (entry.isFile()) {
-        if (relative === "manifest.yaml") manifestSeen = true;
-        else actualFiles.push(relative);
-      } else {
-        valid = false;
+  function inventory() {
+    const actualFiles = new Map();
+    let valid = true;
+    let manifestSeen = false;
+    function visit(directory, prefix = "") {
+      const before = lstatSync(directory);
+      if (!before.isDirectory() || before.isSymbolicLink()) {
+        throw new Error("unsafe installed directory");
+      }
+      for (const name of readdirSync(directory).sort()) {
+        const relative = prefix ? `${prefix}/${name}` : name;
+        const full = path.join(directory, name);
+        const stat = lstatSync(full);
+        if (name.startsWith(".")) valid = false;
+        if (stat.isDirectory() && !stat.isSymbolicLink()) {
+          if (!expectedDirectories.has(relative)) valid = false;
+          visit(full, relative);
+        } else if (stat.isFile() && !stat.isSymbolicLink()) {
+          const raw = readStableRegularFile(full).raw;
+          if (relative === "manifest.yaml") manifestSeen = true;
+          else actualFiles.set(relative, sha256Buffer(raw));
+        } else {
+          valid = false;
+        }
+      }
+      const after = lstatSync(directory);
+      if (!sameFile(before, after) || after.isSymbolicLink()) {
+        throw new Error("installed directory changed");
       }
     }
+    visit(installedDir);
+    return { actualFiles, valid, manifestSeen };
   }
-  visit(installedDir);
-  actualFiles.sort();
-  if (!valid || !manifestSeen) return false;
-  if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) return false;
-  return expectedFiles.every(
-    (relative) =>
-      sha256Buffer(readFileSync(path.join(installedDir, relative))) ===
-      manifest.files[relative],
+  const before = inventory();
+  if (!before.valid || !before.manifestSeen) return false;
+  if (JSON.stringify([...before.actualFiles.keys()]) !== JSON.stringify(expectedFiles)) {
+    return false;
+  }
+  if (
+    !expectedFiles.every(
+      (relative) => before.actualFiles.get(relative) === manifest.files[relative],
+    )
+  ) {
+    return false;
+  }
+  const after = inventory();
+  return (
+    after.valid &&
+    after.manifestSeen &&
+    JSON.stringify([...after.actualFiles]) === JSON.stringify([...before.actualFiles])
   );
+}
+
+function manifestPayloadBytes(raw) {
+  const text = raw.toString("utf8");
+  const matches = text.match(/^commit:\s*.+$/gm) || [];
+  if (matches.length !== 1) return null;
+  return text.replace(/^commit:\s*.+$/m, "commit: <provenance>");
 }
 
 function cmdCheck(args) {
@@ -531,20 +629,34 @@ function cmdCheck(args) {
   const installedDir = path.resolve(args[installedIdx + 1] || "");
   const releaseManifestPath = path.resolve(args[releaseIdx + 1] || "");
   if (!existsSync(installedDir)) {
-    die(`installed skill dir not found: ${installedDir}`);
+    die("installed skill directory is unavailable");
   }
   if (!existsSync(releaseManifestPath)) {
-    die(`release manifest not found: ${releaseManifestPath}`);
+    die("release manifest is unavailable");
   }
 
   const installedManifestPath = path.join(installedDir, "manifest.yaml");
   if (!existsSync(installedManifestPath)) {
-    die(`installed skill has no manifest.yaml: ${installedManifestPath}`);
+    die("installed skill manifest is unavailable");
   }
 
-  const installed = parseManifest(readFileSync(installedManifestPath, "utf8"));
-  const release = parseManifest(readFileSync(releaseManifestPath, "utf8"));
-  if (!installedPayloadMatchesManifest(installedDir, installed)) {
+  let installedManifestRaw;
+  let releaseManifestRaw;
+  try {
+    installedManifestRaw = readStableRegularFile(installedManifestPath).raw;
+    releaseManifestRaw = readStableRegularFile(releaseManifestPath).raw;
+  } catch {
+    die("manifest failed regular-file integrity validation");
+  }
+  const installed = parseManifest(installedManifestRaw.toString("utf8"));
+  const release = parseManifest(releaseManifestRaw.toString("utf8"));
+  let installedPayloadValid = false;
+  try {
+    installedPayloadValid = installedPayloadMatchesManifest(installedDir, installed);
+  } catch {
+    die("installed skill failed stable-tree integrity validation");
+  }
+  if (!installedPayloadValid) {
     die("installed skill payload does not match its manifest");
   }
 
@@ -558,10 +670,6 @@ function cmdCheck(args) {
   );
 
   const cmp = compareSemver(installed.version, release.version);
-  if (cmp === 0 && sameManifestPayload(installed, release)) {
-    console.log("status: up to date");
-    process.exit(0);
-  }
   if (cmp < 0) {
     console.log(
       `status: behind (update available: ${installed.version} -> ${release.version})`,
@@ -573,6 +681,16 @@ function cmdCheck(args) {
       `status: installed is newer than compared release (${installed.version} > ${release.version})`,
     );
     process.exit(3);
+  }
+  if (
+    manifestPayloadBytes(installedManifestRaw) === null ||
+    manifestPayloadBytes(installedManifestRaw) !== manifestPayloadBytes(releaseManifestRaw)
+  ) {
+    die("installed manifest bytes do not match release payload");
+  }
+  if (sameManifestPayload(installed, release)) {
+    console.log("status: up to date");
+    process.exit(0);
   }
   console.log("status: version match, payload differs");
   process.exit(4);
@@ -628,7 +746,9 @@ function cmdPinCheck(args) {
   if (!existsSync(MANIFEST_PATH)) {
     die(`missing ${path.relative(ROOT, MANIFEST_PATH)}`);
   }
-  const manifest = parseManifest(readFileSync(MANIFEST_PATH, "utf8"));
+  const manifest = parseManifest(
+    readStableRegularFile(MANIFEST_PATH).raw.toString("utf8"),
+  );
   const head = gitCommit();
   console.log(`manifest.commit ${manifest.commit}`);
   console.log(`git HEAD         ${head}`);
@@ -703,4 +823,8 @@ function main() {
   }
 }
 
-main();
+try {
+  main();
+} catch {
+  die("release operation failed stable filesystem validation");
+}

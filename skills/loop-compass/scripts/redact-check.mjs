@@ -13,7 +13,6 @@
  */
 import {
   closeSync,
-  existsSync,
   fstatSync,
   lstatSync,
   openSync,
@@ -91,6 +90,15 @@ function isWithin(root, candidate) {
 
 function sameFile(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
+}
+
+function lstatOptional(candidate) {
+  try {
+    return lstatSync(candidate);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 function assertStableDirectory(directory, expected) {
@@ -300,8 +308,8 @@ function parseConfig(text) {
 function loadProjectPatterns(projectRoot, stateRoot, trackedConfig) {
   const configPath = path.join(stateRoot, "redaction.yaml");
   if (!trackedConfig) return [];
-  if (!existsSync(configPath)) throw new Error("tracked config unavailable");
-  const before = lstatSync(configPath);
+  const before = lstatOptional(configPath);
+  if (!before) throw new Error("tracked config unavailable");
   if (!before.isFile() || before.isSymbolicLink() || before.size > MAX_CONFIG_BYTES) {
     throw new Error("unsafe config");
   }
@@ -559,10 +567,10 @@ function laneFilesystemEntries(stateRoot) {
 
   for (const name of SCAN_DIRS) {
     const candidate = path.join(stateRoot, name);
-    if (existsSync(candidate)) visit(candidate, `.loopcompass/${name}`);
+    if (lstatOptional(candidate)) visit(candidate, `.loopcompass/${name}`);
   }
   const config = path.join(stateRoot, "redaction.yaml");
-  if (existsSync(config)) visit(config, ".loopcompass/redaction.yaml");
+  if (lstatOptional(config)) visit(config, ".loopcompass/redaction.yaml");
   return entries.sort();
 }
 
@@ -671,8 +679,8 @@ function scanCommittedState(projectRoot, stateRoot, repository, entries, counts,
 function main() {
   const { project, mode } = parseArgs(process.argv.slice(2));
   try {
-    if (!existsSync(project)) fail("PROJECT_UNAVAILABLE");
-    const projectBefore = lstatSync(project);
+    const projectBefore = lstatOptional(project);
+    if (!projectBefore) fail("PROJECT_UNAVAILABLE");
     if (!projectBefore.isDirectory() || projectBefore.isSymbolicLink()) {
       fail("UNSAFE_PROJECT_ROOT");
     }
@@ -682,8 +690,8 @@ function main() {
     const statePath = path.join(projectRoot, ".loopcompass");
     let stateRoot = null;
     let stateBefore = null;
-    if (existsSync(statePath)) {
-      stateBefore = lstatSync(statePath);
+    stateBefore = lstatOptional(statePath);
+    if (stateBefore) {
       if (!stateBefore.isDirectory() || stateBefore.isSymbolicLink()) {
         fail("UNSAFE_STATE_ROOT");
       }

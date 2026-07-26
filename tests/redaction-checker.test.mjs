@@ -358,6 +358,38 @@ describe("shipped redaction checker", () => {
     assert.doesNotMatch(result.stdout + result.stderr, /external-state/);
   });
 
+  it("rejects dangling state, lane, and config symlinks before absence handling", () => {
+    rmSync(path.join(project, ".loopcompass"), { recursive: true });
+    git(project, "commit", "--allow-empty", "-m", "empty state");
+    symlinkSync(path.join(tmp, "missing-state-target"), path.join(project, ".loopcompass"));
+    let result = runHead(project, "audit");
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error UNSAFE_STATE_ROOT\n");
+    rmSync(path.join(project, ".loopcompass"));
+
+    mkdirSync(path.join(project, ".loopcompass"));
+    symlinkSync(
+      path.join(tmp, "missing-lane-target"),
+      path.join(project, ".loopcompass", "incidents"),
+    );
+    result = runHead(project, "audit");
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    rmSync(path.join(project, ".loopcompass", "incidents"));
+
+    symlinkSync(
+      path.join(tmp, "missing-config-target"),
+      path.join(project, ".loopcompass", "redaction.yaml"),
+    );
+    result = runHead(project, "audit");
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /missing-state-target|missing-lane-target|missing-config-target/,
+    );
+  });
+
   it("fails closed across repeated atomic config and state-directory swaps", () => {
     writeState(project, "incidents", "clean.md", "role: Operator\n");
     writeFileSync(
