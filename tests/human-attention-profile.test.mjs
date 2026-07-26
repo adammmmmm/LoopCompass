@@ -162,17 +162,46 @@ function isCanonicalSlug(value) {
   );
 }
 
-function hasValidEnabledProfile(config) {
-  return Boolean(
-    isPlainRecord(config) &&
-      config.enabled === true &&
-      typeof config.surface === "string" &&
-      config.surface.trim() &&
-      typeof config.authority === "string" &&
-      config.authority.trim() &&
-      typeof config.history_retention === "string" &&
-      config.history_retention.trim(),
-  );
+function parseProfileDeclaration(value) {
+  const errors = [];
+  if (!isPlainRecord(value)) {
+    return {
+      config: null,
+      enabled: false,
+      errors: ["invalid_profile:declaration"],
+    };
+  }
+  if (typeof value.enabled !== "boolean") {
+    return {
+      config: value,
+      enabled: false,
+      errors: ["invalid_profile:enabled"],
+    };
+  }
+  if (!value.enabled) {
+    return { config: value, enabled: false, errors };
+  }
+  for (const field of ["surface", "authority", "history_retention"]) {
+    if (typeof value[field] !== "string" || !value[field].trim()) {
+      errors.push(`invalid_profile:${field}`);
+    }
+  }
+  for (const field of [
+    "human_only_capabilities",
+    "human_only_decisions",
+  ]) {
+    if (
+      !Array.isArray(value[field]) ||
+      value[field].some((identifier) => !isCanonicalSlug(identifier))
+    ) {
+      errors.push(`invalid_profile:${field}`);
+    }
+  }
+  return {
+    config: value,
+    enabled: true,
+    errors,
+  };
 }
 
 function incidentsBySlug(testCase, errors = []) {
@@ -606,13 +635,11 @@ function openIncidentObligationErrors(
 }
 
 function assessConformance(testCase) {
-  const config = testCase.profile_config;
-  if (!config.enabled) return [];
-
+  const profile = parseProfileDeclaration(testCase.profile_config);
+  if (profile.errors.length > 0) return profile.errors.sort();
+  if (!profile.enabled) return [];
+  const config = profile.config;
   const errors = [];
-  if (!config.authority) errors.push("invalid_profile:authority");
-  if (!config.history_retention) errors.push("invalid_profile:history_retention");
-  if (!config.surface) errors.push("invalid_profile:surface");
 
   const {
     openIncidents,
@@ -753,7 +780,8 @@ function assessConformance(testCase) {
 }
 
 function reconcileProjections(testCase) {
-  if (!hasValidEnabledProfile(testCase.profile_config)) {
+  const profile = parseProfileDeclaration(testCase.profile_config);
+  if (!profile.enabled || profile.errors.length > 0) {
     return testCase.projections;
   }
   const obligationErrors = [];
@@ -843,9 +871,10 @@ function reconcileProjections(testCase) {
 }
 
 function repairRegistryCrash(testCase) {
-  const config = testCase.profile_config;
+  const profile = parseProfileDeclaration(testCase.profile_config);
+  const config = profile.config;
   const errors = [];
-  if (!hasValidEnabledProfile(config)) {
+  if (!profile.enabled || profile.errors.length > 0) {
     return structuredClone(testCase);
   }
   if (
@@ -1923,6 +1952,70 @@ describe("optional human-attention profile", () => {
         profile_config,
       };
       const original = structuredClone(testCase);
+      assert.deepEqual(repairRegistryCrash(testCase), original);
+      assert.deepEqual(reconcileProjections(testCase), original.projections);
+      assert.deepEqual(testCase, original);
+    }
+  });
+
+  it("parses malformed profile declarations totally and suppresses lifecycle diagnostics", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const valid = resolveCase(fixture, structuredClone(rawCase));
+    const malformedProfiles = [
+      {
+        profile_config: {
+          ...structuredClone(valid.profile_config),
+          human_only_capabilities: [null, "production-console"],
+        },
+        errors: ["invalid_profile:human_only_capabilities"],
+      },
+      {
+        profile_config: {
+          ...structuredClone(valid.profile_config),
+          human_only_capabilities: {
+            capability: "production-console",
+          },
+        },
+        errors: ["invalid_profile:human_only_capabilities"],
+      },
+      {
+        profile_config: {
+          ...structuredClone(valid.profile_config),
+          enabled: "true",
+        },
+        errors: ["invalid_profile:enabled"],
+      },
+      {
+        profile_config: null,
+        errors: ["invalid_profile:declaration"],
+      },
+      {
+        profile_config: {
+          ...structuredClone(valid.profile_config),
+          authority: "   ",
+        },
+        errors: ["invalid_profile:authority"],
+      },
+      {
+        profile_config: {
+          ...structuredClone(valid.profile_config),
+          human_only_decisions: ["valid-decision", "", "invalid decision"],
+        },
+        errors: ["invalid_profile:human_only_decisions"],
+      },
+    ];
+
+    for (const { profile_config, errors } of malformedProfiles) {
+      const testCase = {
+        ...structuredClone(valid),
+        profile_config,
+      };
+      const original = structuredClone(testCase);
+      assert.deepEqual(assessConformance(testCase), errors);
+      assert.doesNotMatch(assessConformance(testCase).join("\n"), /recoverable_/);
       assert.deepEqual(repairRegistryCrash(testCase), original);
       assert.deepEqual(reconcileProjections(testCase), original.projections);
       assert.deepEqual(testCase, original);

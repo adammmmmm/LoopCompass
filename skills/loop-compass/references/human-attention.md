@@ -26,9 +26,13 @@ coordinator responsible for incident lifecycle. A host adapter may choose its sy
 not merge declarations from several surfaces or infer enablement from the presence of a handoff
 file. Before any marker, registry, or projection mutation, validate that the profile is explicitly
 enabled and has one nonempty designated surface, one nonempty integration authority, and a
-nonempty project audit/retention policy. A disabled or incomplete declaration grants no mutation
-authority; preserve every existing record unchanged and report the configuration failure through
-the host's normal project-policy path.
+nonempty project audit/retention policy. The declaration must be a mapping, `enabled` must be a
+Boolean, and the human-only capability and decision collections must be arrays containing only
+nonempty stable identifiers. Parse this declaration once, defensively, before classification or
+reconciliation. A disabled or incomplete declaration grants no mutation authority; a malformed
+enabled declaration reports only configuration errors, suppresses repair/recovery diagnostics,
+preserves every existing record unchanged, and never causes a runtime exception. Report the
+configuration failure through the host's normal project-policy path.
 
 State schema 1 needs no new incident fields. `owner` remains the lifecycle coordinator; it does not
 identify the action actor and does not imply a human. An open incident needs human action when
