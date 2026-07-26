@@ -188,6 +188,7 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
 
 export function validateParentReceipt(parent, childReceipt, label = "parent_receipt") {
   requireObject(parent, label);
+  validateTerminalReceipt(childReceipt, `${label}.child_receipt`);
   if (requireField(parent, "receipt_schema", label) !== 1) {
     fail(label, ".receipt_schema must be 1");
   }

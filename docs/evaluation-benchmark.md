@@ -40,6 +40,7 @@ and budget are explicit.
 | Time to verified normal path | Actually consulted cases that reached the expected normal-path step budget. |
 | Terminal outcome compliance | Final state is persisted artifact, no artifact, or proposed artifact as expected. |
 | Terminal receipt completeness | Cases requiring a structured handoff that include a complete, valid receipt. |
+| Terminal receipt semantic accuracy | Expected task outcome, mechanism health, and containment use all match the receipt. |
 | Worker-to-parent closure | Required parent handoffs with a linked ingestion receipt and expected terminal action. |
 
 ## Fixture contract
@@ -65,7 +66,8 @@ Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and 
 `expected.terminal_receipt_required` is true. A present receipt is validated strictly: missing,
 blank, malformed, or outcome-inconsistent fields stop evaluation rather than being scored as
 partial success. `expected.parent_terminal_action` requires a linked parent receipt with that
-action.
+action. `expected.terminal_receipt_semantics` separately scores `task_outcome`,
+`mechanism_health`, and `containment.used`; structural validity alone does not earn semantic credit.
 
 The paired validator-workaround cases distinguish task completion from mechanism health. Passing
 validation in an unrelated runtime is containment while the documented runtime remains broken;

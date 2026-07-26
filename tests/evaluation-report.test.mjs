@@ -57,6 +57,7 @@ describe("evaluation benchmark report", () => {
     assert.match(result.stdout, /Time to verified normal path \| 7\/10 \| 70\.0%/);
     assert.match(result.stdout, /Terminal outcome compliance \| 10\/13 \| 76\.9%/);
     assert.match(result.stdout, /Terminal receipt completeness \| 3\/4 \| 75\.0%/);
+    assert.match(result.stdout, /Terminal receipt semantic accuracy \| 3\/4 \| 75\.0%/);
     assert.match(result.stdout, /Worker-to-parent closure \| 2\/2 \| 100\.0%/);
     assert.match(result.stdout, /Live integration required \| false/);
     assert.match(result.stdout, /## Host versus skill breakdown/);
@@ -254,5 +255,44 @@ describe("evaluation benchmark report", () => {
       result.stderr,
       /forwarded_receipt must preserve the complete child receipt unchanged/,
     );
+  });
+
+  it("scores structurally valid but semantically wrong receipt fields as failures", () => {
+    const mutations = [
+      (terminal) => {
+        terminal.task_outcome = "incomplete";
+      },
+      (terminal) => {
+        terminal.mechanism_health = "healthy";
+      },
+      (terminal) => {
+        terminal.containment = {
+          used: false,
+          summary: null,
+          verification_gate: null,
+        };
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      const receiptCase = doc.cases.find(
+        (c) => c.id === "lc-eval-012-workaround-is-containment",
+      );
+      mutate(receiptCase.receipt.terminal_receipt);
+
+      const result = runEvaluateWithDoc(doc);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(
+        result.stdout,
+        /Terminal receipt semantic accuracy \| 2\/4 \| 50\.0%/,
+      );
+      assert.match(result.stdout, /Skill decision quality \| 8\/9 \| 88\.9%/);
+      assert.match(
+        result.stdout,
+        /lc-eval-012-workaround-is-containment \| codex-synthetic \| pass \| fail \| pass \| pass \| pass \| fail \| n\/a/,
+      );
+    }
   });
 });

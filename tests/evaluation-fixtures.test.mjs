@@ -49,6 +49,11 @@ describe("evaluation benchmark fixtures", () => {
     assert.equal(contained.receipt.terminal_receipt.task_outcome, "completed");
     assert.equal(contained.receipt.terminal_receipt.mechanism_health, "broken");
     assert.equal(contained.receipt.terminal_receipt.containment.used, true);
+    assert.deepEqual(contained.expected.terminal_receipt_semantics, {
+      task_outcome: "completed",
+      mechanism_health: "broken",
+      containment_used: true,
+    });
     assert.equal(closed.receipt.parent_receipt.terminal_action, "persisted_artifact");
     assert.equal(propagated.receipt.parent_receipt.terminal_action, "proposed_artifact");
     assert.deepEqual(

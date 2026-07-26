@@ -357,6 +357,11 @@
         "blind_retry": false,
         "terminal_outcome": "proposed_artifact",
         "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment_used": false
+        },
         "parent_terminal_action": "persisted_artifact"
       }
     },
@@ -468,7 +473,12 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": true
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "task_outcome": "completed",
+          "mechanism_health": "broken",
+          "containment_used": true
+        }
       }
     },
     {
@@ -534,7 +544,12 @@
         "repeated_failure_reduced": false,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": true
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "task_outcome": "completed",
+          "mechanism_health": "broken",
+          "containment_used": true
+        }
       }
     },
     {
@@ -655,6 +670,11 @@
         "blind_retry": false,
         "terminal_outcome": "proposed_artifact",
         "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment_used": true
+        },
         "parent_terminal_action": "proposed_artifact"
       }
     }

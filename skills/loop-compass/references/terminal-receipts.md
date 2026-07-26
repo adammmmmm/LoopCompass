@@ -2,8 +2,16 @@
 
 A terminal receipt is a compact, host-neutral handoff for one triggered failure signature. It is
 not a recovery or incident capsule, does not change capsule schema, and is not a default log.
-Emit it in the task response or host handoff surface. Host integrations decide whether and how to
-ingest, deduplicate, sanitize, queue, persist, and close it.
+The emitting worker or parent must apply the
+[PII sanitation contract](pii-sanitation.md) before the first handoff or write. Sanitize source
+material in memory before constructing any receipt field. Only after sanitation may the actor
+normalize the signature or derive a dedupe key, receipt id, artifact reference, or other
+identity-bearing value.
+
+This ordering covers every field, including evidence, containment, proposed artifact content,
+escalation target and action, `no_artifact` reason, and parent-receipt additions. Use functional
+roles instead of identities. A non-authoritative parent forwards the complete already-sanitized
+child receipt and sanitizes its own new fields before emitting the parent receipt.
 
 ## Classification receipt
 
@@ -87,4 +95,7 @@ null; further escalation includes the complete unchanged child receipt.
 
 Receipts are ephemeral coordination evidence unless a host already has an authorized durable task
 record. Core LoopCompass does not create a receipt directory, queue, daemon, database, transcript,
-or network service. A receipt never replaces the canonical `.loopcompass` artifact.
+or network service. A receipt never replaces the canonical `.loopcompass` artifact. Host
+integrations decide how to ingest, deduplicate, queue, persist, and close receipts. Host sanitation
+checks are defense in depth only; they do not defer or replace the emitting actor's sanitation
+before first handoff or write, and passing a check is not proof that no PII remains.

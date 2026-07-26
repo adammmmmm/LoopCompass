@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  receiptEnums,
   validateParentReceipt,
   validateTerminalReceipt,
 } from "./lib/receipt.mjs";
@@ -149,7 +150,22 @@ function skillDecisionPass(c) {
   const terminal = terminalOutcomeMatches(c);
   const stale =
     (c.receipt?.stale_rejected === true) === (c.expected?.stale_rejected === true);
-  return classification && terminal && stale;
+  const receiptSemantics = terminalReceiptSemanticsPass(c);
+  return classification && terminal && stale && receiptSemantics !== false;
+}
+
+function terminalReceiptSemanticsPass(c) {
+  const expected = c.expected?.terminal_receipt_semantics;
+  if (!expected) {
+    return null;
+  }
+  const actual = c.receipt?.terminal_receipt;
+  if (!actual) {
+    return false;
+  }
+  return actual.task_outcome === expected.task_outcome
+    && actual.mechanism_health === expected.mechanism_health
+    && actual.containment.used === expected.containment_used;
 }
 
 function receiptCompleteness(cases) {
@@ -159,6 +175,12 @@ function receiptCompleteness(cases) {
       && typeof c.receipt?.terminal_receipt === "object",
   );
   return [complete.length, required.length];
+}
+
+function receiptSemantics(cases) {
+  const required = cases.filter((c) => c.expected?.terminal_receipt_semantics);
+  const matched = required.filter((c) => terminalReceiptSemanticsPass(c) === true);
+  return [matched.length, required.length];
 }
 
 function parentClosure(cases) {
@@ -349,6 +371,32 @@ function validateFixture(doc) {
     if (hasField(expected, "terminal_receipt_required")) {
       requireBoolean(expected, "terminal_receipt_required", `${label}.expected`);
     }
+    if (hasField(expected, "terminal_receipt_semantics")) {
+      const semantics = expected.terminal_receipt_semantics;
+      requireObject(semantics, `${label}.expected.terminal_receipt_semantics`);
+      requireEnum(
+        semantics,
+        "task_outcome",
+        `${label}.expected.terminal_receipt_semantics`,
+        receiptEnums.taskOutcomes,
+      );
+      requireEnum(
+        semantics,
+        "mechanism_health",
+        `${label}.expected.terminal_receipt_semantics`,
+        receiptEnums.mechanismHealthStates,
+      );
+      requireBoolean(
+        semantics,
+        "containment_used",
+        `${label}.expected.terminal_receipt_semantics`,
+      );
+      if (expected.terminal_receipt_required !== true) {
+        throw new Error(
+          `${label}.expected.terminal_receipt_semantics requires terminal_receipt_required: true`,
+        );
+      }
+    }
     if (hasField(expected, "parent_terminal_action")) {
       requireEnum(
         expected,
@@ -373,6 +421,7 @@ function renderReport(doc) {
   const terminalMatches = cases.filter(terminalOutcomeMatches).length;
   const [skillMatched, skillTotal] = skillDecisionQuality(cases);
   const [completeReceipts, requiredReceipts] = receiptCompleteness(cases);
+  const [correctReceiptSemantics, expectedReceiptSemantics] = receiptSemantics(cases);
   const [closedParentReceipts, requiredParentReceipts] = parentClosure(cases);
 
   return [
@@ -400,6 +449,11 @@ function renderReport(doc) {
     metricRow("Time to verified normal path", normalPath, normalPathExpected),
     metricRow("Terminal outcome compliance", terminalMatches, cases.length),
     metricRow("Terminal receipt completeness", completeReceipts, requiredReceipts),
+    metricRow(
+      "Terminal receipt semantic accuracy",
+      correctReceiptSemantics,
+      expectedReceiptSemantics,
+    ),
     metricRow("Worker-to-parent closure", closedParentReceipts, requiredParentReceipts),
     "",
     "## Host versus skill breakdown",
@@ -410,8 +464,8 @@ function renderReport(doc) {
     "",
     "## Case outcomes",
     "",
-    "| Case | Host | Host enforced | Skill decision | Classification | Terminal outcome | Receipt | Parent closure | Consulted | Blind retry |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| Case | Host | Host enforced | Skill decision | Classification | Terminal outcome | Receipt | Receipt semantics | Parent closure | Consulted | Blind retry |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...cases.map((c) => {
       const hostEnforced =
         c.receipt?.host_enforced === c.expected?.host_enforced ? "pass" : "fail";
@@ -425,6 +479,8 @@ function renderReport(doc) {
           ? "pass"
           : "fail"
         : "n/a";
+      const semantics = terminalReceiptSemanticsPass(c);
+      const receiptSemantics = semantics === null ? "n/a" : semantics ? "pass" : "fail";
       const parent = hasField(c.expected ?? {}, "parent_terminal_action")
         ? c.receipt?.parent_receipt?.terminal_action === c.expected.parent_terminal_action
           ? "pass"
@@ -432,7 +488,7 @@ function renderReport(doc) {
         : "n/a";
       const consulted = c.receipt?.consulted === c.expected?.consulted ? "pass" : "fail";
       const blindRetry = c.receipt?.blind_retry === c.expected?.blind_retry ? "pass" : "fail";
-      return `| ${c.id} | ${hostName(c)} | ${hostEnforced} | ${skill} | ${classification} | ${terminal} | ${receipt} | ${parent} | ${consulted} | ${blindRetry} |`;
+      return `| ${c.id} | ${hostName(c)} | ${hostEnforced} | ${skill} | ${classification} | ${terminal} | ${receipt} | ${receiptSemantics} | ${parent} | ${consulted} | ${blindRetry} |`;
     }),
     "",
   ].join("\n");

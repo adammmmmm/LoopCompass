@@ -93,8 +93,9 @@ capsule schema. It records normalized identity, classification, sanitized eviden
 mechanism health, containment, terminal outcome, proposed content, and exact escalation. The
 receiving parent links its own ingestion receipt to the worker receipt and records persistence,
 `no_artifact`, or further full-payload escalation. Core validates this contract but stays
-storage-neutral; host integrations own ingestion, deduplication, sanitation, durable queueing, and
-closure.
+storage-neutral. The emitting actor sanitizes before the first handoff and before deriving receipt
+identity. Host integrations own mechanical ingestion, deduplication, durable queueing, and closure;
+their sanitation checks are defense in depth rather than a substitute for worker-side sanitation.
 
 ## Artifact identity and concurrency
 

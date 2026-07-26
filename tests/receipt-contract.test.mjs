@@ -9,6 +9,10 @@ import {
 } from "../scripts/lib/receipt.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const receiptReference = readFileSync(
+  path.join(root, "skills", "loop-compass", "references", "terminal-receipts.md"),
+  "utf8",
+);
 const fixture = JSON.parse(
   readFileSync(path.join(root, "fixtures", "evaluation", "cases.json"), "utf8"),
 );
@@ -135,6 +139,37 @@ describe("terminal receipt contract", () => {
     assert.throws(
       () => validateParentReceipt(partial, propagatedCase.terminal_receipt),
       /forwarded_receipt must preserve the complete child receipt unchanged/,
+    );
+  });
+
+  it("independently rejects a malformed child passed to the parent validator", () => {
+    const malformedChild = structuredClone(propagatedCase.terminal_receipt);
+    delete malformedChild.mechanism_health;
+    assert.throws(
+      () =>
+        validateParentReceipt(
+          structuredClone(propagatedCase.parent_receipt),
+          malformedChild,
+        ),
+      /parent_receipt\.child_receipt\.mechanism_health is required/,
+    );
+  });
+
+  it("requires worker-side sanitation before identity derivation and first handoff", () => {
+    const sanitize = receiptReference.indexOf("Sanitize source");
+    const derive = receiptReference.indexOf("Only after sanitation");
+    assert.ok(sanitize >= 0);
+    assert.ok(derive > sanitize);
+    assert.match(receiptReference, /before the first handoff or write/i);
+    assert.match(receiptReference, /every field/i);
+    assert.match(receiptReference, /functional\s+roles instead of identities/i);
+    assert.match(
+      receiptReference,
+      /Host sanitation\s+checks are defense in depth only/i,
+    );
+    assert.match(
+      receiptReference,
+      /do not defer or replace the emitting actor's sanitation/i,
     );
   });
 });
