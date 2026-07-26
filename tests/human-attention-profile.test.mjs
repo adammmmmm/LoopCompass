@@ -526,6 +526,22 @@ function projectionRepresentationErrors(config, obligation, projection) {
   return errors;
 }
 
+function intrinsicProjectionIsValid(projection) {
+  return Boolean(
+    isPlainRecord(projection) &&
+      isCanonicalSlug(projection.incident_slug) &&
+      typeof projection.requested_action === "string" &&
+      projection.requested_action.trim() &&
+      projection.incident_path ===
+        `.loopcompass/incidents/${projection.incident_slug}.md` &&
+      ACTIVE_OBLIGATIONS.has(projection.state) &&
+      Number.isInteger(projection.obligation_revision) &&
+      projection.obligation_revision > 0 &&
+      typeof projection.surface === "string" &&
+      projection.surface.trim(),
+  );
+}
+
 function selectedMarkerStateErrors(config, testCase, marker, openIncidents) {
   return canonicalStateErrors(
     config,
@@ -794,6 +810,13 @@ function assessConformance(testCase) {
     ) {
       continue;
     }
+    if (
+      projectionRecords
+        .get(slug)
+        .some((projection) => !intrinsicProjectionIsValid(projection))
+    ) {
+      errors.push(`invalid_orphan_projection:${slug}`);
+    }
     const closureKnown = hasCompleteClosureEvidence(testCase, slug);
     const closure = closureKnown ? "verified-closure" : "unknown-closure";
     errors.push(`orphan_projection:${closure}:${slug}`);
@@ -868,6 +891,14 @@ function reconcileProjections(testCase) {
       registry.has(slug) ||
       openIncidents.has(slug)
     ) {
+      continue;
+    }
+    if (
+      projectionRecords
+        .get(slug)
+        .some((projection) => !intrinsicProjectionIsValid(projection))
+    ) {
+      obligationErrors.push(`invalid_orphan_projection:${slug}`);
       continue;
     }
     if (!hasCompleteClosureEvidence(testCase, slug)) {
@@ -2122,6 +2153,41 @@ describe("optional human-attention profile", () => {
     assert.ok(
       assessConformance(testCase).includes(
         "orphan_projection:unknown-closure:unresolved-orphan",
+      ),
+    );
+    assert.throws(
+      () => reconcileProjections(testCase),
+      /obligation conflict blocks reconciliation/,
+    );
+    assert.equal(JSON.stringify(testCase), originalBytes);
+  });
+
+  it("does not delete a malformed orphan even when complete closure evidence exists", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "enabled-divergent-duplicates-recompute",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    testCase.projections.push({
+      incident_slug: "closed-orphan",
+      requested_action: "",
+      incident_path: ".loopcompass/incidents/wrong-path.md",
+      state: "verification_pending",
+      obligation_revision: 2,
+      surface: "HANDOFF.md",
+    });
+    testCase.closure_evidence.push({
+      id: "closure-closed-orphan-v1",
+      incident_slug: "closed-orphan",
+      normal_path_verified: true,
+      containment_removed: true,
+      incident_closure_recorded: true,
+    });
+    const originalBytes = JSON.stringify(testCase);
+
+    assert.ok(
+      assessConformance(testCase).includes(
+        "invalid_orphan_projection:closed-orphan",
       ),
     );
     assert.throws(

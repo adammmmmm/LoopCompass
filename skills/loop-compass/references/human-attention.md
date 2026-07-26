@@ -278,6 +278,12 @@ because the human acknowledged, decided, or completed the requested step.
   quarantine it on the designated surface and escalate reconciliation to that surface's declared
   authority.
 
+A closure reference authorizes cleanup only after every projection for that orphan passes intrinsic
+representation validation: canonical slug, nonempty requested action and surface, exact canonical
+incident path, active state, and positive integer obligation revision. Closure evidence must never
+be used to delete a malformed projection. Quarantine or repair its representation first; until
+then, it blocks reconciliation for the whole surface.
+
 A projection for an incident that is still open is never an orphan. Retain it and fail
 reconciliation when its marker or registry is missing, even if stale slug-matching closure evidence
 also exists. Closure cleanup applies only after the canonical incident is no longer open and the
