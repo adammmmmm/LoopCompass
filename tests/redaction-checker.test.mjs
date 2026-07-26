@@ -593,6 +593,31 @@ describe("shipped redaction checker", () => {
     assert.doesNotMatch(result.stdout + result.stderr, /hidden@|global-hidden|global-excludes/);
   });
 
+  it("rejects an unexpected empty directory inside a state lane", () => {
+    writeState(project, "incidents", "clean.md", "role: Operator\n");
+    run(project, "audit");
+    mkdirSync(path.join(project, ".loopcompass", "incidents", "empty-extra"));
+    const result = runHead(project);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    assert.doesNotMatch(result.stdout + result.stderr, /empty-extra/);
+  });
+
+  it("rejects a special filesystem node inside a state lane", (context) => {
+    writeState(project, "incidents", "clean.md", "role: Operator\n");
+    run(project, "audit");
+    const fifo = path.join(project, ".loopcompass", "incidents", "private-fifo");
+    const created = spawnSync("mkfifo", [fifo], { encoding: "utf8" });
+    if (created.status !== 0) {
+      context.skip("mkfifo unavailable on this host");
+      return;
+    }
+    const result = runHead(project);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    assert.doesNotMatch(result.stdout + result.stderr, /private-fifo/);
+  });
+
   it("does not let a dirty or deleted config hide a committed project rule", () => {
     writeFileSync(
       path.join(project, ".loopcompass", "redaction.yaml"),

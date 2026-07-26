@@ -537,14 +537,20 @@ function committedEntries(projectRoot, repository) {
 }
 
 function laneFilesystemEntries(stateRoot) {
-  const files = [];
+  const entries = [];
   function visit(candidate, relative) {
     const before = lstatSync(candidate);
-    if (before.isSymbolicLink() || before.isFile()) {
-      files.push(relative.replaceAll("\\", "/"));
+    const portable = relative.replaceAll("\\", "/");
+    if (before.isSymbolicLink()) {
+      entries.push(`symlink:${portable}`);
       return;
     }
-    if (!before.isDirectory()) return;
+    if (before.isFile()) {
+      entries.push(`file:${portable}`);
+      return;
+    }
+    if (!before.isDirectory()) throw new Error("unsupported state node");
+    entries.push(`directory:${portable}`);
     for (const name of readdirSync(candidate).sort()) {
       visit(path.join(candidate, name), `${relative}/${name}`);
     }
@@ -556,14 +562,25 @@ function laneFilesystemEntries(stateRoot) {
     if (existsSync(candidate)) visit(candidate, `.loopcompass/${name}`);
   }
   const config = path.join(stateRoot, "redaction.yaml");
-  if (existsSync(config)) files.push(".loopcompass/redaction.yaml");
-  return files.sort();
+  if (existsSync(config)) visit(config, ".loopcompass/redaction.yaml");
+  return entries.sort();
 }
 
 function assertExactStateInventory(stateRoot, entries) {
-  const tracked = entries.map((entry) => entry.name).sort();
+  const tracked = new Set();
+  for (const entry of entries) {
+    tracked.add(
+      `${entry.mode === "120000" ? "symlink" : "file"}:${entry.name}`,
+    );
+    if (entry.name === ".loopcompass/redaction.yaml") continue;
+    let directory = path.posix.dirname(entry.name);
+    while (directory !== ".loopcompass") {
+      tracked.add(`directory:${directory}`);
+      directory = path.posix.dirname(directory);
+    }
+  }
   const actual = stateRoot ? laneFilesystemEntries(stateRoot) : [];
-  if (JSON.stringify(actual) !== JSON.stringify(tracked)) {
+  if (JSON.stringify(actual) !== JSON.stringify([...tracked].sort())) {
     throw new Error("state inventory differs from HEAD");
   }
 }

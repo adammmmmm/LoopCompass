@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -261,6 +262,34 @@ describe("release tooling", () => {
         compatibility.stderr || compatibility.stdout,
       );
       assert.match(compatibility.stdout, /status: up to date/);
+      writeFileSync(path.join(installedSkill, ".hidden-payload"), "unexpected\n");
+      let unexpected = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.notEqual(unexpected.status, 0);
+      assert.match(unexpected.stderr, /payload does not match its manifest/);
+      assert.doesNotMatch(unexpected.stderr, /hidden-payload/);
+      rmSync(path.join(installedSkill, ".hidden-payload"));
+
+      symlinkSync("SKILL.md", path.join(installedSkill, "unexpected-link"));
+      unexpected = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.notEqual(unexpected.status, 0);
+      assert.match(unexpected.stderr, /payload does not match its manifest/);
+      assert.doesNotMatch(unexpected.stderr, /unexpected-link/);
+      rmSync(path.join(installedSkill, "unexpected-link"));
+
       const installedManifest = path.join(installedSkill, "manifest.yaml");
       const mismatchedRelease = path.join(fixtureRoot, "same-commit-mismatch.yaml");
       writeFileSync(

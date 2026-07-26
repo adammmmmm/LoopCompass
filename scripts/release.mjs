@@ -483,7 +483,35 @@ function sameManifestPayload(left, right) {
 
 function installedPayloadMatchesManifest(installedDir, manifest) {
   const expectedFiles = Object.keys(manifest.files).sort();
-  const actualFiles = listSkillFiles(installedDir).sort();
+  const expectedDirectories = new Set();
+  for (const relative of expectedFiles) {
+    let directory = path.posix.dirname(relative);
+    while (directory !== ".") {
+      expectedDirectories.add(directory);
+      directory = path.posix.dirname(directory);
+    }
+  }
+  const actualFiles = [];
+  let valid = true;
+  let manifestSeen = false;
+  function visit(directory, prefix = "") {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (!expectedDirectories.has(relative)) valid = false;
+        visit(full, relative);
+      } else if (entry.isFile()) {
+        if (relative === "manifest.yaml") manifestSeen = true;
+        else actualFiles.push(relative);
+      } else {
+        valid = false;
+      }
+    }
+  }
+  visit(installedDir);
+  actualFiles.sort();
+  if (!valid || !manifestSeen) return false;
   if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) return false;
   return expectedFiles.every(
     (relative) =>

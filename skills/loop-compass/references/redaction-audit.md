@@ -16,7 +16,8 @@ Both modes require Git and scan files beneath `.loopcompass/incidents/`,
 Those lanes and `.loopcompass/redaction.yaml` must be tracked, clean, and byte-identical to `HEAD`;
 modified, deleted, or untracked state fails preflight. Reads use no-follow file descriptors and
 verify each blob identity against `HEAD`. Concurrent replacement of the repository root is outside
-the supported execution contract and fails when detected. `audit` reports
+the supported execution contract and fails when detected. Unexpected empty directories and
+non-regular filesystem nodes inside scanned lanes also fail preflight. `audit` reports
 historical findings without failing because of content findings. `enforce` exits nonzero for
 high-confidence blocking categories. Warnings do not fail either mode. Invocation, configuration,
 and filesystem-preflight errors fail safely in both modes.
