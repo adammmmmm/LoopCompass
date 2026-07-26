@@ -56,6 +56,9 @@ describe("PII sanitation contract", () => {
       "filenames",
       "terminal receipts",
       "human-attention projections",
+      "obligation markers",
+      "known-obligation registries",
+      "requested_action",
       "diagnostics",
     ]) {
       assert.match(contract, new RegExp(surface, "i"));
@@ -68,9 +71,9 @@ describe("PII sanitation contract", () => {
     assert.match(coreSkill, /before normalizing the signature or deriving a dedupe key/i);
     assert.match(
       projectPolicy,
-      /Before writing LoopCompass state, receipts, projections, or diagnostics/i,
+      /Before writing LoopCompass state, receipts, human-attention projections, obligation markers,[\s\S]*known-obligation registry entries, `requested_action` prose, or diagnostics/i,
     );
-    assert.match(projectPolicy, /Sanitize before signature normalization/i);
+    assert.match(projectPolicy, /Sanitize before signature[\s\S]*normalization/i);
   });
 
   it("requires role substitution and covers prohibited identity-bearing material", () => {

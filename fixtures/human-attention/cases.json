@@ -72,6 +72,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -112,6 +113,7 @@
           "incident_slug": "mixed-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -207,7 +209,8 @@
       "known_obligations": [
         {
           "incident_slug": "console-action-required",
-          "last_known_revision": 1
+          "last_known_revision": 1,
+          "retention_note": "preserve"
         }
       ],
       "obligations": [
@@ -215,6 +218,14 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -246,6 +257,7 @@
           "incident_slug": "console-action-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -302,6 +314,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -350,6 +363,7 @@
           "incident_slug": "release-approval-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "decision:production-release",
           "requested_action": "Approve the production release."
         }
       ],
@@ -390,6 +404,7 @@
           "incident_slug": "release-approval-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "decision:production-release",
           "requested_action": "Approve the production release."
         }
       ],
@@ -632,12 +647,14 @@
           "incident_slug": "console-action-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         },
         {
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -669,12 +686,14 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         },
         {
           "incident_slug": "console-action-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -701,6 +720,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -775,6 +795,7 @@
           "incident_slug": "console-action-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -815,6 +836,7 @@
           "incident_slug": "console-action-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -849,6 +871,7 @@
           "incident_slug": "console-action-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -958,6 +981,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -998,6 +1022,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -1038,6 +1063,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -1079,12 +1105,14 @@
           "incident_slug": "release-approval-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "decision:production-release",
           "requested_action": "Approve the production release."
         },
         {
           "incident_slug": "release-approval-required",
           "state": "human_action_pending",
           "revision": 3,
+          "human_requirement": "decision:production-release",
           "requested_action": "Correct the release approval."
         }
       ],
@@ -1133,12 +1161,14 @@
           "incident_slug": "release-approval-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "decision:production-release",
           "requested_action": "Approve the production release."
         },
         {
           "incident_slug": "release-approval-required",
           "state": "human_action_pending",
           "revision": 3,
+          "human_requirement": "decision:production-release",
           "requested_action": "Correct the release approval."
         }
       ],
@@ -1161,7 +1191,7 @@
       }
     },
     {
-      "id": "registry-revision-mismatch-fails",
+      "id": "registry-lag-repairable",
       "profile_config": "capability",
       "incidents": [
         {
@@ -1173,14 +1203,23 @@
       "known_obligations": [
         {
           "incident_slug": "console-action-required",
-          "last_known_revision": 1
+          "last_known_revision": 1,
+          "retention_note": "preserve"
         }
       ],
       "obligations": [
         {
           "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
           "state": "verification_pending",
           "revision": 2,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -1197,7 +1236,7 @@
       "closure_evidence": [],
       "expected": {
         "conformant": false,
-        "errors": ["registry_revision_mismatch:console-action-required"]
+        "errors": ["recoverable_registry_lag:console-action-required"]
       }
     },
     {
@@ -1215,6 +1254,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -1280,6 +1320,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -1320,6 +1361,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -1379,6 +1421,7 @@
           "incident_slug": "console-action-required",
           "state": "human_action_pending",
           "revision": 1,
+          "human_requirement": "production-console",
           "requested_action": "Perform the production console action."
         }
       ],
@@ -1416,6 +1459,206 @@
           "invalid_profile:history_retention",
           "invalid_profile:surface"
         ]
+      }
+    },
+    {
+      "id": "first-marker-registry-lag-is-recoverable",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console",
+          "retention_note": "preserve"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_registry_lag:console-action-required"]
+      }
+    },
+    {
+      "id": "invalid-first-write-metadata-does-not-reconstruct",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "mixed-action-required",
+          "open": true,
+          "requires": ["ci-runner", "production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "mixed-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Run the console operation.",
+          "pending_human_requirement": "ci-runner"
+        }
+      ],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["invalid_first_write_metadata:mixed-action-required"]
+      }
+    },
+    {
+      "id": "registry-ahead-of-marker-fails",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["registry_ahead_of_marker:console-action-required"]
+      }
+    },
+    {
+      "id": "mixed-valid-invalid-markers-fail-closed",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": ""
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["invalid_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "same-revision-unknown-field-conflict-fails",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action.",
+          "extension": "one"
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action.",
+          "extension": "two"
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["conflicting_obligation_revision:console-action-required"]
       }
     }
   ]

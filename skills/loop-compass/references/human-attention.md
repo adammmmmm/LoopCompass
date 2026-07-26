@@ -43,8 +43,8 @@ non-human-only action.
 
 While the profile is enabled:
 
-> Every open incident whose next required action is declared human-only appears exactly once on
-> the designated durable attention surface.
+> Every open incident with any `requires` entry matching a declared human-only capability or
+> decision appears exactly once on the designated durable attention surface.
 
 The projection is visibility and resume state. The `.loopcompass/incidents/<slug>.md` incident is
 canonical. Every projection carries the canonical incident slug as its durable join key. A title,
@@ -59,12 +59,13 @@ Formatting is consumer-defined. At minimum, the entry must convey:
 - the designated surface identifier; and
 - enough location information to reach the canonical incident.
 
-The persisted representation must contain and mechanically validate all of these exact fields:
-canonical slug, `requested_action`, canonical
-`.loopcompass/incidents/<canonical-slug>.md` path, obligation `state`, integer `revision`, and the
-single designated `surface`. A missing or mismatched field is non-conformant. Count projections for
-a slug across every discoverable surface: two entries are duplicates even when each appears only
-once on a different surface.
+The persisted representation must contain and mechanically validate these exact keys:
+`incident_slug`, `requested_action`, `incident_path`, `state`, `obligation_revision`, and
+`surface`. `incident_slug` is the canonical slug; `incident_path` is exactly
+`.loopcompass/incidents/<incident_slug>.md`; `obligation_revision` is the integer revision of the
+selected marker; and `surface` is the single designated surface. A missing or mismatched field is
+non-conformant. Count projections for a slug across every discoverable surface: two entries are
+duplicates even when each appears only once on a different surface.
 
 The projection must not become a second incident record. Detailed evidence, containment, repair
 state, and closure authority remain with the incident.
@@ -81,7 +82,8 @@ Each marker is keyed by canonical incident slug and carries:
 - `state`: `human_action_pending`, `verification_pending`, `reassigned_nonhuman`, or
   `verified_closed`;
 - a monotonically increasing integer `revision`;
-- the requested action or stable decision/capability identifier while active; and
+- nonempty sanitized `requested_action` and a stable declared `human_requirement` identifier while
+  active; and
 - for `verified_closed`, a non-sensitive durable reference to the normal-path verification and
   closure evidence.
 
@@ -92,8 +94,21 @@ cannot delete or rewrite it. Each record carries the already-sanitized slug and
 cannot provide that, first persist a revision-0 registry record containing the stable human
 requirement and sanitized pending `requested_action`; those fields are sufficient to reconstruct
 the revision-1 `human_action_pending` marker from the still-open, human-matched canonical incident.
-After the marker write, advance `last_known_revision` to 1. Reconciliation must preserve unknown
-registry fields and the configured retention metadata on round trip.
+
+Two first-write crash windows are repairable:
+
+1. revision-0 registry exists but marker revision 1 does not: reconstruct the marker only when the
+   pending action is nonempty and the pending requirement both appears in incident `requires` and
+   is itself declared human-only;
+2. matching valid marker revision 1 exists but the registry remains at revision 0: advance only
+   that complete registry record to revision 1.
+
+The same redo rule applies after later writes: when a complete registry record lags a valid selected
+marker, advance `last_known_revision` to that marker revision. A registry ahead of the selected
+marker, or a positive registry revision with no marker, is a hard deletion failure.
+Reconciliation must preserve the full marker history, sibling and unknown records, unknown fields,
+pending metadata, and configured retention metadata; mutate only the targeted registry record or
+append the missing revision-1 marker.
 
 This registry is the durable expected-slug source used to detect accidental deletion of the
 incident, marker, projection, and closure evidence together. Outside the revision-0 first-write
@@ -137,8 +152,8 @@ The greatest valid marker revision must satisfy exactly these canonical conditio
 
 | Marker state | Required canonical incident/evidence state |
 | --- | --- |
-| `human_action_pending` | Incident exists, is open, and at least one `requires` entry currently matches the human-only declaration. |
-| `verification_pending` | Incident exists and is open. The human-only token may already be removed because the persisted marker retains the obligation. |
+| `human_action_pending` | Incident exists and is open; marker `human_requirement` is declared human-only and appears in incident `requires`; `requested_action` is nonempty. |
+| `verification_pending` | Incident exists and is open; marker `human_requirement` remains a stable declared human-only identifier and `requested_action` is nonempty. The token may already be removed from `requires`. |
 | `reassigned_nonhuman` | Incident exists, is open, and no `requires` entry matches the human-only declaration. |
 | `verified_closed` | No open canonical incident exists, and the marker references durable evidence that containment was removed, the normal path was verified, and closure was recorded. |
 
@@ -152,22 +167,24 @@ Reconciliation is an idempotent upsert by canonical incident slug:
 
 1. Read the enabled profile declaration, known-obligation registry, canonical open incidents,
    persisted obligation markers, and referenced closure evidence.
-2. Repair only a revision-0 first-write gap whose registry metadata exactly matches an open
-   human-required incident. Otherwise fail reconciliation for any known slug whose marker is
-   absent; an otherwise empty current state is not evidence that the obligation never existed or
-   was correctly closed.
+2. Repair only the exact crash windows and registry-lag redo described above. Otherwise fail
+   reconciliation for any known slug whose marker is absent; an otherwise empty current state is
+   not evidence that the obligation never existed or was correctly closed.
 3. Match current `requires` values exactly and reconcile them with the markers using the rules
    above.
-4. If marker history contains several revisions for a slug, select the greatest valid integer
-   revision. Divergent records with the same greatest revision are a hard conflict for the
-   designated authority; never choose by document order or prose.
+4. Validate every co-marker before selecting by revision. Fail closed if any co-marker is invalid,
+   even when another marker for that slug is valid. If all are valid, select the greatest integer
+   revision. Divergent full records with the same greatest revision are a hard conflict for the
+   designated authority; unknown-field differences count as divergence. Never choose by document
+   order, lifecycle-state names, or prose.
 5. Deterministically render one projection for each active marker from the canonical slug,
    marker state and revision, requested action, canonical incident path, and designated surface.
 6. Replace all existing projections for that slug with the deterministic result. Do not merge
    fields from duplicates or guess which entry is newest or most advanced.
 7. Reconcile entries that no longer match an active obligation as described below.
 8. Re-read the surface and confirm the exactly-one invariant and matching obligation revision
-   before reporting projection success.
+   before reporting projection success. Mechanically validate the complete rendered projection
+   again; reconciliation must not report success for its own incomplete or corrupt output.
 
 Human acknowledgment or completion of the requested action is progress, not closure. Update the
 same projection to `verification_pending` while the incident coordinator verifies the authoritative
