@@ -52,6 +52,9 @@ const structuralTemplateMarkers = new Set([
   "version-range-or-unknown",
   "integer",
 ]);
+const proseTemplateMarkers = allShippedTemplateMarkers.filter(
+  (marker) => !structuralTemplateMarkers.has(marker),
+);
 const fixture = JSON.parse(
   readFileSync(path.join(root, "fixtures", "evaluation", "cases.json"), "utf8"),
 );
@@ -719,6 +722,35 @@ describe("terminal receipt contract", () => {
     );
   });
 
+  it("rejects every long shipped prose marker bare or split across whitespace", () => {
+    assert.ok(proseTemplateMarkers.length > 5);
+    for (const marker of proseTemplateMarkers) {
+      for (const injected of [
+        marker,
+        marker.replace(/\s+/gu, "\n  "),
+      ]) {
+        const proposed = structuredClone(propagatedCase.terminal_receipt);
+        proposed.proposed_artifact.content =
+          proposed.proposed_artifact.content.replace(
+            "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+            `Normal path: ${injected}`,
+          );
+        assert.throws(
+          () => validateTerminalReceipt(proposed),
+          /content must be a complete filled sanitized incident artifact/,
+          marker,
+        );
+      }
+    }
+
+    const safe = structuredClone(propagatedCase.terminal_receipt);
+    safe.proposed_artifact.content = safe.proposed_artifact.content.replace(
+      "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+      "Normal path: use <code>status</code>, <https://example.test/docs>, type <T>, and the ordinary words repair and verification.",
+    );
+    assert.doesNotThrow(() => validateTerminalReceipt(safe));
+  });
+
   it("rejects nested, default-ignorable, and whitespace-obscured template markers", () => {
     const mutations = [
       (content) => content.replace(
@@ -929,6 +961,20 @@ describe("terminal receipt contract", () => {
 
   it("requires exact, closed, fully parsed proposal frontmatter", () => {
     const base = propagatedCase.terminal_receipt.proposed_artifact.content;
+    const canonicalQuoted = structuredClone(propagatedCase.terminal_receipt);
+    canonicalQuoted.signature =
+      'Panel launcher "discovery" differs between sandbox and host contexts.';
+    canonicalQuoted.proposed_artifact.content = base
+      .replace(
+        'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+        'signature: "Panel launcher \\"discovery\\" differs between sandbox and host contexts."',
+      )
+      .replace(
+        "requires: [repository_write]",
+        'requires: ["repository_write"]',
+      );
+    assert.doesNotThrow(() => validateTerminalReceipt(canonicalQuoted));
+
     const invalidBodies = [
       base.replace(/^---\n/, "----\n"),
       base.replace("\n---\n# Repair panel launcher discovery", "\n--- \n# Repair panel launcher discovery"),
@@ -936,6 +982,18 @@ describe("terminal receipt contract", () => {
       base.replace("status: detected", "status: detected\nstatus: repairing"),
       base.replace("status: detected", "status: detected\nunexpected: value"),
       base.replace("owner: Incident Coordinator", 'owner: "Incident Coordinator'),
+      base.replace(
+        "requires: [repository_write]",
+        'requires: ["repository_write]',
+      ),
+      base.replace(
+        'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+        'signature: "Panel launcher "discovery" differs between sandbox and host contexts."',
+      ),
+      base.replace("owner: Incident Coordinator", "owner: &owner Incident Coordinator"),
+      base.replace("owner: Incident Coordinator", "owner: *owner"),
+      base.replace("owner: Incident Coordinator", "owner: !!str Incident Coordinator"),
+      base.replace("owner: Incident Coordinator", "owner: !role Incident Coordinator"),
       base.replace("owner: Incident Coordinator", "owner: <unresolved-owner>"),
       base.replace(
         "requires: [repository_write]",

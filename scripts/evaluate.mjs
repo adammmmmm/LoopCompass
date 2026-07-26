@@ -108,6 +108,12 @@ const parentSemanticsFields = new Set([
   "escalation",
   "forwards_child_receipt",
 ]);
+const requiredCorpusCases = new Map([
+  ["lc-eval-001-known-recovery", "classified positive"],
+  ["lc-eval-003-expected-negative", "expected negative"],
+  ["lc-eval-008-subagent-readonly-handoff", "read-only proposal and parent closure"],
+  ["lc-eval-015-missing-parent-receipt", "missing-parent negative"],
+]);
 
 function usage() {
   return [
@@ -842,6 +848,13 @@ function validateFixture(doc) {
       );
     }
   });
+  for (const [caseId, partition] of requiredCorpusCases) {
+    if (!caseIds.has(caseId)) {
+      throw new Error(
+        `fixture.cases is missing required ${partition} case ${caseId}`,
+      );
+    }
+  }
 }
 
 function renderReport(doc) {

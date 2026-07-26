@@ -68,6 +68,9 @@ path, email, or secret shape.
 Case ids are unique. Every observed receipt object includes explicit `terminal_receipt` and
 `parent_receipt` properties whose values are either complete objects or `null`; omission is not an
 alternate representation of a miss.
+The evaluator also owns a minimum required corpus inventory. Fixtures that erase the classified
+positive, expected-negative, read-only proposal-and-closure, or missing-parent negative partitions
+fail before scoring; a fixture cannot redefine those denominators by deleting its own cases.
 
 `fixture.metrics` must exactly match the evaluator's single ordered metric registry. Missing,
 duplicate, unknown, or reordered entries fail validation. The same registry drives report

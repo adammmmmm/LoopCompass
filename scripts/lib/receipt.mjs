@@ -446,13 +446,94 @@ function scalarLooksUnresolved(raw) {
   });
 }
 
-function proposedFrontmatterIsStrict(source, kind) {
+function parseStrictQuotedString(raw) {
+  if (!raw.startsWith('"') || !raw.endsWith('"')) {
+    return null;
+  }
+  try {
+    const value = JSON.parse(raw);
+    return typeof value === "string" && value.length > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function strictPlainScalar(raw) {
+  const value = raw.trim();
+  if (
+    value.length === 0
+    || /[\[\]{}"'\\`]/u.test(value)
+    || /^(?:[&*!|>@]|---$)/u.test(value)
+    || /(?:^|\s)[&*!][^\s]*/u.test(value)
+    || /:(?:\s|$)|(?:^|\s)#/u.test(value)
+  ) {
+    return null;
+  }
+  return value;
+}
+
+function parseStrictInlineList(raw, { nonempty }) {
+  const value = raw.trim();
+  if (!value.startsWith("[") || !value.endsWith("]")) {
+    return null;
+  }
+  const inner = value.slice(1, -1).trim();
+  if (inner.length === 0) {
+    return nonempty ? null : [];
+  }
+  const items = [];
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = 0; index <= inner.length; index += 1) {
+    const character = inner[index];
+    if (quoted) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        quoted = false;
+      }
+    } else if (character === '"') {
+      quoted = true;
+    } else if (character === "," || index === inner.length) {
+      const item = inner.slice(start, index).trim();
+      const parsed = item.startsWith('"')
+        ? parseStrictQuotedString(item)
+        : strictPlainScalar(item);
+      if (parsed === null) {
+        return null;
+      }
+      items.push(parsed);
+      start = index + 1;
+    }
+  }
+  return quoted || escaped || items.length === 0 ? null : items;
+}
+
+function parseStrictArtifactScalar(kind, field, raw, { nested = false } = {}) {
+  const value = raw.trim();
+  if (field === "signature" && !nested) {
+    return parseStrictQuotedString(value);
+  }
+  if (kind === "incident" && !nested && field === "requires") {
+    return parseStrictInlineList(value, { nonempty: true }) === null ? null : value;
+  }
+  if (kind === "incident" && !nested && field === "consulted") {
+    return parseStrictInlineList(value, { nonempty: false }) === null ? null : value;
+  }
+  return strictPlainScalar(value);
+}
+
+function parseStrictProposedFrontmatter(source, kind) {
   if (source.length === 0) {
-    return false;
+    return null;
   }
   const allowedTopLevel = new Set(requiredArtifactFields[kind]);
   const topLevel = new Set();
   const nested = new Map();
+  const fields = {};
   let activeMap = null;
 
   for (const line of source.split("\n")) {
@@ -462,11 +543,19 @@ function proposedFrontmatterIsStrict(source, kind) {
     if (/^\s/.test(line)) {
       const match = /^  ([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
       if (!match || activeMap !== "scope" || match[2].trim().length === 0) {
-        return false;
+        return null;
       }
       const keys = nested.get(activeMap) ?? new Set();
-      if (keys.has(match[1]) || scalarLooksUnresolved(match[2])) {
-        return false;
+      const parsed = parseStrictArtifactScalar(kind, match[1], match[2], {
+        nested: true,
+      });
+      if (
+        keys.has(match[1])
+        || !recoveryScopeFields.has(match[1])
+        || parsed === null
+        || scalarLooksUnresolved(match[2])
+      ) {
+        return null;
       }
       keys.add(match[1]);
       nested.set(activeMap, keys);
@@ -475,18 +564,20 @@ function proposedFrontmatterIsStrict(source, kind) {
 
     const match = /^([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
     if (!match || topLevel.has(match[1]) || !allowedTopLevel.has(match[1])) {
-      return false;
+      return null;
     }
     topLevel.add(match[1]);
     activeMap = match[2].trim().length === 0 ? match[1] : null;
-    if (scalarLooksUnresolved(match[2])) {
-      return false;
-    }
-    if (
-      (match[2].trim().startsWith('"') !== match[2].trim().endsWith('"'))
-      || (match[2].trim().startsWith("'") !== match[2].trim().endsWith("'"))
-    ) {
-      return false;
+    if (activeMap === null) {
+      const parsed = parseStrictArtifactScalar(kind, match[1], match[2]);
+      if (parsed === null || scalarLooksUnresolved(match[2])) {
+        return null;
+      }
+      fields[match[1]] = parsed;
+    } else if (kind !== "recovery" || match[1] !== "scope") {
+      return null;
+    } else {
+      fields[match[1]] = "";
     }
   }
 
@@ -494,15 +585,17 @@ function proposedFrontmatterIsStrict(source, kind) {
     topLevel.size !== allowedTopLevel.size
     || [...allowedTopLevel].some((field) => !topLevel.has(field))
   ) {
-    return false;
+    return null;
   }
   if (kind === "incident") {
-    return nested.size === 0;
+    return nested.size === 0 ? fields : null;
   }
   const scope = nested.get("scope");
   return nested.size === 1
     && scope?.size === recoveryScopeFields.size
-    && [...recoveryScopeFields].every((field) => scope.has(field));
+    && [...recoveryScopeFields].every((field) => scope.has(field))
+    ? fields
+    : null;
 }
 
 function parseInlineList(raw, { nonempty }) {
@@ -616,7 +709,12 @@ function unwrapStructuralPlaceholder(value) {
 
 function containsShippedTemplatePlaceholder(content, source, body, kind) {
   const prose = content.replace(/<!--[\s\S]*?-->/g, "");
+  const normalizedProse = normalizeTemplateMarker(prose);
   if (
+    [...proseTemplatePlaceholders].some((marker) =>
+      normalizedProse.includes(normalizeTemplateMarker(marker)),
+    )
+    ||
     angleCandidatesFromEveryStart(prose).some((candidate) =>
       proseTemplatePlaceholders.has(candidate),
     )
@@ -706,9 +804,10 @@ function validateProposedArtifact(artifact, label) {
     `${label}.content`,
     { allowLf: true },
   );
-  const { fields, body } = parseFrontmatter(normalizedContent);
+  const { body } = parseFrontmatter(normalizedContent);
   const source = frontmatterSource(normalizedContent);
-  if (!proposedFrontmatterIsStrict(source, kind)) {
+  const fields = parseStrictProposedFrontmatter(source, kind);
+  if (fields === null) {
     fail(label, `.content must be a complete filled sanitized ${kind} artifact`);
   }
   const proposedSignature = requireNormalizedSignature(

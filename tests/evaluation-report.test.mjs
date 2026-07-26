@@ -217,6 +217,29 @@ describe("evaluation benchmark report", () => {
     assert.match(result.stderr, /cases\[1\]\.id duplicates cases\[0\]\.id/);
   });
 
+  it("rejects an empty corpus or deletion of required benchmark partitions", () => {
+    const requiredCases = [
+      ["lc-eval-001-known-recovery", "classified positive"],
+      ["lc-eval-003-expected-negative", "expected negative"],
+      ["lc-eval-008-subagent-readonly-handoff", "read-only proposal and parent closure"],
+      ["lc-eval-015-missing-parent-receipt", "missing-parent negative"],
+    ];
+
+    const empty = readFixture();
+    empty.cases = [];
+    const emptyResult = runEvaluateWithDoc(empty);
+    assert.equal(emptyResult.status, 1);
+    assert.match(emptyResult.stderr, /missing required classified positive case/);
+
+    for (const [id, partition] of requiredCases) {
+      const doc = readFixture();
+      doc.cases = doc.cases.filter((c) => c.id !== id);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, new RegExp(`missing required ${partition} case ${id}`));
+    }
+  });
+
   it("rejects a receipt whose host does not match its declared scope", () => {
     const doc = readFixture();
     doc.cases[0].receipt.host = "different-host";
@@ -346,7 +369,7 @@ describe("evaluation benchmark report", () => {
   it("bounds every rendered identifier and rejects table-cell injection", () => {
     const exact = readFixture();
     exact.benchmark = "b".repeat(128);
-    exact.cases[0].id = "c".repeat(128);
+    exact.cases[1].id = "c".repeat(128);
     exact.cases[0].scope.host = "h".repeat(128);
     exact.cases[0].receipt.host = "h".repeat(128);
     let result = runEvaluateWithDoc(exact);
@@ -357,7 +380,7 @@ describe("evaluation benchmark report", () => {
         doc.benchmark = "b".repeat(129);
       },
       (doc) => {
-        doc.cases[0].id = "c".repeat(129);
+        doc.cases[1].id = "c".repeat(129);
       },
       (doc) => {
         doc.cases[0].scope.host = "h".repeat(129);
@@ -367,7 +390,7 @@ describe("evaluation benchmark report", () => {
         doc.benchmark = "benchmark|injected";
       },
       (doc) => {
-        doc.cases[0].id = "case|injected";
+        doc.cases[1].id = "case|injected";
       },
       (doc) => {
         doc.cases[0].scope.host = "host|injected";
