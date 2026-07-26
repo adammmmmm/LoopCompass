@@ -57,7 +57,10 @@ Read [classification.md](references/classification.md) when the correct lane is 
 - **No artifact:** The result is an accidental success, unverified correlation, clever bypass, or
   low-value task-specific detail.
 
-A workaround cannot become a recovery merely because it unblocked the task.
+Treat task outcome and mechanism health as separate facts. A successful task or validation command
+does not prove that the documented mechanism is healthy.
+
+**A workaround may complete the task; it does not complete the classification.**
 
 ## Create a recovery
 
@@ -99,7 +102,8 @@ immediately and coordination must survive the current exchange.
 2. Use the same normalized-signature and search-before-create rules as recoveries. Update the
    existing incident for a matching signature rather than opening another.
 3. Record the failed normal path, minimal evidence, and required capability.
-4. Escalate to the nearest parent, agent, or operator with sufficient authority.
+4. Escalate to the nearest actor with the required capability. That actor may be an agent, service,
+   team, or human.
 5. Treat containment as temporary incident metadata, never as resolution.
 6. Reject expired containment whenever LoopCompass is invoked. If `containment_expires` is past and
    the incident is still open, renew with a new expiry, clear containment, or close after repair.
@@ -109,6 +113,10 @@ immediately and coordination must survive the current exchange.
 9. Delete the live incident file after verification. Git history, the repaired mechanism, tests,
    and governing policy provide durable evidence. Do not archive closed incidents as permanent
    folklore in the live store.
+
+Alternate interpreters, unrelated virtual environments, bypass flags, and borrowed credentials are
+containment when they avoid a broken documented path. Bound their scope and verification gate; do
+not promote them to recoveries merely because the immediate command succeeds.
 
 Use this compact escalation payload and suppress duplicates for the same incident:
 
@@ -124,26 +132,38 @@ consulted: <recovery-or-incident-ids-or-unavailable>
 
 When persisting the payload, map `signature`, `requires`, and `consulted` to incident frontmatter;
 map `failed_normal_path` and `evidence` to **Failure**, `containment` to **Containment**, and
-`verification` to **Verification**. Preserve `owner`, `opened`, and `containment_expires` from the
-incident lifecycle rather than inventing them from the payload.
+`verification` to **Verification**. Under state schema 1, `owner` is the coordinator responsible
+for escalation, state, verification, and closure. The actor who performs or decides the required
+action may be different, and `owner` does not imply a human. Preserve `owner`, `opened`, and
+`containment_expires` from the incident lifecycle rather than inventing them from the payload.
 
-If no parent or peer has the required capability, terminate the ladder at the operator. Do not
-bounce the same escalation between agents.
+If no agent, service, or team has the required capability, terminate the ladder at the operator.
+Do not bounce the same escalation between actors.
+
+The coordinator retains the incident until normal-path verification and closure. Acknowledgment,
+completion of the requested action, and successful completion of the original task are progress,
+not closure.
+
+A directional resolution changes the intended normal path rather than restoring the old one. It is
+valid only after the source of authority documents that new path, obsolete containment is removed,
+and the replacement path is verified from clean preconditions. A decision or acknowledgment alone
+is not directional resolution.
 
 ## Finish every classification
 
-Every triggered failure must end in exactly one reviewable outcome:
+Every triggered signature must end in exactly one reviewable outcome, even if a later retry,
+alternate runtime, or workaround succeeds:
 
-1. a recovery is created or updated at the appropriate lifecycle status, with unverified proposals
-   remaining `candidate` and ineligible for use;
-2. an incident is created or updated when repair or coordination must survive the current exchange;
-3. `no artifact` is reported with a short classification reason; or
-4. the proposed recovery or incident is returned with the exact missing permission, capability,
-   or operator action required to persist or repair it.
+1. `persisted_artifact`: a recovery or incident is created or updated at the appropriate lifecycle
+   status, with unverified recovery proposals remaining `candidate` and ineligible for use;
+2. `no_artifact`: no artifact is justified and a short classification reason is reported; or
+3. `proposed_artifact`: the proposed recovery or incident and exact missing permission, capability,
+   or operator action required to persist or repair it are returned.
 
-Do not stop after retrieval or classification. Persistence is automatic within current repository
-authority. Explicit read-only instructions and safety boundaries still control, and storage failure
-remains fail-open for the primary task.
+Do not stop after retrieval, classification, acknowledgment, requested-action completion, or task
+success. Persistence is automatic within current repository authority. Explicit read-only
+instructions and safety boundaries still control, and storage failure remains fail-open for the
+primary task without cancelling classification.
 
 A delegated agent with shared repository write authority follows the same contract directly. A
 brief-only or read-only worker returns the normalized signature, classification, minimal evidence,

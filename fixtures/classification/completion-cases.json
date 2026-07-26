@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "description": "Synthetic cases for classification completion after task success, acknowledgment, containment, or a directional decision.",
+  "cases": [
+    {
+      "id": "alternate-runtime-success-erases-classification",
+      "scenario": "A deterministic validator dependency failure is reproduced in both documented runtimes. An unrelated project virtual environment succeeds, and the agent reports validation success without classifying the broken launcher.",
+      "triggered": true,
+      "task_outcome": "succeeded",
+      "mechanism_health": "broken",
+      "classification": "incident",
+      "terminal_outcome": "missing",
+      "containment": "unrelated virtual environment",
+      "normal_path_authority_updated": false,
+      "containment_removed": false,
+      "normal_path_verified": false,
+      "acknowledged": false,
+      "expected_result": "fail"
+    },
+    {
+      "id": "alternate-runtime-is-bounded-containment",
+      "scenario": "The alternate runtime completes validation, while the agent separately marks the documented launcher broken, persists an incident, bounds the virtual-environment containment, and keeps normal-path verification pending.",
+      "triggered": true,
+      "task_outcome": "succeeded",
+      "mechanism_health": "broken",
+      "classification": "incident",
+      "terminal_outcome": "persisted_artifact",
+      "containment": "bounded unrelated virtual environment",
+      "normal_path_authority_updated": false,
+      "containment_removed": false,
+      "normal_path_verified": false,
+      "acknowledged": false,
+      "expected_result": "pass"
+    },
+    {
+      "id": "acknowledgment-without-verification",
+      "scenario": "The capable actor acknowledges and performs the requested change, but containment remains and the authoritative normal path has not been verified.",
+      "triggered": true,
+      "task_outcome": "succeeded",
+      "mechanism_health": "verification_pending",
+      "classification": "incident",
+      "terminal_outcome": "no_artifact",
+      "containment": "temporary bypass",
+      "normal_path_authority_updated": true,
+      "containment_removed": false,
+      "normal_path_verified": false,
+      "acknowledged": true,
+      "expected_result": "fail"
+    },
+    {
+      "id": "directional-decision-without-authority-update",
+      "scenario": "A decision names a replacement normal path, but the governing source is unchanged and the replacement has not been verified.",
+      "triggered": true,
+      "task_outcome": "succeeded",
+      "mechanism_health": "verification_pending",
+      "classification": "incident",
+      "terminal_outcome": "no_artifact",
+      "containment": "temporary alternate path",
+      "normal_path_authority_updated": false,
+      "containment_removed": false,
+      "normal_path_verified": false,
+      "acknowledged": true,
+      "directional_resolution": true,
+      "expected_result": "fail"
+    },
+    {
+      "id": "verified-directional-resolution",
+      "scenario": "The governing source adopts a replacement normal path, obsolete containment is removed, and the replacement is verified from clean preconditions before closure.",
+      "triggered": true,
+      "task_outcome": "succeeded",
+      "mechanism_health": "healthy",
+      "classification": "incident",
+      "terminal_outcome": "no_artifact",
+      "containment": "none",
+      "normal_path_authority_updated": true,
+      "containment_removed": true,
+      "normal_path_verified": true,
+      "acknowledged": true,
+      "directional_resolution": true,
+      "expected_result": "pass"
+    }
+  ]
+}

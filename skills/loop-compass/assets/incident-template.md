@@ -4,7 +4,7 @@ schema: 1
 signature: "<normalized symptom or error>"
 status: detected
 requires: [<capability>]
-owner: <agent-or-operator>
+owner: <incident-coordinator>
 opened: <YYYY-MM-DD>
 containment_expires: null
 consulted: []
@@ -13,6 +13,7 @@ consulted: []
 <!-- status: detected | escalated | repairing | blocked | verified -->
 <!-- blocked is metadata on an open incident, not a terminal archive -->
 <!-- id and filename must be the mechanical slug of signature (see SKILL.md) -->
+<!-- in schema 1, owner is the lifecycle coordinator; the action actor may differ -->
 <!-- containment_expires past today on an open incident is invalid; renew, clear, or close -->
 <!-- after verified repair: delete this live file; do not keep closed incidents as folklore -->
 
@@ -30,7 +31,8 @@ Evidence: <Expected behavior, observed behavior, and minimal reproduction.>
 
 ## Containment
 
-<Temporary containment, owner, and expiry, or "None".>
+<Temporary containment, the actor responsible for operating or expiring it, and expiry, or "None".
+The incident coordinator remains the frontmatter owner.>
 
 ## Verification
 

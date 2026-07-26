@@ -99,6 +99,57 @@ describe("release tooling", () => {
     assert.doesNotMatch(`${policy}\n${skill}`, /operator approval by default/i);
   });
 
+  it("keeps successful workarounds from erasing classification", () => {
+    const policy = readFileSync(
+      path.join(root, "skills", "loop-compass", "assets", "project-policy.md"),
+      "utf8",
+    );
+    const skill = readFileSync(
+      path.join(root, "skills", "loop-compass", "SKILL.md"),
+      "utf8",
+    );
+
+    for (const text of [policy, skill]) {
+      assert.match(
+        text,
+        /A workaround may complete the task; it does not complete the classification\./,
+      );
+      assert.match(text, /persisted_artifact/);
+      assert.match(text, /proposed_artifact/);
+      assert.match(text, /no_artifact/);
+      assert.match(text, /task outcome and mechanism health/i);
+    }
+  });
+
+  it("keeps schema-1 coordination and closure semantics explicit", () => {
+    const skill = readFileSync(
+      path.join(root, "skills", "loop-compass", "SKILL.md"),
+      "utf8",
+    );
+    const classification = readFileSync(
+      path.join(root, "skills", "loop-compass", "references", "classification.md"),
+      "utf8",
+    );
+    const incidentTemplate = readFileSync(
+      path.join(root, "skills", "loop-compass", "assets", "incident-template.md"),
+      "utf8",
+    );
+
+    for (const text of [skill, classification]) {
+      assert.match(text, /state schema 1/i);
+      assert.match(text, /`owner` (?:is|means) the coordinator/i);
+      assert.match(text, /acknowledgment[\s\S]{0,180}not closure/i);
+      assert.match(
+        text,
+        /source\s+of\s+authority[\s\S]{0,240}containment[\s\S]{0,160}verified/i,
+      );
+    }
+    assert.match(incidentTemplate, /owner:\s*<incident-coordinator>/);
+    assert.match(incidentTemplate, /in schema 1, owner is the lifecycle coordinator/i);
+    assert.match(incidentTemplate, /action actor may differ/i);
+    assert.match(incidentTemplate, /actor responsible for operating or expiring it/i);
+  });
+
   it("top-level verify includes evaluation benchmark tests", () => {
     const verify = readFileSync(path.join(root, "scripts", "verify.mjs"), "utf8");
     assert.match(verify, /tests\/evaluation-fixtures\.test\.mjs/);

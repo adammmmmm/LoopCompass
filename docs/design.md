@@ -34,6 +34,11 @@ detected -> escalated -> repairing -> verified -> deleted
 `blocked` is metadata on an open incident, not a terminal archive. Containment is incident metadata,
 not a lifecycle state.
 
+Task outcome and mechanism health are independent. Alternate interpreters, unrelated virtual
+environments, bypass flags, and borrowed credentials may contain a failure long enough to complete
+the task, but they do not repair a broken documented path. A workaround may complete the task; it
+does not complete the classification.
+
 ## Initial architecture
 
 The first release is intentionally only a skill, references, and Markdown templates. It relies on
@@ -72,10 +77,11 @@ Project instructions provide best-effort automatic behavior rather than a cross-
 Skill preloading improves availability but does not enforce use. A worker without the skill searches
 `.loopcompass` directly and continues fail-open if retrieval is unavailable.
 
-Every triggered classification has a visible terminal outcome. A verified agent persists a
-justified recovery or incident automatically within current repository authority, reports `no
-artifact`, or returns the proposed artifact with the exact missing permission, capability, or
-operator action. Explicit read-only instructions and safety boundaries override automatic writes.
+Every triggered signature has a visible terminal outcome, even after a later success. A verified
+agent returns `persisted_artifact` after persisting a justified recovery or incident automatically
+within current repository authority, reports `no_artifact` with a classification reason, or returns
+`proposed_artifact` plus the exact missing permission, capability, or operator action. Explicit
+read-only instructions and safety boundaries override automatic writes.
 
 Delegated agents with shared repository write authority follow the same rule. Brief-only or
 read-only workers return the normalized signature, classification, evidence, proposed artifact,
@@ -99,8 +105,18 @@ suffix beginning with `-2`. Agents must not invent alternate descriptive filenam
 ## Escalation ladder
 
 Escalation names the failed normal path, evidence, missing capability, any containment, and the
-verification gate. Each parent either repairs within its authority or passes the deduplicated
-incident upward. The ladder terminates at the operator when no agent can act.
+verification gate. It targets the nearest actor with the required capability, whether that actor is
+an agent, service, team, or human. Each parent either repairs within its authority or passes the
+deduplicated incident upward. The ladder terminates at the operator when no other actor can act.
+
+Lifecycle coordination remains distinct from action ownership. Under state schema 1, incident
+`owner` is the coordinator responsible for escalation, state, verification, and closure. Another
+actor may perform or decide the missing action. Acknowledgment, requested-action completion, and
+successful task completion are progress, not closure.
+
+A directional resolution changes the intended normal path instead of restoring the old one. It
+closes an incident only after the authority for that path is updated, obsolete containment is
+removed, and the replacement path is verified from clean preconditions.
 
 ## Planned optional hooks
 
@@ -241,10 +257,15 @@ cannot write safely.
 11. Consultation failure does not recursively invoke LoopCompass.
 12. Manual invocation exercises the same classification path as policy-triggered use.
 13. Two agents handling the same signature converge on one deterministic artifact path.
-14. Every triggered classification ends as persisted recovery, persisted incident, explicit `no
-    artifact`, or proposed artifact with exact escalation.
+14. Every triggered signature ends as `persisted_artifact`, `no_artifact`, or
+    `proposed_artifact`, even if a later retry, runtime switch, or workaround succeeds.
 15. A delegated read-only worker returns the full classification payload to a parent that closes
     the outcome in the same turn.
+16. A successful task or validation result does not mark a still-broken mechanism healthy.
+17. Acknowledgment or requested-action completion does not close an incident without normal-path
+    verification.
+18. Directional resolution updates the authoritative path, removes obsolete containment, and
+    verifies the replacement path before closure.
 
 Update-contract acceptance tests live in [update-strategy-v1.md](update-strategy-v1.md).
 

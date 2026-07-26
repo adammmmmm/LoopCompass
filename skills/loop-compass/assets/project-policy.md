@@ -19,13 +19,24 @@ authority or escalate by required capability. If consultation or storage is unav
 fail-open. Report skipped consultation when retrieval was unavailable. When persistence storage is
 unavailable, return the proposed artifact and exact missing permission or capability.
 
-Finish every triggered classification in the same turn with exactly one reviewable outcome:
-create or update a recovery at the appropriate lifecycle status, create or update an incident,
-report `no artifact` with a short reason, or return the proposed artifact with the exact missing
-permission, capability, or operator action. Candidate recoveries are ineligible for use until
-verified. Persistence is automatic within current repository authority. Explicit read-only
-instructions, safety boundaries, and missing write permission override automatic writes, but they
-require the same-turn proposed artifact and escalation rather than silent omission.
+Treat task outcome and mechanism health as separate facts. A successful task or validation command
+does not prove that the documented mechanism is healthy.
+**A workaround may complete the task; it does not complete the classification.**
+
+Finish every triggered signature in the same turn with exactly one reviewable terminal outcome,
+even if a later retry or workaround succeeds: `persisted_artifact` after creating or updating a
+recovery or incident, `no_artifact` with a short classification reason, or `proposed_artifact` with
+the proposed artifact and exact missing permission, capability, or operator action. Candidate
+recoveries are ineligible for use until verified. Persistence is automatic within current repository
+authority. Explicit read-only instructions, safety boundaries, and missing write
+permission override automatic writes, but they require the same-turn proposed artifact and
+escalation rather than silent omission.
+
+Alternate interpreters, unrelated virtual environments, bypass flags, and borrowed credentials are
+containment when they avoid a broken documented path. Acknowledgment, completion of a requested
+action, or successful task completion is not incident closure. The incident coordinator must keep
+the incident open until the authoritative normal path is repaired or directionally replaced,
+obsolete containment is removed, and that path is verified from clean preconditions.
 
 Delegated agents with shared repository write authority follow the same rule directly. Brief-only
 or read-only workers must return the normalized signature, classification, minimal evidence,

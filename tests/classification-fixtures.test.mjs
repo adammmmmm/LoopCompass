@@ -8,6 +8,38 @@ import { signatureIdentity } from "../scripts/lib/signature.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixturePath = path.join(root, "fixtures", "classification", "cases.json");
+const completionFixturePath = path.join(
+  root,
+  "fixtures",
+  "classification",
+  "completion-cases.json",
+);
+
+function completionResult(c) {
+  const hasTerminalOutcome = new Set([
+    "persisted_artifact",
+    "no_artifact",
+    "proposed_artifact",
+  ]).has(c.terminal_outcome);
+  if (!c.triggered) return hasTerminalOutcome;
+  if (!hasTerminalOutcome) return false;
+
+  if (c.mechanism_health !== "healthy") {
+    return (
+      c.classification === "incident"
+      && new Set(["persisted_artifact", "proposed_artifact"]).has(c.terminal_outcome)
+    );
+  }
+
+  if (c.directional_resolution) {
+    return (
+      c.normal_path_authority_updated
+      && c.containment_removed
+      && c.normal_path_verified
+    );
+  }
+  return c.normal_path_verified;
+}
 
 describe("classification fixtures", () => {
   const doc = JSON.parse(readFileSync(fixturePath, "utf8"));
@@ -56,5 +88,70 @@ describe("classification fixtures", () => {
         .replace(/TASK-042-abc/, "TASK-099-zzz"),
     );
     assert.equal(a.slug, b.slug);
+  });
+});
+
+describe("classification completion fixtures", () => {
+  const doc = JSON.parse(readFileSync(completionFixturePath, "utf8"));
+
+  it("keeps task outcome distinct from mechanism health", () => {
+    assert.equal(doc.schema, 1);
+    assert.ok(doc.cases.length >= 5);
+    for (const c of doc.cases) {
+      assert.ok(c.id);
+      assert.equal(c.task_outcome, "succeeded", c.id);
+      assert.ok(c.mechanism_health, c.id);
+      assert.ok(c.terminal_outcome, c.id);
+      assert.ok(["pass", "fail"].includes(c.expected_result), c.id);
+      assert.equal(
+        completionResult(c) ? "pass" : "fail",
+        c.expected_result,
+        c.id,
+      );
+    }
+  });
+
+  it("rejects later workaround success without terminal classification", () => {
+    const c = doc.cases.find(
+      (item) => item.id === "alternate-runtime-success-erases-classification",
+    );
+    assert.ok(c);
+    assert.equal(c.task_outcome, "succeeded");
+    assert.equal(c.mechanism_health, "broken");
+    assert.equal(completionResult(c), false);
+  });
+
+  it("accepts successful containment only while the incident remains reviewable", () => {
+    const c = doc.cases.find(
+      (item) => item.id === "alternate-runtime-is-bounded-containment",
+    );
+    assert.ok(c);
+    assert.equal(c.task_outcome, "succeeded");
+    assert.equal(c.mechanism_health, "broken");
+    assert.equal(c.terminal_outcome, "persisted_artifact");
+    assert.equal(completionResult(c), true);
+  });
+
+  it("requires authority update, containment removal, and verification for directional closure", () => {
+    const invalid = doc.cases.find(
+      (item) => item.id === "directional-decision-without-authority-update",
+    );
+    const valid = doc.cases.find(
+      (item) => item.id === "verified-directional-resolution",
+    );
+    assert.ok(invalid);
+    assert.ok(valid);
+    assert.equal(completionResult(invalid), false);
+    assert.equal(completionResult(valid), true);
+  });
+
+  it("does not let acknowledgment close a verification-pending incident", () => {
+    const c = doc.cases.find(
+      (item) => item.id === "acknowledgment-without-verification",
+    );
+    assert.ok(c);
+    assert.equal(c.acknowledged, true);
+    assert.equal(c.normal_path_verified, false);
+    assert.equal(completionResult(c), false);
   });
 });

@@ -73,6 +73,18 @@
       "failure": "task worktree missing at /tmp/worktrees/TASK-042-abc with id 550e8400-e29b-41d4-a716-446655440000",
       "lane": "incident",
       "rationale": "Local workflow/path mechanism issue; volatile id/path must not create unique folklore filenames."
+    },
+    {
+      "id": "system-skill-validator-default-runtime-missing-dependency",
+      "failure": "Skill Creator quick_validate.py exits before validation at import yaml with ModuleNotFoundError: No module named yaml; reproduced in OS-default and bundled Python runtimes",
+      "lane": "incident",
+      "rationale": "An unrelated virtual environment may contain the task, but the documented validator runtime remains broken and requires repair."
+    },
+    {
+      "id": "system-skill-entrypoint-not-executable",
+      "failure": "direct execution of system skill init_skill.py returns permission denied because the documented entrypoint lacks executable mode; python3 init_skill.py succeeds",
+      "lane": "incident",
+      "rationale": "Interpreter invocation is containment for a distinct launcher-readiness defect until the documented entrypoint contract is repaired and verified."
     }
   ]
 }
