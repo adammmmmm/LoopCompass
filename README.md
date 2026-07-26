@@ -192,6 +192,7 @@ node scripts/release.mjs stage-install   # copy skill into consumer host paths
 node scripts/release.mjs pin-check       # manifest.commit vs HEAD
 node scripts/validate-state.mjs          # validate a project's .loopcompass
 node scripts/verify-consumer.mjs         # consumer install + policy + state checks
+node scripts/ownership-probe.mjs         # prove schema-1 ownership compatibility without writes
 ```
 
 Teaching examples (not live memory): [`examples/capsules/`](examples/capsules/).

@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "probe": "schema-1-ownership-compatibility",
+  "expected_consumer_state_sha256": "034b5154a77659cfe69542d70f7a0701eaa7333217e8a4d18596be8560b52f0d",
+  "cases": [
+    {
+      "id": "utc-mapping-action-reassignment",
+      "incident_path": "examples/capsules/incidents/exchange-ticker-utc-hhmm-misread-as-local.md",
+      "expected": {
+        "coordinator": "project-maintainer",
+        "action_owners": [
+          "runtime-maintainer",
+          "project-maintainer"
+        ],
+        "current_action_owner": "project-maintainer",
+        "verification_owner": "project-maintainer",
+        "closure_owner": "project-maintainer",
+        "query_receipts_by_action_owner": {
+          "runtime-maintainer": [
+            "utc-runtime-repair"
+          ],
+          "project-maintainer": [
+            "utc-project-verification"
+          ]
+        }
+      },
+      "events": [
+        {
+          "receipt_id": "utc-runtime-repair",
+          "action_owner": "runtime-maintainer",
+          "action": "Repair the UTC mapping mechanism and return bounded verification evidence.",
+          "evidence": "The UTC mapping defect remains open under the stable project coordinator."
+        },
+        {
+          "receipt_id": "utc-project-verification",
+          "action_owner": "project-maintainer",
+          "action": "Verify the repaired UTC mapping path from clean preconditions before closure.",
+          "evidence": "The repair action is complete and coordinator-owned verification remains pending."
+        }
+      ]
+    },
+    {
+      "id": "identity-refresh-stable-coordination",
+      "incident_path": "examples/capsules/incidents/null-identity-replay-state-stops-periodic-refresh.md",
+      "expected": {
+        "coordinator": "project-maintainer",
+        "action_owners": [
+          "client-maintainer",
+          "test-maintainer"
+        ],
+        "current_action_owner": "test-maintainer",
+        "verification_owner": "project-maintainer",
+        "closure_owner": "project-maintainer",
+        "query_receipts_by_action_owner": {
+          "client-maintainer": [
+            "identity-client-repair"
+          ],
+          "test-maintainer": [
+            "identity-regression-proof"
+          ]
+        }
+      },
+      "events": [
+        {
+          "receipt_id": "identity-client-repair",
+          "action_owner": "client-maintainer",
+          "action": "Repair periodic identity refresh without changing incident coordination.",
+          "evidence": "The client repair is assigned while the project coordinator retains lifecycle ownership."
+        },
+        {
+          "receipt_id": "identity-regression-proof",
+          "action_owner": "test-maintainer",
+          "action": "Produce the clean-session regression evidence required by the incident.",
+          "evidence": "Action ownership moves to regression proof while coordination remains stable."
+        }
+      ]
+    },
+    {
+      "id": "global-worktree-operator-closure",
+      "incident_path": "examples/capsules/incidents/worktree-spawn-from-non-git-cwd.md",
+      "expected": {
+        "coordinator": "operator",
+        "action_owners": [
+          "configuration-maintainer",
+          "operator"
+        ],
+        "current_action_owner": "operator",
+        "verification_owner": "operator",
+        "closure_owner": "operator",
+        "query_receipts_by_action_owner": {
+          "configuration-maintainer": [
+            "worktree-configuration-repair"
+          ],
+          "operator": [
+            "worktree-neutral-root-verification"
+          ]
+        }
+      },
+      "events": [
+        {
+          "receipt_id": "worktree-configuration-repair",
+          "action_owner": "configuration-maintainer",
+          "action": "Repair the global worktree creation mechanism for neutral roots.",
+          "evidence": "The global configuration repair is assigned without transferring incident coordination."
+        },
+        {
+          "receipt_id": "worktree-neutral-root-verification",
+          "action_owner": "operator",
+          "action": "Verify repeated neutral-root worktree creation before closing the incident.",
+          "evidence": "The operator resumes action ownership for authoritative verification and closure."
+        }
+      ]
+    }
+  ]
+}
