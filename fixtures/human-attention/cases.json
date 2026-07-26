@@ -2259,6 +2259,102 @@
           "unrepairable_registry_lag:console-action-required"
         ]
       }
+    },
+    {
+      "id": "stale-projection-does-not-block-registry-lag-repair",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "projection_obligation_revision_mismatch:console-action-required",
+          "projection_requested_action_mismatch:console-action-required",
+          "projection_state_mismatch:console-action-required",
+          "recoverable_registry_lag:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "divergent-projections-do-not-block-first-marker-gap-repair",
+      "profile_config": "capability",
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Stale action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 4,
+          "surface": "HANDOFF.md"
+        },
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Different stale action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_first_marker_gap:console-action-required"]
+      }
     }
   ]
 }

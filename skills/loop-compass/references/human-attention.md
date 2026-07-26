@@ -96,7 +96,9 @@ a valid later marker cannot mask it or authorize repair.
 Parse marker, registry, and projection collections defensively before reading fields. Null, scalar,
 array, or malformed sibling records produce explicit non-sensitive conformance errors, never a
 runtime exception. Preserve them for quarantine or authorized repair. An unscoped malformed record
-blocks mutation; a malformed record with a trustworthy canonical slug blocks only that slug.
+blocks mutation across the surface and suppresses every `recoverable` diagnostic; report one hard
+unscoped-surface error instead. A malformed record with a trustworthy canonical slug blocks only
+that slug.
 
 The surface also maintains a minimal known-obligation registry keyed by canonical incident slug.
 Keep this registry structurally separate from the projection block so deterministic re-rendering
@@ -130,6 +132,9 @@ history, not repair authority.
 Stage the reconstructed marker and registry advancement together, validate the complete candidate
 history and selected marker against canonical state, and only then commit both changes. Failed
 validation is an exact no-op: it must not leave a synthetic revision 1 behind.
+Projection representation does not gate marker/registry crash repair. First make the valid
+marker/registry repair atomically, then run deterministic projection reconciliation to replace
+stale, incomplete, or divergent entries from the repaired canonical state.
 Reconciliation must preserve the full marker history, sibling and unknown records, unknown fields,
 pending metadata, and configured retention metadata; mutate only the targeted registry record or
 append the missing revision-1 marker.

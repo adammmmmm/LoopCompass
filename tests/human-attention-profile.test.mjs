@@ -508,16 +508,28 @@ function assessConformance(testCase) {
       .filter((incident) => incident.open)
       .map((incident) => [incident.slug, incident]),
   );
-  const { registry, failed: failedRegistry } = registryBySlug(testCase, errors);
-  const { projections: projectionRecords } = projectionsBySlug(
+  const {
+    registry,
+    failed: failedRegistry,
+    unscopedInvalid: unscopedRegistry,
+  } = registryBySlug(testCase, errors);
+  const {
+    projections: projectionRecords,
+    unscopedInvalid: unscopedProjection,
+  } = projectionsBySlug(
     testCase,
     errors,
   );
-  const { selected: obligations, failed: failedObligations } = selectObligations(
-    testCase.obligations,
-    config,
-    errors,
-  );
+  const {
+    selected: obligations,
+    failed: failedObligations,
+    unscopedInvalid: unscopedMarker,
+  } = selectObligations(testCase.obligations, config, errors);
+  const unscopedSurfaceFailure =
+    unscopedRegistry || unscopedProjection || unscopedMarker;
+  if (unscopedSurfaceFailure) {
+    errors.push("invalid_attention_surface:unscoped-record");
+  }
   const failedState = new Set([...failedObligations, ...failedRegistry]);
   for (const [slug, record] of registry) {
     if (failedState.has(slug)) continue;
@@ -525,7 +537,9 @@ function assessConformance(testCase) {
     if (!obligation) {
       const incident = openIncidents.get(slug);
       if (exactPendingMetadataMatches(record, incident, config)) {
-        errors.push(`recoverable_first_marker_gap:${slug}`);
+        if (!unscopedSurfaceFailure) {
+          errors.push(`recoverable_first_marker_gap:${slug}`);
+        }
       } else if (record.last_known_revision === 0) {
         errors.push(
           `${
@@ -547,7 +561,7 @@ function assessConformance(testCase) {
       );
       if (catchUpError) {
         errors.push(`${catchUpError}:${slug}`);
-      } else {
+      } else if (!unscopedSurfaceFailure) {
         errors.push(`recoverable_registry_lag:${slug}`);
       }
     } else if (record.last_known_revision > obligation.revision) {
@@ -731,10 +745,7 @@ function repairRegistryCrash(testCase) {
     failed: failedRegistry,
     unscopedInvalid: unscopedRegistry,
   } = registryBySlug(working, errors);
-  const {
-    projections: projectionRecords,
-    unscopedInvalid: unscopedProjection,
-  } = projectionsBySlug(
+  const { unscopedInvalid: unscopedProjection } = projectionsBySlug(
     testCase,
     errors,
   );
@@ -759,24 +770,6 @@ function repairRegistryCrash(testCase) {
       .filter((incident) => incident.open)
       .map((incident) => [incident.slug, incident]),
   );
-  const failedProjections = new Set();
-  for (const [slug, projections] of projectionRecords) {
-    const obligation = obligations.get(slug);
-    if (
-      obligation &&
-      ((ACTIVE_OBLIGATIONS.has(obligation.state) &&
-        projections.some(
-          (projection) =>
-            projectionRepresentationErrors(config, obligation, projection)
-              .length > 0,
-        )) ||
-        (RELEASED_OBLIGATIONS.has(obligation.state) &&
-          projections.length > 0))
-    ) {
-      failedProjections.add(slug);
-    }
-  }
-
   for (let index = 0; index < knownObligations.length; index++) {
     const record = knownObligations[index];
     if (!isPlainRecord(record)) continue;
@@ -784,8 +777,7 @@ function repairRegistryCrash(testCase) {
     if (
       registry.get(slug) !== record ||
       failed.has(slug) ||
-      failedRegistry.has(slug) ||
-      failedProjections.has(slug)
+      failedRegistry.has(slug)
     ) {
       continue;
     }
@@ -812,21 +804,10 @@ function repairRegistryCrash(testCase) {
       obligations: candidateHistory,
     };
     const candidateMarker = marker ?? initialMarker;
-    const candidateProjections = projectionRecords.get(slug) ?? [];
 
     if (
       !candidateMarker ||
       record.last_known_revision >= candidateMarker.revision
-    ) {
-      continue;
-    }
-    if (
-      ACTIVE_OBLIGATIONS.has(candidateMarker.state) &&
-      candidateProjections.some(
-        (projection) =>
-          projectionRepresentationErrors(config, candidateMarker, projection)
-            .length > 0,
-      )
     ) {
       continue;
     }
@@ -910,6 +891,11 @@ describe("optional human-attention profile", () => {
     );
     assert.match(reference, /Fail closed if any co-marker is invalid/i);
     assert.match(reference, /Failed[\s\S]*validation is an exact no-op/i);
+    assert.match(
+      reference,
+      /Projection representation does not gate marker\/registry crash repair/i,
+    );
+    assert.match(reference, /suppresses every `recoverable` diagnostic/i);
     assert.match(
       reference,
       /Null, scalar,[\s\S]*malformed sibling records[\s\S]*never a[\s\S]*runtime exception/i,
@@ -1012,6 +998,8 @@ describe("optional human-attention profile", () => {
       "multi-slug-repair-is-isolated",
       "synthetic-revision-one-is-atomic-with-invalid-closed-marker",
       "synthetic-revision-one-is-atomic-with-invalid-reassignment",
+      "stale-projection-does-not-block-registry-lag-repair",
+      "divergent-projections-do-not-block-first-marker-gap-repair",
       "human-action-missing-canonical-incident",
       "reassignment-missing-canonical-incident",
       "projection-requested-action-mismatch-fails",
@@ -1224,6 +1212,34 @@ describe("optional human-attention profile", () => {
     }
   });
 
+  it("repairs marker and registry state before canonically rewriting projections", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    for (const id of [
+      "stale-projection-does-not-block-registry-lag-repair",
+      "divergent-projections-do-not-block-first-marker-gap-repair",
+    ]) {
+      const rawCase = fixture.cases.find((testCase) => testCase.id === id);
+      const testCase = resolveCase(fixture, structuredClone(rawCase));
+      const originalProjections = structuredClone(testCase.projections);
+
+      const repaired = repairRegistryCrash(testCase);
+      assert.deepEqual(
+        repaired.projections,
+        originalProjections,
+        `${id}: repair must not rewrite projection`,
+      );
+      assert.ok(
+        repaired.known_obligations[0].last_known_revision > 0,
+        `${id}: registry must advance`,
+      );
+      const reconciled = {
+        ...repaired,
+        projections: reconcileProjections(repaired),
+      };
+      assert.deepEqual(assessConformance(reconciled), [], id);
+    }
+  });
+
   it("validates every historical marker and handles malformed values without throwing", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     const lagRaw = fixture.cases.find(
@@ -1298,6 +1314,15 @@ describe("optional human-attention profile", () => {
           "invalid_obligation:missing-slug",
         ),
       );
+      assert.ok(
+        assessConformance(testCase).includes(
+          "invalid_attention_surface:unscoped-record",
+        ),
+      );
+      assert.doesNotMatch(
+        assessConformance(testCase).join("\n"),
+        /recoverable_(?:first_marker_gap|registry_lag)/,
+      );
       assert.deepEqual(repairRegistryCrash(testCase), original);
       assert.throws(
         () => reconcileProjections(testCase),
@@ -1318,6 +1343,15 @@ describe("optional human-attention profile", () => {
             ? "invalid_registry_record:missing-slug"
             : "invalid_projection:missing-slug";
         assert.ok(assessConformance(testCase).includes(diagnostic));
+        assert.ok(
+          assessConformance(testCase).includes(
+            "invalid_attention_surface:unscoped-record",
+          ),
+        );
+        assert.doesNotMatch(
+          assessConformance(testCase).join("\n"),
+          /recoverable_(?:first_marker_gap|registry_lag)/,
+        );
         assert.deepEqual(repairRegistryCrash(testCase), original);
         assert.throws(
           () => reconcileProjections(testCase),
