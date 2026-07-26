@@ -30,6 +30,7 @@ const testFiles = [
   "tests/evaluation-report.test.mjs",
   "tests/receipt-contract.test.mjs",
   "tests/repository-health.test.mjs",
+  "tests/review-gate.test.mjs",
   "tests/site.test.mjs",
   "tests/artifact-schema.test.mjs",
   "tests/pii-sanitation-contract.test.mjs",
