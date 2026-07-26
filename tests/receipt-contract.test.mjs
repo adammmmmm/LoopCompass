@@ -8,6 +8,7 @@ import {
   validateParentReceipt,
   validateTerminalReceipt,
 } from "../scripts/lib/receipt.mjs";
+import { parseFrontmatter } from "../scripts/lib/frontmatter.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const receiptReference = readFileSync(
@@ -34,6 +35,59 @@ const propagatedCase = fixture.cases.find(
 const parentNoArtifactCase = fixture.cases.find(
   (c) => c.id === "lc-eval-014-parent-no-artifact",
 ).receipt;
+const filledRecoveryArtifact = `---
+id: documented-validator-launcher-works-with-managed-runtime
+schema: 1
+signature: "Documented validator launcher works with managed runtime."
+scope:
+  os: any
+  shell: any
+  tool: validator
+  versions: managed
+status: candidate
+first_seen: 2026-07-26
+last_verified: null
+expires_after_days: 30
+supersedes: null
+---
+<!-- candidate recovery: retain this harmless template guidance -->
+# Run the managed validator launcher
+
+## Symptom
+
+The default runtime lacks the declared validator dependency.
+
+## Recovery
+
+Use the documented managed launcher.
+
+## Verification
+
+Run from clean preconditions and observe successful validation.
+
+## Limits
+
+Applies only to the documented managed runtime.
+`;
+
+function recoveryProposalReceipt() {
+  const receipt = structuredClone(propagatedCase.terminal_receipt);
+  receipt.classification = "recovery";
+  receipt.proposed_artifact = {
+    kind: "recovery",
+    content: filledRecoveryArtifact,
+  };
+  return receipt;
+}
+
+function captureError(fn) {
+  try {
+    fn();
+  } catch (error) {
+    return error;
+  }
+  assert.fail("expected function to throw");
+}
 
 describe("terminal receipt contract", () => {
   it("accepts task completion while mechanism health remains broken", () => {
@@ -91,6 +145,32 @@ describe("terminal receipt contract", () => {
     assert.throws(
       () => validateTerminalReceipt(inconsistent),
       /no_artifact_reason is required for no_artifact/,
+    );
+  });
+
+  it("bounds minimal evidence and rejects transcript-like multiline items", () => {
+    const tooMany = structuredClone(persisted);
+    tooMany.evidence = Array.from(
+      { length: 9 },
+      (_, index) => `Sanitized evidence item ${index + 1}.`,
+    );
+    assert.throws(
+      () => validateTerminalReceipt(tooMany),
+      /evidence must contain at most 8 one-line items/,
+    );
+
+    const tooLong = structuredClone(persisted);
+    tooLong.evidence = ["x".repeat(513)];
+    assert.throws(
+      () => validateTerminalReceipt(tooLong),
+      /evidence must contain at most 8 one-line items of at most 512 characters/,
+    );
+
+    const multiline = structuredClone(persisted);
+    multiline.evidence = ["First output line.\nSecond transcript line."];
+    assert.throws(
+      () => validateTerminalReceipt(multiline),
+      /evidence must contain at most 8 one-line items/,
     );
   });
 
@@ -191,6 +271,36 @@ describe("terminal receipt contract", () => {
     assert.throws(
       () => validateParentReceipt(parent, authoritativeCase.terminal_receipt),
       /escalation is required when persisting an incident/,
+    );
+  });
+
+  it("binds authoritative persistence to the proposed mechanical artifact id", () => {
+    const authoritativeCase = fixture.cases.find(
+      (c) => c.id === "lc-eval-008-subagent-readonly-handoff",
+    ).receipt;
+    const proposedId = parseFrontmatter(
+      authoritativeCase.terminal_receipt.proposed_artifact.content,
+    ).fields.id;
+    assert.equal(authoritativeCase.parent_receipt.artifact_ref, proposedId);
+
+    const wrong = structuredClone(authoritativeCase.parent_receipt);
+    wrong.artifact_ref = "different-mechanical-id";
+    assert.throws(
+      () => validateParentReceipt(wrong, authoritativeCase.terminal_receipt),
+      /artifact_ref must equal the proposed artifact id/,
+    );
+
+    const collision = structuredClone(authoritativeCase.parent_receipt);
+    collision.artifact_ref = `${proposedId}-2`;
+    assert.doesNotThrow(() =>
+      validateParentReceipt(collision, authoritativeCase.terminal_receipt),
+    );
+
+    const paddedCollision = structuredClone(authoritativeCase.parent_receipt);
+    paddedCollision.artifact_ref = `${proposedId}-02`;
+    assert.throws(
+      () => validateParentReceipt(paddedCollision, authoritativeCase.terminal_receipt),
+      /artifact_ref must equal the proposed artifact id/,
     );
   });
 
@@ -339,46 +449,66 @@ describe("terminal receipt contract", () => {
   });
 
   it("accepts a complete filled multiline recovery artifact", () => {
-    const proposed = structuredClone(propagatedCase.terminal_receipt);
-    proposed.classification = "recovery";
-    proposed.proposed_artifact = {
-      kind: "recovery",
-      content: `---
-id: documented-validator-launcher-works-with-managed-runtime
-schema: 1
-signature: "Documented validator launcher works with managed runtime."
-scope:
-  os: any
-  shell: any
-  tool: validator
-  versions: managed
-status: candidate
-first_seen: 2026-07-26
-last_verified: null
-expires_after_days: 30
-supersedes: null
----
-# Run the managed validator launcher
-
-## Symptom
-
-The default runtime lacks the declared validator dependency.
-
-## Recovery
-
-Use the documented managed launcher.
-
-## Verification
-
-Run from clean preconditions and observe successful validation.
-
-## Limits
-
-Applies only to the documented managed runtime.
-`,
-    };
+    const proposed = recoveryProposalReceipt();
     assert.ok(recoveryTemplate.includes("## Recovery"));
     assert.doesNotThrow(() => validateTerminalReceipt(proposed));
+  });
+
+  it("rejects schema-invalid incident artifacts despite present keys and headings", () => {
+    const base = propagatedCase.terminal_receipt.proposed_artifact.content;
+    const invalidBodies = [
+      incidentTemplate,
+      base.replace("requires: [repository_write]", "requires:"),
+      base.replace("requires: [repository_write]", "requires: repository_write"),
+      base.replace("consulted: []", "consulted:"),
+      base.replace("owner: Incident Coordinator", "owner:"),
+      base.replace("opened: 2026-07-26", "opened: 2026-02-30"),
+      base.replace(
+        "## Repair\n\nMake launcher discovery and authentication preflight host-aware.",
+        "## Repair\n",
+      ),
+    ];
+
+    for (const content of invalidBodies) {
+      const receipt = structuredClone(propagatedCase.terminal_receipt);
+      receipt.proposed_artifact.content = content;
+      assert.throws(
+        () => validateTerminalReceipt(receipt),
+        /content must be a complete filled sanitized incident artifact/,
+      );
+    }
+  });
+
+  it("rejects invalid recovery lifecycle, nested scope, dates, and empty sections", () => {
+    const invalidBodies = [
+      recoveryTemplate,
+      filledRecoveryArtifact.replace("status: candidate", "status: unknown"),
+      filledRecoveryArtifact.replace("  tool: validator", "  tool:"),
+      filledRecoveryArtifact.replace("  versions: managed\n", ""),
+      filledRecoveryArtifact.replace(
+        "  tool: validator",
+        "  os: duplicate\n  tool: validator",
+      ),
+      filledRecoveryArtifact.replace("last_verified: null", "last_verified:"),
+      filledRecoveryArtifact.replace("supersedes: null", "supersedes:"),
+      filledRecoveryArtifact.replace("first_seen: 2026-07-26", "first_seen: 2026-02-30"),
+      filledRecoveryArtifact.replace("last_verified: null", "last_verified: 2026-02-30"),
+      filledRecoveryArtifact.replace("expires_after_days: 30", "expires_after_days: 0"),
+      filledRecoveryArtifact.replace("expires_after_days: 30", "expires_after_days: 1.5"),
+      filledRecoveryArtifact.replace(
+        "## Verification\n\nRun from clean preconditions and observe successful validation.",
+        "## Verification\n",
+      ),
+    ];
+
+    for (const content of invalidBodies) {
+      const receipt = recoveryProposalReceipt();
+      receipt.proposed_artifact.content = content;
+      assert.throws(
+        () => validateTerminalReceipt(receipt),
+        /content must be a complete filled sanitized recovery artifact/,
+      );
+    }
   });
 
   it("rejects high-confidence sensitive values without claiming comprehensive identity proof", () => {
@@ -431,6 +561,80 @@ Applies only to the documented managed runtime.
         /content contains a high-confidence sensitive value/,
       );
     }
+  });
+
+  it("catches home paths across every prose surface without echoing the value", () => {
+    const privatePath = "file:///Users/PrivateUser/private-project";
+    const terminalMutations = [
+      (receipt) => {
+        receipt.evidence = [`Observed (${privatePath}), then the command failed.`];
+      },
+      (receipt) => {
+        receipt.containment.summary = `Temporarily read [${privatePath}].`;
+      },
+      (receipt) => {
+        receipt.containment.verification_gate =
+          "Retry after removing (/home/PrivateUser/private-project).";
+      },
+      (receipt) => {
+        receipt.escalation.requires = [`read ${privatePath}`];
+      },
+      (receipt) => {
+        receipt.escalation.target = `/Users/PrivateUser/private-project`;
+      },
+      (receipt) => {
+        receipt.escalation.action =
+          "Inspect C:\\Users\\PrivateUser\\private-project before repair.";
+      },
+    ];
+
+    for (const mutate of terminalMutations) {
+      const receipt = structuredClone(persisted);
+      mutate(receipt);
+      const error = captureError(() => validateTerminalReceipt(receipt));
+      assert.match(error.message, /high-confidence sensitive value/);
+      assert.equal(error.message.includes("PrivateUser"), false);
+    }
+
+    const proposed = structuredClone(propagatedCase.terminal_receipt);
+    proposed.proposed_artifact.content =
+      proposed.proposed_artifact.content.replace(
+        "Make launcher discovery and authentication preflight host-aware.",
+        `Inspect ${privatePath} before repair.`,
+      );
+    const proposedError = captureError(() => validateTerminalReceipt(proposed));
+    assert.match(proposedError.message, /high-confidence sensitive value/);
+    assert.equal(proposedError.message.includes("PrivateUser"), false);
+
+    const parent = structuredClone(parentNoArtifactCase.parent_receipt);
+    parent.no_artifact_reason =
+      "The current edit directly references file:///home/PrivateUser/private-project.";
+    const parentError = captureError(() =>
+      validateParentReceipt(parent, parentNoArtifactCase.terminal_receipt),
+    );
+    assert.match(parentError.message, /high-confidence sensitive value/);
+    assert.equal(parentError.message.includes("PrivateUser"), false);
+  });
+
+  it("allows functional roots and ordinary non-home paths as safe controls", () => {
+    const terminal = structuredClone(persisted);
+    terminal.evidence = [
+      "The command fails under <user-home>/project.",
+      "The same failure reproduces under /workspace/project and /opt/tool.",
+    ];
+    terminal.containment.summary =
+      "Use <project-root>/managed-runtime for this task.";
+    terminal.containment.verification_gate =
+      "Retry from <user-home>/clean-project after repair.";
+    terminal.escalation.target = "Incident Coordinator";
+    assert.doesNotThrow(() => validateTerminalReceipt(terminal));
+
+    const parent = structuredClone(parentNoArtifactCase.parent_receipt);
+    parent.no_artifact_reason =
+      "The mismatch exists only under <project-root>/current-edit.";
+    assert.doesNotThrow(() =>
+      validateParentReceipt(parent, parentNoArtifactCase.terminal_receipt),
+    );
   });
 
   it("independently rejects a malformed child passed to the parent validator", () => {

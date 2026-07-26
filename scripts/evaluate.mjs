@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import {
   receiptPayloadDigest,
+  validateSanitizedProse,
   validateParentReceipt,
   validateTerminalReceipt,
 } from "./lib/receipt.mjs";
@@ -452,6 +453,9 @@ function validateExpectedTerminalSemantics(c, semantics, label) {
 
 function validateExpectedParentSemantics(c, semantics, label) {
   requireExactFields(semantics, label, parentSemanticsFields);
+  if (!c.expected.terminal_receipt_semantics) {
+    throw new Error(`${label} requires expected terminal_receipt_semantics`);
+  }
   const child = expectedTerminalReceipt(c, c.expected.terminal_receipt_semantics);
   if (child.terminal_outcome !== "proposed_artifact") {
     throw new Error(`${label} requires expected terminal_outcome proposed_artifact`);
@@ -506,6 +510,7 @@ function validateFixture(doc) {
     requireExactFields(c, label, caseFields);
     requireString(c, "id", label);
     requireString(c, "scenario", label);
+    validateSanitizedProse(c.scenario, `${label}.scenario`);
 
     const scope = requireField(c, "scope", label);
     requireObject(scope, `${label}.scope`);
@@ -526,6 +531,7 @@ function validateFixture(doc) {
     requireBoolean(receipt, "consulted", `${label}.receipt`);
     requireBoolean(receipt, "host_enforced", `${label}.receipt`);
     requireString(receipt, "failure", `${label}.receipt`);
+    validateSanitizedProse(receipt.failure, `${label}.receipt.failure`);
     requireEnum(receipt, "classification", `${label}.receipt`, classifications);
     requireBoolean(receipt, "stale_rejected", `${label}.receipt`);
     requireNonnegativeInteger(receipt, "repeated_failure_attempts_before", `${label}.receipt`);
@@ -594,6 +600,12 @@ function validateFixture(doc) {
     requireEnum(expected, "terminal_outcome", `${label}.expected`, expectedTerminalOutcomes);
     requireBoolean(expected, "terminal_receipt_required", `${label}.expected`);
     requireBoolean(expected, "parent_receipt_required", `${label}.expected`);
+    const classificationRequiresReceipt = expected.classification !== "none";
+    if (expected.terminal_receipt_required !== classificationRequiresReceipt) {
+      throw new Error(
+        `${label}.expected.terminal_receipt_required must be ${classificationRequiresReceipt} for classification ${expected.classification}`,
+      );
+    }
     if (
       receipt.terminal_receipt !== null
       && typeof receipt.terminal_receipt === "object"

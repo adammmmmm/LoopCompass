@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { validateCapsuleText } from "./capsule.mjs";
+import { parseIsoDate, validateCapsuleText } from "./capsule.mjs";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { normalizeSignature } from "./signature.mjs";
 
@@ -47,7 +47,8 @@ const escalationFields = new Set(["requires", "target", "action"]);
 const safeIdentifier = /^[a-z0-9][a-z0-9._:|-]*$/;
 const highConfidenceSensitivePatterns = [
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
-  /(?:^|[\s"'`(=])\/(?:Users|home)\/[^/\s"'`]+(?:\/[^\s"'`]*)?/,
+  /(?:file:\/\/)?\/(?:Users|home)\/[^/\s"'`<>()\[\]{},;]+(?:\/[^\s"'`<>()\[\]{},;]*)?/i,
+  /file:\/\/\/[A-Za-z]:\/Users\/[^/\s"'`<>()\[\]{},;]+(?:\/[^\s"'`<>()\[\]{},;]*)?/i,
   /\b[A-Za-z]:\\Users\\[^\\\s"'`]+(?:\\[^\s"'`]*)?/,
   /\b(?:sk-[A-Za-z0-9_-]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{10,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/i,
 ];
@@ -79,8 +80,10 @@ const requiredArtifactSections = Object.freeze({
   incident: ["Failure", "Repair", "Containment", "Verification"],
   recovery: ["Symptom", "Recovery", "Verification", "Limits"],
 });
-const unfilledTemplateMarker =
-  /<(?:slug-from-normalized-signature|normalized symptom or error|capability|incident-coordinator|YYYY-MM-DD|any-or-specific|tool-name|version-range-or-unknown|integer|Correct path in one line|Repair the broken mechanism)>/i;
+const recoveryScopeFields = new Set(["os", "shell", "tool", "versions"]);
+const allowedFunctionalPlaceholders = new Set(["user-home", "project-root"]);
+const maximumEvidenceItems = 8;
+const maximumEvidenceItemLength = 512;
 
 function hasField(value, field) {
   return Object.prototype.hasOwnProperty.call(value, field);
@@ -124,15 +127,22 @@ function hasHighConfidenceSensitiveValue(value) {
   return highConfidenceSensitivePatterns.some((pattern) => pattern.test(value));
 }
 
-function requireSanitizedString(value, field, label) {
-  const result = requireString(value, field, label);
-  if (hasHighConfidenceSensitiveValue(result)) {
+export function validateSanitizedProse(value, label = "prose") {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    fail(label, " must be a non-empty string");
+  }
+  if (hasHighConfidenceSensitiveValue(value)) {
     fail(
       label,
-      `.${field} contains a high-confidence sensitive value; sanitize it before receipt construction`,
+      " contains a high-confidence sensitive value; sanitize it before receipt construction",
     );
   }
-  return result;
+  return value;
+}
+
+function requireSanitizedString(value, field, label) {
+  const result = requireString(value, field, label);
+  return validateSanitizedProse(result, `${label}.${field}`);
 }
 
 function requireNormalizedSignature(value, field, label) {
@@ -217,6 +227,24 @@ function requireSanitizedStringArray(value, field, label) {
   return result;
 }
 
+function validateEvidence(value, label) {
+  const evidence = requireSanitizedStringArray(value, "evidence", label);
+  if (
+    evidence.length > maximumEvidenceItems
+    || evidence.some(
+      (item) =>
+        item.length > maximumEvidenceItemLength
+        || /[\r\n]/.test(item),
+    )
+  ) {
+    fail(
+      label,
+      `.evidence must contain at most ${maximumEvidenceItems} one-line items of at most ${maximumEvidenceItemLength} characters`,
+    );
+  }
+  return evidence;
+}
+
 function requireNullableObject(value, field, label) {
   const result = requireField(value, field, label);
   if (result === null) {
@@ -253,6 +281,128 @@ function validateContainment(containment, label) {
   }
 }
 
+function frontmatterSource(content) {
+  if (!content.startsWith("---\n")) {
+    return "";
+  }
+  const end = content.indexOf("\n---", 4);
+  return end === -1 ? "" : content.slice(4, end);
+}
+
+function parseInlineList(raw, { nonempty }) {
+  const match = /^\[(.*)\]$/.exec(raw.trim());
+  if (!match) {
+    return null;
+  }
+  if (match[1].trim() === "") {
+    return nonempty ? null : [];
+  }
+  const items = match[1].split(",").map((item) =>
+    item.trim().replace(/^(["'])(.*)\1$/, "$2"),
+  );
+  return items.some((item) => item.length === 0) ? null : items;
+}
+
+function parseNestedMap(source, key) {
+  const lines = source.split("\n");
+  const start = lines.findIndex((line) => new RegExp(`^${key}:\\s*$`).test(line));
+  if (start === -1) {
+    return null;
+  }
+  const result = {};
+  for (const line of lines.slice(start + 1)) {
+    if (!/^\s/.test(line)) {
+      break;
+    }
+    if (!line.trim()) {
+      continue;
+    }
+    const match = /^\s+([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
+    if (!match || match[2].trim().length === 0) {
+      return null;
+    }
+    if (hasField(result, match[1])) {
+      return null;
+    }
+    result[match[1]] = match[2].trim();
+  }
+  return result;
+}
+
+function sectionHasBody(body, section) {
+  const heading = new RegExp(`^##\\s+${section}\\b[^\\n]*\\n`, "m");
+  const match = heading.exec(body);
+  if (!match) {
+    return false;
+  }
+  const remainder = body.slice(match.index + match[0].length);
+  const nextHeading = remainder.search(/^##\s+/m);
+  const sectionBody = (nextHeading === -1 ? remainder : remainder.slice(0, nextHeading))
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim();
+  return sectionBody.length > 0;
+}
+
+function hasNonemptyField(fields, field) {
+  return hasField(fields, field)
+    && typeof fields[field] === "string"
+    && fields[field].trim().length > 0;
+}
+
+function hasOnlyAllowedFunctionalPlaceholders(content) {
+  const prose = content.replace(/<!--[\s\S]*?-->/g, "");
+  const placeholders = [...prose.matchAll(/<([^>\n]+)>/g)].map((match) => match[1].trim());
+  return placeholders.every((placeholder) =>
+    allowedFunctionalPlaceholders.has(placeholder),
+  );
+}
+
+function validateIncidentArtifactSchema(fields, source) {
+  const requiredPresent = requiredArtifactFields.incident.every((field) =>
+    hasNonemptyField(fields, field),
+  );
+  const requires = hasField(fields, "requires")
+    ? parseInlineList(fields.requires, { nonempty: true })
+    : null;
+  const consulted = hasField(fields, "consulted")
+    ? parseInlineList(fields.consulted, { nonempty: false })
+    : null;
+  const containmentExpiryValid =
+    fields.containment_expires === "null"
+    || parseIsoDate(fields.containment_expires) !== null;
+  return requiredPresent
+    && requires !== null
+    && consulted !== null
+    && parseIsoDate(fields.opened) !== null
+    && containmentExpiryValid
+    && source.length > 0;
+}
+
+function validateRecoveryArtifactSchema(fields, source) {
+  const requiredPresent = requiredArtifactFields.recovery.every((field) =>
+    field === "scope" ? hasField(fields, field) : hasNonemptyField(fields, field),
+  );
+  const scope = parseNestedMap(source, "scope");
+  const scopeValid =
+    scope !== null
+    && Object.keys(scope).length === recoveryScopeFields.size
+    && [...recoveryScopeFields].every((field) => hasNonemptyField(scope, field));
+  const lastVerifiedValid =
+    fields.last_verified === "null"
+    || parseIsoDate(fields.last_verified) !== null;
+  const expires = Number(fields.expires_after_days);
+  const supersedesValid =
+    fields.supersedes === "null"
+    || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(fields.supersedes);
+  return requiredPresent
+    && scopeValid
+    && parseIsoDate(fields.first_seen) !== null
+    && lastVerifiedValid
+    && Number.isInteger(expires)
+    && expires > 0
+    && supersedesValid;
+}
+
 function validateProposedArtifact(artifact, label) {
   if (artifact === null) {
     return;
@@ -261,11 +411,12 @@ function validateProposedArtifact(artifact, label) {
   const kind = requireEnum(artifact, "kind", label, new Set(["recovery", "incident"]));
   const content = requireSanitizedString(artifact, "content", label);
   const { fields, body } = parseFrontmatter(content);
-  const completeFields = requiredArtifactFields[kind].every((field) =>
-    hasField(fields, field),
-  );
+  const source = frontmatterSource(content);
+  const schemaValid = kind === "incident"
+    ? validateIncidentArtifactSchema(fields, source)
+    : validateRecoveryArtifactSchema(fields, source);
   const completeSections = requiredArtifactSections[kind].every((section) =>
-    new RegExp(`^##\\s+${section}\\b`, "m").test(body),
+    sectionHasBody(body, section),
   );
   const filename = fields.id ? `${fields.id}.md` : "proposed-artifact.md";
   const validation = validateCapsuleText(content, {
@@ -277,8 +428,8 @@ function validateProposedArtifact(artifact, label) {
   });
   if (
     !content.includes("\n")
-    || unfilledTemplateMarker.test(content)
-    || !completeFields
+    || !hasOnlyAllowedFunctionalPlaceholders(content)
+    || !schemaValid
     || !completeSections
     || validation.errors.length > 0
   ) {
@@ -362,7 +513,7 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
   requireNormalizedSignature(receipt, "signature", label);
   requireSafeIdentifier(receipt, "dedupe_key", label);
   const classification = requireEnum(receipt, "classification", label, classifications);
-  requireSanitizedStringArray(receipt, "evidence", label);
+  validateEvidence(receipt, label);
   requireEnum(receipt, "task_outcome", label, taskOutcomes);
   requireEnum(receipt, "mechanism_health", label, mechanismHealthStates);
   validateContainment(
@@ -430,6 +581,26 @@ export function validateParentReceipt(parent, childReceipt, label = "parent_rece
     && !isDeepStrictEqual(parent.proposed_artifact, childReceipt.proposed_artifact)
   ) {
     fail(label, ".proposed_artifact must preserve the complete child proposed artifact");
+  }
+  if (outcome === "persisted_artifact" && childReceipt.proposed_artifact !== null) {
+    const proposedId = parseFrontmatter(childReceipt.proposed_artifact.content).fields.id;
+    const collisionSuffix = parent.artifact_ref?.startsWith(`${proposedId}-`)
+      ? parent.artifact_ref.slice(proposedId.length + 1)
+      : "";
+    const collisionNumber = Number(collisionSuffix);
+    const validArtifactRef =
+      parent.artifact_ref === proposedId
+      || (
+        /^[1-9][0-9]*$/.test(collisionSuffix)
+        && Number.isSafeInteger(collisionNumber)
+        && collisionNumber >= 2
+      );
+    if (!validArtifactRef) {
+      fail(
+        label,
+        ".artifact_ref must equal the proposed artifact id or its documented -N collision id",
+      );
+    }
   }
   if (
     outcome === "persisted_artifact"

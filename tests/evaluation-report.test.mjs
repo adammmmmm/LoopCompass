@@ -56,8 +56,8 @@ describe("evaluation benchmark report", () => {
     assert.match(result.stdout, /Blind retry rate \| 3\/15 \| 20\.0%/);
     assert.match(result.stdout, /Time to verified normal path \| 7\/10 \| 70\.0%/);
     assert.match(result.stdout, /Terminal outcome compliance \| 12\/15 \| 80\.0%/);
-    assert.match(result.stdout, /Terminal receipt completeness \| 6\/7 \| 85\.7%/);
-    assert.match(result.stdout, /Terminal receipt semantic accuracy \| 6\/7 \| 85\.7%/);
+    assert.match(result.stdout, /Terminal receipt completeness \| 11\/14 \| 78\.6%/);
+    assert.match(result.stdout, /Terminal receipt semantic accuracy \| 11\/14 \| 78\.6%/);
     assert.match(result.stdout, /Worker-to-parent closure \| 3\/4 \| 75\.0%/);
     assert.match(result.stdout, /Live integration required \| false/);
     assert.match(result.stdout, /## Host versus skill breakdown/);
@@ -197,6 +197,28 @@ describe("evaluation benchmark report", () => {
     );
   });
 
+  it("sanitizes fixture scenario and failure prose without echoing matches", () => {
+    const mutations = [
+      (doc) => {
+        doc.cases[0].scenario =
+          "The failure occurred at file:///Users/PrivateUser/private-project.";
+      },
+      (doc) => {
+        doc.cases[0].receipt.failure =
+          "The command failed under (/home/PrivateUser/private-project).";
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      mutate(doc);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stderr, /contains a high-confidence sensitive value/);
+      assert.equal(result.stderr.includes("PrivateUser"), false);
+    }
+  });
+
   it("rejects negative attempt and step counts before scoring", () => {
     const invalidCounts = [
       ["receipt.repeated_failure_attempts_before", (doc) => {
@@ -253,7 +275,11 @@ describe("evaluation benchmark report", () => {
 
   it("scores a consulted but wrong decision as a skill and classification failure", () => {
     const doc = readFixture();
-    doc.cases[0].receipt.classification = "incident";
+    const receiptCase = doc.cases.find(
+      (item) => item.id === "lc-eval-012-workaround-is-containment",
+    );
+    receiptCase.receipt.classification = "external";
+    receiptCase.receipt.terminal_receipt.classification = "external";
 
     const result = runEvaluateWithDoc(doc);
 
@@ -262,7 +288,7 @@ describe("evaluation benchmark report", () => {
     assert.match(result.stdout, /Classification accuracy when consulted \| 10\/11 \| 90\.9%/);
     assert.match(
       result.stdout,
-      /lc-eval-001-known-recovery \| codex-synthetic \| pass \| fail \| fail/,
+      /lc-eval-012-workaround-is-containment \| codex-synthetic \| pass \| fail \| fail/,
     );
   });
 
@@ -358,20 +384,34 @@ describe("evaluation benchmark report", () => {
     assert.equal(result.status, 1);
     assert.match(
       result.stderr,
-      /terminal_receipt_required must be true when terminal_receipt is present/,
+      /terminal_receipt_required must be true for classification incident/,
     );
   });
 
-  it("does not allow proposed-artifact cases to shrink receipt or parent denominators", () => {
+  it("derives terminal receipt requiredness from every classified expectation", () => {
+    const doc = readFixture();
+    const receiptCase = doc.cases.find(
+      (c) => c.id === "lc-eval-011-workaround-erases-classification",
+    );
+    receiptCase.expected.terminal_receipt_required = false;
+    delete receiptCase.expected.terminal_receipt_semantics;
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /terminal_receipt_required must be true for classification incident/,
+    );
+  });
+
+  it("does not allow proposed-artifact cases to shrink the parent denominator", () => {
     const doc = readFixture();
     const receiptCase = doc.cases.find(
       (c) => c.id === "lc-eval-013-parent-without-store-propagates",
     );
-    receiptCase.receipt.terminal_receipt = null;
     receiptCase.receipt.parent_receipt = null;
-    receiptCase.expected.terminal_receipt_required = false;
     receiptCase.expected.parent_receipt_required = false;
-    delete receiptCase.expected.terminal_receipt_semantics;
     delete receiptCase.expected.parent_receipt_semantics;
 
     const result = runEvaluateWithDoc(doc);
@@ -380,6 +420,25 @@ describe("evaluation benchmark report", () => {
     assert.match(
       result.stderr,
       /proposed_artifact requires terminal_receipt_required and parent_receipt_required/,
+    );
+  });
+
+  it("rejects parent semantics without terminal semantics explicitly", () => {
+    const doc = readFixture();
+    const receiptCase = doc.cases.find(
+      (c) => c.id === "lc-eval-003-expected-negative",
+    );
+    receiptCase.expected.parent_receipt_semantics = structuredClone(
+      doc.cases.find((c) => c.id === "lc-eval-015-missing-parent-receipt")
+        .expected.parent_receipt_semantics,
+    );
+
+    const result = runEvaluateWithDoc(doc);
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /parent_receipt_semantics requires expected terminal_receipt_semantics/,
     );
   });
 
@@ -461,7 +520,7 @@ describe("evaluation benchmark report", () => {
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(
         result.stdout,
-        /Terminal receipt semantic accuracy \| 5\/7 \| 71\.4%/,
+        /Terminal receipt semantic accuracy \| 10\/14 \| 71\.4%/,
       );
       assert.match(result.stdout, /Skill decision quality \| 9\/11 \| 81\.8%/);
       assert.match(
@@ -501,7 +560,7 @@ describe("evaluation benchmark report", () => {
       mutate(receiptCase.receipt.terminal_receipt);
       const result = runEvaluateWithDoc(doc);
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.match(result.stdout, /Terminal receipt semantic accuracy \| 5\/7 \| 71\.4%/);
+      assert.match(result.stdout, /Terminal receipt semantic accuracy \| 10\/14 \| 71\.4%/);
     }
 
     const proposedDoc = readFixture();
@@ -515,7 +574,7 @@ describe("evaluation benchmark report", () => {
       );
     const proposedResult = runEvaluateWithDoc(proposedDoc);
     assert.equal(proposedResult.status, 0, proposedResult.stderr || proposedResult.stdout);
-    assert.match(proposedResult.stdout, /Terminal receipt semantic accuracy \| 5\/7 \| 71\.4%/);
+    assert.match(proposedResult.stdout, /Terminal receipt semantic accuracy \| 10\/14 \| 71\.4%/);
   });
 
   it("scores exact signature, dedupe key, and minimal evidence semantics", () => {
@@ -539,7 +598,7 @@ describe("evaluation benchmark report", () => {
       mutate(receiptCase.receipt.terminal_receipt);
       const result = runEvaluateWithDoc(doc);
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.match(result.stdout, /Terminal receipt semantic accuracy \| 5\/7 \| 71\.4%/);
+      assert.match(result.stdout, /Terminal receipt semantic accuracy \| 10\/14 \| 71\.4%/);
       assert.match(result.stdout, /Skill decision quality \| 9\/11 \| 81\.8%/);
     }
   });
@@ -547,7 +606,7 @@ describe("evaluation benchmark report", () => {
   it("scores exact authoritative parent payloads and no-artifact reasons", () => {
     const mutations = [
       ["lc-eval-008-subagent-readonly-handoff", (parent) => {
-        parent.artifact_ref = "different-artifact-reference";
+        parent.artifact_ref = `${parent.artifact_ref}-2`;
       }],
       ["lc-eval-008-subagent-readonly-handoff", (parent) => {
         parent.escalation.action = "Perform a different repair action.";

@@ -37,7 +37,7 @@
         "host": "codex-synthetic",
         "consulted": true,
         "host_enforced": true,
-        "failure": "uv sync failed writing cache under /home/runner/.cache/uv with disk full on ephemeral runner",
+        "failure": "uv sync failed writing cache under <user-home>/.cache/uv with disk full on an ephemeral runner",
         "classification": "recovery",
         "applied_existing_artifact": true,
         "stale_rejected": false,
@@ -45,7 +45,31 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 2,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-001",
+          "signature": "uv cache write fails when an ephemeral runner disk is full.",
+          "dedupe_key": "uv|cache-write|ephemeral-disk-full",
+          "classification": "recovery",
+          "evidence": [
+            "The cache write fails after the ephemeral runner exhausts disk space.",
+            "The verified recovery restores sufficient writable cache capacity."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "uv-cache-write-ephemeral-disk-full",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -57,7 +81,26 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": false,
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "uv cache write fails when an ephemeral runner disk is full.",
+          "dedupe_key": "uv|cache-write|ephemeral-disk-full",
+          "evidence": [
+            "The cache write fails after the ephemeral runner exhausts disk space.",
+            "The verified recovery restores sufficient writable cache capacity."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "uv-cache-write-ephemeral-disk-full",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
         "parent_receipt_required": false
       }
     },
@@ -75,7 +118,7 @@
         "host": "claude-synthetic",
         "consulted": true,
         "host_enforced": true,
-        "failure": "build wrapper failed because it hardcodes C:\\Users\\dev\\project\\scripts\\build.ps1 on CI",
+        "failure": "build wrapper failed because it hardcodes <project-root>/scripts/build.ps1 on CI",
         "classification": "incident",
         "applied_existing_artifact": false,
         "stale_rejected": false,
@@ -83,7 +126,37 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-002",
+          "signature": "Build wrapper hardcodes a workstation-specific script path on CI.",
+          "dedupe_key": "build-wrapper|hardcoded-script-path|ci",
+          "classification": "incident",
+          "evidence": [
+            "The wrapper resolves a workstation-specific path instead of the project root.",
+            "The same wrapper failure reproduces on a clean CI runner."
+          ],
+          "task_outcome": "incomplete",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "build-wrapper-hardcodes-workstation-script-path",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "build wrapper repair owner",
+            "action": "Resolve the script from the project root and verify the wrapper on clean CI."
+          }
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -95,7 +168,32 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": false,
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Build wrapper hardcodes a workstation-specific script path on CI.",
+          "dedupe_key": "build-wrapper|hardcoded-script-path|ci",
+          "evidence": [
+            "The wrapper resolves a workstation-specific path instead of the project root.",
+            "The same wrapper failure reproduces on a clean CI runner."
+          ],
+          "task_outcome": "incomplete",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "build-wrapper-hardcodes-workstation-script-path",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "build wrapper repair owner",
+            "action": "Resolve the script from the project root and verify the wrapper on clean CI."
+          }
+        },
         "parent_receipt_required": false
       }
     },
@@ -158,7 +256,37 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-004",
+          "signature": "Git push remains rejected after credential rotation invalidates the cached credential.",
+          "dedupe_key": "git-push|credential-rotation|cached-credential-stale",
+          "classification": "incident",
+          "evidence": [
+            "Current authentication evidence contradicts the cached-credential recovery.",
+            "The stale recovery is rejected before another push."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "git-push-cached-credential-stale-after-rotation",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "credential_update"
+            ],
+            "target": "repository credential owner",
+            "action": "Install the current credential and verify the authoritative push path."
+          }
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -170,7 +298,32 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": false,
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Git push remains rejected after credential rotation invalidates the cached credential.",
+          "dedupe_key": "git-push|credential-rotation|cached-credential-stale",
+          "evidence": [
+            "Current authentication evidence contradicts the cached-credential recovery.",
+            "The stale recovery is rejected before another push."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "git-push-cached-credential-stale-after-rotation",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "credential_update"
+            ],
+            "target": "repository credential owner",
+            "action": "Install the current credential and verify the authoritative push path."
+          }
+        },
         "parent_receipt_required": false
       }
     },
@@ -196,7 +349,9 @@
         "repeated_failure_attempts_after": 3,
         "steps_to_verified_normal_path": null,
         "blind_retry": true,
-        "terminal_outcome": "missing"
+        "terminal_outcome": "missing",
+        "terminal_receipt": null,
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -208,7 +363,31 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": false,
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "GitHub Actions permission failure repeats under the same command and credential class.",
+          "dedupe_key": "github-actions|permission-failure|blind-retry",
+          "evidence": [
+            "The same permission failure repeats three times without a context change."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "github-actions-permission-failure-repeats",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "workflow_permission_change"
+            ],
+            "target": "workflow permission owner",
+            "action": "Grant the required workflow permission and verify the original action."
+          }
+        },
         "parent_receipt_required": false
       }
     },
@@ -327,7 +506,31 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 2,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-007",
+          "signature": "Release manifest digest differs when generated before LF canonicalization.",
+          "dedupe_key": "release-manifest|digest|lf-canonicalization",
+          "classification": "recovery",
+          "evidence": [
+            "The verified release path hashes LF-canonical skill bytes.",
+            "Regeneration after canonicalization makes package validation pass."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "release-manifest-digest-lf-canonicalization",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -339,7 +542,26 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": false,
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Release manifest digest differs when generated before LF canonicalization.",
+          "dedupe_key": "release-manifest|digest|lf-canonicalization",
+          "evidence": [
+            "The verified release path hashes LF-canonical skill bytes.",
+            "Regeneration after canonicalization makes package validation pass."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "release-manifest-digest-lf-canonicalization",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
         "parent_receipt_required": false
       }
     },
@@ -405,7 +627,7 @@
           "child_payload_sha256": "01ffe8099dc66ad6378b3b1eb2eb7395c7d7b2aac66a1e3c8bf7865bbc8d2864",
           "ingested": true,
           "terminal_action": "persisted_artifact",
-          "artifact_ref": "windows-path-normalization-deterministically-fails",
+          "artifact_ref": "windows-path-normalization-fails-deterministically",
           "no_artifact_reason": null,
           "proposed_artifact": null,
           "escalation": {
@@ -460,7 +682,7 @@
         },
         "parent_receipt_semantics": {
           "terminal_action": "persisted_artifact",
-          "artifact_ref": "windows-path-normalization-deterministically-fails",
+          "artifact_ref": "windows-path-normalization-fails-deterministically",
           "no_artifact_reason": null,
           "proposed_artifact": null,
           "escalation": {
@@ -496,7 +718,31 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 3,
         "blind_retry": false,
-        "terminal_outcome": "persisted_artifact"
+        "terminal_outcome": "persisted_artifact",
+        "terminal_receipt": {
+          "receipt_schema": 1,
+          "receipt_id": "parent-lc-eval-009",
+          "signature": "Host skill discovery misses LoopCompass while project policy provides direct recovery lookup.",
+          "dedupe_key": "skill-discovery|missing-skill|policy-fallback",
+          "classification": "recovery",
+          "evidence": [
+            "Project policy directs a direct recovery search when skill discovery is unavailable.",
+            "The verified recovery succeeds after the policy fallback is followed."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "terminal_outcome": "persisted_artifact",
+          "artifact_ref": "skill-discovery-missing-policy-fallback",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -508,7 +754,26 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": false,
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Host skill discovery misses LoopCompass while project policy provides direct recovery lookup.",
+          "dedupe_key": "skill-discovery|missing-skill|policy-fallback",
+          "evidence": [
+            "Project policy directs a direct recovery search when skill discovery is unavailable.",
+            "The verified recovery succeeds after the policy fallback is followed."
+          ],
+          "task_outcome": "completed",
+          "mechanism_health": "healthy",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "skill-discovery-missing-policy-fallback",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": null
+        },
         "parent_receipt_required": false
       }
     },
@@ -534,7 +799,9 @@
         "repeated_failure_attempts_after": 2,
         "steps_to_verified_normal_path": null,
         "blind_retry": true,
-        "terminal_outcome": "no_artifact"
+        "terminal_outcome": "no_artifact",
+        "terminal_receipt": null,
+        "parent_receipt": null
       },
       "expected": {
         "consulted": true,
@@ -546,7 +813,31 @@
         "time_to_verified_normal_path_max_steps": 3,
         "blind_retry": false,
         "terminal_outcome": "persisted_artifact",
-        "terminal_receipt_required": false,
+        "terminal_receipt_required": true,
+        "terminal_receipt_semantics": {
+          "signature": "Environment-specific browser transport fails repeatedly without project-policy consultation.",
+          "dedupe_key": "browser-transport|environment-specific|missing-policy-consultation",
+          "evidence": [
+            "The same transport failure repeats without consulting project memory."
+          ],
+          "task_outcome": "blocked",
+          "mechanism_health": "broken",
+          "containment": {
+            "used": false,
+            "summary": null,
+            "verification_gate": null
+          },
+          "artifact_ref": "browser-transport-environment-specific-failure",
+          "no_artifact_reason": null,
+          "proposed_artifact": null,
+          "escalation": {
+            "requires": [
+              "repository_write"
+            ],
+            "target": "browser transport repair owner",
+            "action": "Repair and verify the authoritative transport path in the affected environment."
+          }
+        },
         "parent_receipt_required": false
       }
     },

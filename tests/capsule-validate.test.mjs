@@ -6,6 +6,7 @@ import { describe, it, after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
+  parseIsoDate,
   validateCapsuleText,
   validateStateDir,
 } from "../scripts/lib/capsule.mjs";
@@ -15,6 +16,12 @@ const fixtures = path.join(root, "fixtures", "capsules");
 const examples = path.join(root, "examples", "capsules");
 
 describe("capsule validator", () => {
+  it("accepts only real calendar dates", () => {
+    assert.ok(parseIsoDate("2026-02-28") instanceof Date);
+    assert.equal(parseIsoDate("2026-02-30"), null);
+    assert.equal(parseIsoDate("2026-13-01"), null);
+  });
+
   it("accepts good recovery fixture", () => {
     const text = readFileSync(path.join(fixtures, "good-recovery.md"), "utf8");
     const r = validateCapsuleText(text, {

@@ -42,8 +42,9 @@ escalation:
   action: <exact-action-needed>
 ```
 
-All keys are required; fields marked `null` stay present. `evidence` and `requires` are non-empty
-lists when used. `containment.summary` and `containment.verification_gate` are non-empty only when
+All keys are required; fields marked `null` stay present. `evidence` contains 1–8 single-line,
+sanitized facts, each at most 512 characters. `requires` is a non-empty list when used.
+`containment.summary` and `containment.verification_gate` are non-empty only when
 `containment.used` is true.
 
 The schema is closed: do not add raw-log, transcript, private-payload, or host-specific fields.
@@ -54,8 +55,12 @@ Receipt ids, dedupe keys, and artifact references use lowercase host-neutral ide
 ids are unique within the handoff chain.
 
 `proposed_artifact.content` is the complete filled recovery or incident Markdown artifact,
-including frontmatter and every required template section. It is not a one-line instruction,
-summary, patch fragment, or artifact id.
+including type-correct, non-empty required frontmatter and a non-empty body under every required
+template section. Incident dates must be real calendar dates. Recovery scope contains only the
+required non-empty OS, shell, tool, and versions values; its dates and positive expiry follow the
+recovery schema. Shipped template placeholders are not filled values. Only the functional
+`<user-home>` and `<project-root>` substitutions may remain in a complete sanitized artifact. The
+content is not a one-line instruction, summary, patch fragment, or artifact id.
 
 Outcome-specific rules:
 
@@ -110,7 +115,9 @@ for different receipts. An authoritative action leaves `forwarded_receipt` null;
 includes the complete unchanged child receipt. A parent that persists an incident or external
 incident retains the exact repair escalation rather than dropping it after persistence. A parent
 that propagates also repeats the child's complete proposed artifact unchanged; changing the
-candidate requires a new child classification receipt.
+candidate requires a new child classification receipt. When an authoritative parent persists a
+proposed artifact, `artifact_ref` is the proposal's mechanical id, or that id plus the documented
+`-N` collision suffix where `N` is an integer of at least 2.
 
 ## Boundaries
 
