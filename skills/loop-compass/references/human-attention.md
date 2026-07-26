@@ -93,12 +93,13 @@ action plus a stable requirement declared human-only; every `verified_closed` ma
 closure-evidence reference. These are intrinsic record checks, separate from validating the
 selected marker against current incident state. A malformed lower revision fails the whole slug;
 a valid later marker cannot mask it or authorize repair.
-Parse marker, registry, and projection collections defensively before reading fields. Null, scalar,
-array, or malformed sibling records produce explicit non-sensitive conformance errors, never a
-runtime exception. Preserve them for quarantine or authorized repair. An unscoped malformed record
-blocks mutation across the surface and suppresses every `recoverable` diagnostic; report one hard
-unscoped-surface error instead. A malformed record with a trustworthy canonical slug blocks only
-that slug.
+Parse incident, marker, registry, and projection collections defensively before reading fields.
+Incident records require a canonical slug, Boolean open state, and a requirements array. Null,
+scalar, array, or malformed sibling records produce explicit non-sensitive conformance errors,
+never a runtime exception. Preserve them for quarantine or authorized repair. An unscoped malformed
+record blocks mutation across the surface and suppresses every `recoverable` diagnostic; report one
+hard unscoped-surface error instead. A malformed record with a trustworthy canonical slug blocks
+only that slug.
 
 The surface also maintains a minimal known-obligation registry keyed by canonical incident slug.
 Keep this registry structurally separate from the projection block so deterministic re-rendering

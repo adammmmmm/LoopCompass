@@ -162,6 +162,53 @@ function isCanonicalSlug(value) {
   );
 }
 
+function incidentsBySlug(testCase, errors = []) {
+  const openIncidents = new Map();
+  const failed = new Set();
+  const seen = new Set();
+  let unscopedInvalid = false;
+  if (!Array.isArray(testCase.incidents)) {
+    errors.push("invalid_incident_collection");
+    return { openIncidents, failed, unscopedInvalid: true };
+  }
+  for (const incident of testCase.incidents) {
+    if (!isPlainRecord(incident)) {
+      errors.push("invalid_incident_record:missing-slug");
+      unscopedInvalid = true;
+      continue;
+    }
+    const slug = incident.slug;
+    if (!isCanonicalSlug(slug)) {
+      errors.push("invalid_incident_record:invalid-slug");
+      unscopedInvalid = true;
+      continue;
+    }
+    if (
+      typeof incident.open !== "boolean" ||
+      !Array.isArray(incident.requires) ||
+      incident.requires.some(
+        (requirement) =>
+          typeof requirement !== "string" || !requirement.trim(),
+      )
+    ) {
+      errors.push(`invalid_incident_record:${slug}`);
+      failed.add(slug);
+      openIncidents.delete(slug);
+      continue;
+    }
+    if (seen.has(slug)) {
+      errors.push(`duplicate_incident_record:${slug}`);
+      failed.add(slug);
+      openIncidents.delete(slug);
+      continue;
+    }
+    seen.add(slug);
+    if (incident.open) openIncidents.set(slug, incident);
+  }
+  for (const slug of failed) openIncidents.delete(slug);
+  return { openIncidents, failed, unscopedInvalid };
+}
+
 function resolveCase(fixture, testCase) {
   return {
     ...testCase,
@@ -418,9 +465,16 @@ function registryCatchUpError(
   return null;
 }
 
-function canonicalStateErrors(config, testCase, obligations, openIncidents) {
+function canonicalStateErrors(
+  config,
+  testCase,
+  obligations,
+  openIncidents,
+  failedIncidents = new Set(),
+) {
   const errors = [];
   for (const [slug, obligation] of obligations) {
+    if (failedIncidents.has(slug)) continue;
     const incident = openIncidents.get(slug);
     if (
       obligation.state === "human_action_pending" &&
@@ -503,11 +557,11 @@ function assessConformance(testCase) {
   if (!config.history_retention) errors.push("invalid_profile:history_retention");
   if (!config.surface) errors.push("invalid_profile:surface");
 
-  const openIncidents = new Map(
-    testCase.incidents
-      .filter((incident) => incident.open)
-      .map((incident) => [incident.slug, incident]),
-  );
+  const {
+    openIncidents,
+    failed: failedIncidents,
+    unscopedInvalid: unscopedIncident,
+  } = incidentsBySlug(testCase, errors);
   const {
     registry,
     failed: failedRegistry,
@@ -526,13 +580,16 @@ function assessConformance(testCase) {
     unscopedInvalid: unscopedMarker,
   } = selectObligations(testCase.obligations, config, errors);
   const unscopedSurfaceFailure =
-    unscopedRegistry || unscopedProjection || unscopedMarker;
+    unscopedIncident ||
+    unscopedRegistry ||
+    unscopedProjection ||
+    unscopedMarker;
   if (unscopedSurfaceFailure) {
     errors.push("invalid_attention_surface:unscoped-record");
   }
   const failedState = new Set([...failedObligations, ...failedRegistry]);
   for (const [slug, record] of registry) {
-    if (failedState.has(slug)) continue;
+    if (failedState.has(slug) || failedIncidents.has(slug)) continue;
     const obligation = obligations.get(slug);
     if (!obligation) {
       const incident = openIncidents.get(slug);
@@ -585,7 +642,13 @@ function assessConformance(testCase) {
   );
 
   errors.push(
-    ...canonicalStateErrors(config, testCase, obligations, openIncidents),
+    ...canonicalStateErrors(
+      config,
+      testCase,
+      obligations,
+      openIncidents,
+      failedIncidents,
+    ),
   );
 
   for (const [slug, obligation] of obligations) {
@@ -618,6 +681,7 @@ function assessConformance(testCase) {
     if (
       obligations.has(slug) ||
       failedState.has(slug) ||
+      failedIncidents.has(slug) ||
       registry.has(slug) ||
       openIncidents.has(slug)
     ) {
@@ -634,6 +698,10 @@ function assessConformance(testCase) {
 function reconcileProjections(testCase) {
   if (!testCase.profile_config.enabled) return testCase.projections;
   const obligationErrors = [];
+  const {
+    openIncidents,
+    failed: failedIncidents,
+  } = incidentsBySlug(testCase, obligationErrors);
   const { registry, failed: failedRegistry } = registryBySlug(
     testCase,
     obligationErrors,
@@ -663,11 +731,6 @@ function reconcileProjections(testCase) {
       obligationErrors.push(`unregistered_obligation:${slug}`);
     }
   }
-  const openIncidents = new Map(
-    testCase.incidents
-      .filter((incident) => incident.open)
-      .map((incident) => [incident.slug, incident]),
-  );
   obligationErrors.push(
     ...openIncidentObligationErrors(
       testCase.profile_config,
@@ -684,6 +747,7 @@ function reconcileProjections(testCase) {
       testCase,
       obligations,
       openIncidents,
+      failedIncidents,
     ),
   );
   assert.deepEqual(obligationErrors, [], "obligation conflict blocks reconciliation");
@@ -723,6 +787,7 @@ function repairRegistryCrash(testCase) {
   const config = testCase.profile_config;
   const errors = [];
   if (
+    !Array.isArray(testCase.incidents) ||
     !Array.isArray(testCase.known_obligations) ||
     !Array.isArray(testCase.obligations) ||
     !Array.isArray(testCase.projections)
@@ -741,6 +806,11 @@ function repairRegistryCrash(testCase) {
     obligations: markerHistory,
   };
   const {
+    openIncidents,
+    failed: failedIncidents,
+    unscopedInvalid: unscopedIncident,
+  } = incidentsBySlug(working, errors);
+  const {
     registry,
     failed: failedRegistry,
     unscopedInvalid: unscopedRegistry,
@@ -758,24 +828,25 @@ function repairRegistryCrash(testCase) {
     config,
     errors,
   );
-  if (unscopedInvalid || unscopedRegistry || unscopedProjection) {
+  if (
+    unscopedIncident ||
+    unscopedInvalid ||
+    unscopedRegistry ||
+    unscopedProjection
+  ) {
     return {
       ...testCase,
       known_obligations: knownObligations,
       obligations: markerHistory,
     };
   }
-  const openIncidents = new Map(
-    testCase.incidents
-      .filter((incident) => incident.open)
-      .map((incident) => [incident.slug, incident]),
-  );
   for (let index = 0; index < knownObligations.length; index++) {
     const record = knownObligations[index];
     if (!isPlainRecord(record)) continue;
     const slug = record.incident_slug;
     if (
       registry.get(slug) !== record ||
+      failedIncidents.has(slug) ||
       failed.has(slug) ||
       failedRegistry.has(slug)
     ) {
@@ -898,7 +969,11 @@ describe("optional human-attention profile", () => {
     assert.match(reference, /suppresses every `recoverable` diagnostic/i);
     assert.match(
       reference,
-      /Null, scalar,[\s\S]*malformed sibling records[\s\S]*never a[\s\S]*runtime exception/i,
+      /Incident records require[\s\S]*canonical slug[\s\S]*Boolean open state[\s\S]*requirements array/i,
+    );
+    assert.match(
+      reference,
+      /Null,\s*scalar,[\s\S]*malformed sibling records[\s\S]*never a[\s\S]*runtime exception/i,
     );
     assert.match(reference, /deterministically render one projection/i);
     assert.match(reference, /verification_pending/);
@@ -1359,6 +1434,118 @@ describe("optional human-attention profile", () => {
         );
       }
     }
+  });
+
+  it("parses malformed incident collections and siblings totally", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const lagRaw = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+
+    const invalidCollection = resolveCase(fixture, structuredClone(lagRaw));
+    invalidCollection.incidents = null;
+    assert.ok(
+      assessConformance(invalidCollection).includes(
+        "invalid_incident_collection",
+      ),
+    );
+    assert.ok(
+      assessConformance(invalidCollection).includes(
+        "invalid_attention_surface:unscoped-record",
+      ),
+    );
+    assert.deepEqual(repairRegistryCrash(invalidCollection), invalidCollection);
+    assert.throws(
+      () => reconcileProjections(invalidCollection),
+      /obligation conflict blocks reconciliation/,
+    );
+
+    for (const { malformed, diagnostic } of [
+      { malformed: null, diagnostic: "invalid_incident_record:missing-slug" },
+      { malformed: 7, diagnostic: "invalid_incident_record:missing-slug" },
+      { malformed: [], diagnostic: "invalid_incident_record:missing-slug" },
+      {
+        malformed: { slug: "Not Canonical", open: true, requires: [] },
+        diagnostic: "invalid_incident_record:invalid-slug",
+      },
+    ]) {
+      const testCase = resolveCase(fixture, structuredClone(lagRaw));
+      testCase.incidents.push(malformed);
+      const original = structuredClone(testCase);
+      const errors = assessConformance(testCase);
+      assert.ok(errors.includes(diagnostic));
+      assert.ok(errors.includes("invalid_attention_surface:unscoped-record"));
+      assert.doesNotMatch(
+        errors.join("\n"),
+        /recoverable_(?:first_marker_gap|registry_lag)/,
+      );
+      assert.deepEqual(repairRegistryCrash(testCase), original);
+      assert.throws(
+        () => reconcileProjections(testCase),
+        /obligation conflict blocks reconciliation/,
+      );
+    }
+
+    for (const replacement of [
+      { slug: "console-action-required", open: true },
+      {
+        slug: "console-action-required",
+        open: "true",
+        requires: ["production-console"],
+      },
+      {
+        slug: "console-action-required",
+        open: true,
+        requires: [null],
+      },
+    ]) {
+      const testCase = resolveCase(fixture, structuredClone(lagRaw));
+      testCase.incidents[0] = replacement;
+      const original = structuredClone(testCase);
+      const errors = assessConformance(testCase);
+      assert.ok(
+        errors.includes("invalid_incident_record:console-action-required"),
+      );
+      assert.doesNotMatch(errors.join("\n"), /recoverable_registry_lag/);
+      assert.deepEqual(repairRegistryCrash(testCase), original);
+      assert.throws(
+        () => reconcileProjections(testCase),
+        /obligation conflict blocks reconciliation/,
+      );
+    }
+  });
+
+  it("isolates malformed incident repair blocking by canonical slug", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "multi-slug-repair-is-isolated",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    testCase.obligations.find(
+      (marker) =>
+        marker.incident_slug === "second-console-action" &&
+        marker.revision === 1,
+    ).human_requirement = "production-console";
+    delete testCase.incidents.find(
+      (incident) => incident.slug === "second-console-action",
+    ).requires;
+    const originalIncidents = structuredClone(testCase.incidents);
+
+    const errors = assessConformance(testCase);
+    assert.ok(errors.includes("invalid_incident_record:second-console-action"));
+    assert.ok(errors.includes("recoverable_registry_lag:console-action-required"));
+    assert.ok(
+      !errors.includes("recoverable_registry_lag:second-console-action"),
+    );
+
+    const repaired = repairRegistryCrash(testCase);
+    assert.equal(repaired.known_obligations[0].last_known_revision, 2);
+    assert.equal(repaired.known_obligations[1].last_known_revision, 1);
+    assert.deepEqual(repaired.incidents, originalIncidents);
+    assert.throws(
+      () => reconcileProjections(repaired),
+      /obligation conflict blocks reconciliation/,
+    );
   });
 
   it("never treats stale closure evidence as authority to delete a live projection", () => {
