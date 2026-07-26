@@ -18,10 +18,12 @@ import {
   lstatSync,
   openSync,
   readFileSync,
+  readSync,
   realpathSync,
 } from "node:fs";
 import { constants as fsConstants } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -124,6 +126,42 @@ function readStableFile(filePath, expected, maxBytes) {
   }
 }
 
+function verifyStableFileBlob(filePath, expected, objectFormat, objectId) {
+  const noFollow = fsConstants.O_NOFOLLOW || 0;
+  const descriptor = openSync(filePath, fsConstants.O_RDONLY | noFollow);
+  try {
+    const opened = fstatSync(descriptor);
+    if (!opened.isFile() || !sameFile(opened, expected)) {
+      throw new Error("unsafe file identity");
+    }
+    const hash = createHash(objectFormat).update(`blob ${opened.size}\0`);
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let position = 0;
+    while (position < opened.size) {
+      const bytes = readSync(
+        descriptor,
+        buffer,
+        0,
+        Math.min(buffer.length, opened.size - position),
+        position,
+      );
+      if (bytes <= 0) throw new Error("short file read");
+      hash.update(buffer.subarray(0, bytes));
+      position += bytes;
+    }
+    const afterRead = fstatSync(descriptor);
+    if (
+      !sameFile(opened, afterRead) ||
+      opened.size !== afterRead.size ||
+      hash.digest("hex") !== objectId
+    ) {
+      throw new Error("file differs from HEAD");
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 function parseScalar(raw) {
   const value = raw.trim();
   if (!value) throw new Error("empty scalar");
@@ -137,6 +175,31 @@ function parseScalar(raw) {
   }
   if (value.includes("#")) throw new Error("quote values containing comments");
   return value;
+}
+
+function isEscaped(source, index) {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && source[cursor] === "\\"; cursor -= 1) {
+    backslashes += 1;
+  }
+  return backslashes % 2 === 1;
+}
+
+function hasUnsafeQuantifier(source) {
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if ("*+?".includes(character) && !isEscaped(source, index)) return true;
+    if (character === "{" && !isEscaped(source, index)) {
+      const close = source.indexOf("}", index + 1);
+      if (close === -1 || isEscaped(source, close)) return true;
+      const count = source.slice(index + 1, close);
+      if (!/^[1-9]\d{0,2}$/.test(count) || Number(count) > 256) return true;
+      index = close;
+    } else if (character === "}" && !isEscaped(source, index)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function compileProjectPattern(entry) {
@@ -165,7 +228,6 @@ function compileProjectPattern(entry) {
     source = entry.literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   } else {
     source = entry.regex;
-    const withoutFixedRepetitions = source.replace(/\{[1-9]\d{0,2}\}/g, "");
     if (
       source.length < 3 ||
       source.length > 256 ||
@@ -176,11 +238,7 @@ function compileProjectPattern(entry) {
       ) ||
       /[()]/.test(source) ||
       /\\[1-9]/.test(source) ||
-      /(^|[^\\])[*+?]/.test(source) ||
-      /[{}]/.test(withoutFixedRepetitions) ||
-      [...source.matchAll(/\{(\d+)\}/g)].some(
-        (match) => Number(match[1]) < 1 || Number(match[1]) > 256,
-      )
+      hasUnsafeQuantifier(source)
     ) {
       throw new Error("regex is not safely bounded");
     }
@@ -238,9 +296,10 @@ function parseConfig(text) {
   });
 }
 
-function loadProjectPatterns(projectRoot, stateRoot) {
+function loadProjectPatterns(projectRoot, stateRoot, trackedConfig) {
   const configPath = path.join(stateRoot, "redaction.yaml");
-  if (!existsSync(configPath)) return [];
+  if (!trackedConfig) return [];
+  if (!existsSync(configPath)) throw new Error("tracked config unavailable");
   const before = lstatSync(configPath);
   if (!before.isFile() || before.isSymbolicLink() || before.size > MAX_CONFIG_BYTES) {
     throw new Error("unsafe config");
@@ -250,6 +309,9 @@ function loadProjectPatterns(projectRoot, stateRoot) {
     throw new Error("config escaped root");
   }
   const raw = readStableFile(realConfig, before, MAX_CONFIG_BYTES);
+  if (gitBlobId(raw, trackedConfig.objectFormat) !== trackedConfig.object) {
+    throw new Error("config differs from HEAD");
+  }
   const after = lstatSync(configPath);
   if (!sameFile(before, after) || after.isSymbolicLink()) {
     throw new Error("config identity changed");
@@ -374,26 +436,93 @@ function scanText(text, counts, projectPatterns) {
   }
 }
 
-function runGit(projectRoot, args, maxBuffer = 32 * 1024 * 1024) {
-  const result = spawnSync("git", args, {
-    cwd: projectRoot,
+function cleanGitEnvironment() {
+  const environment = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith("GIT_")) environment[key] = value;
+  }
+  environment.GIT_NO_LAZY_FETCH = "1";
+  environment.GIT_OPTIONAL_LOCKS = "0";
+  environment.LC_ALL = "C";
+  return environment;
+}
+
+function runRawGit(projectRoot, args, maxBuffer = 32 * 1024 * 1024) {
+  const result = spawnSync("git", ["--no-replace-objects", ...args], {
+    cwd: path.parse(projectRoot).root,
     encoding: null,
     maxBuffer,
     windowsHide: true,
+    env: cleanGitEnvironment(),
   });
   if (result.status !== 0 || result.error) throw new Error("git preflight failed");
   return result.stdout;
 }
 
-function committedEntries(projectRoot) {
-  const roots = SCAN_DIRS.map((name) => `.loopcompass/${name}`);
-  const output = runGit(projectRoot, [
+function repositoryContext(projectRoot) {
+  const prefix = ["-C", projectRoot];
+  const top = runRawGit(projectRoot, [...prefix, "rev-parse", "--show-toplevel"])
+    .toString("utf8")
+    .trim();
+  if (realpathSync(top) !== projectRoot) throw new Error("project is not repository root");
+  const gitDirPath = runRawGit(projectRoot, [
+    ...prefix,
+    "rev-parse",
+    "--absolute-git-dir",
+  ])
+    .toString("utf8")
+    .trim();
+  const gitDir = realpathSync(gitDirPath);
+  const gitDirStat = lstatSync(gitDir);
+  if (!gitDirStat.isDirectory() || gitDirStat.isSymbolicLink()) {
+    throw new Error("unsafe git directory");
+  }
+  const bound = ["--git-dir", gitDir, "--work-tree", projectRoot];
+  const head = runRawGit(projectRoot, [...bound, "rev-parse", "--verify", "HEAD^{commit}"])
+    .toString("ascii")
+    .trim();
+  const objectFormat = runRawGit(projectRoot, [
+    ...bound,
+    "rev-parse",
+    "--show-object-format",
+  ])
+    .toString("ascii")
+    .trim();
+  if (!["sha1", "sha256"].includes(objectFormat)) throw new Error("unsupported object format");
+  return { bound, gitDir, gitDirStat, head, objectFormat };
+}
+
+function runGit(projectRoot, repository, args, maxBuffer = 32 * 1024 * 1024) {
+  return runRawGit(projectRoot, [...repository.bound, ...args], maxBuffer);
+}
+
+function statePaths() {
+  return [
+    ...SCAN_DIRS.map((name) => `.loopcompass/${name}`),
+    ".loopcompass/redaction.yaml",
+  ];
+}
+
+function assertCleanState(projectRoot, repository) {
+  const output = runGit(projectRoot, repository, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+    "--",
+    ...statePaths(),
+  ]);
+  if (output.length) throw new Error("committed state differs from HEAD");
+}
+
+function committedEntries(projectRoot, repository) {
+  const output = runGit(projectRoot, repository, [
     "ls-tree",
     "-rz",
     "--full-tree",
-    "HEAD",
+    repository.head,
     "--",
-    ...roots,
+    ...statePaths(),
   ]);
   return output
     .toString("utf8")
@@ -406,8 +535,41 @@ function committedEntries(projectRoot) {
     });
 }
 
-function scanCommittedState(projectRoot, counts, projectPatterns, stats) {
-  for (const entry of committedEntries(projectRoot)) {
+function gitBlobId(raw, objectFormat) {
+  return createHash(objectFormat)
+    .update(`blob ${raw.length}\0`)
+    .update(raw)
+    .digest("hex");
+}
+
+function readTrackedFile(projectRoot, stateRoot, repository, entry) {
+  if (entry.mode === "120000" || entry.type !== "blob" || entry.mode === "160000") {
+    throw new Error("unsupported tracked entry");
+  }
+  const candidate = path.join(projectRoot, entry.name);
+  if (!isWithin(stateRoot, candidate)) throw new Error("tracked path escaped state");
+  const before = lstatSync(candidate);
+  if (!before.isFile() || before.isSymbolicLink() || before.size > MAX_FILE_BYTES) {
+    throw new Error("unsafe tracked file");
+  }
+  const realCandidate = realpathSync(candidate);
+  if (!isWithin(projectRoot, realCandidate) || !isWithin(stateRoot, realCandidate)) {
+    throw new Error("real path escaped root");
+  }
+  const raw = readStableFile(realCandidate, before, MAX_FILE_BYTES);
+  const after = lstatSync(candidate);
+  if (!sameFile(before, after) || after.isSymbolicLink()) {
+    throw new Error("tracked file identity changed");
+  }
+  if (gitBlobId(raw, repository.objectFormat) !== entry.object) {
+    throw new Error("tracked file differs from HEAD");
+  }
+  return raw;
+}
+
+function scanCommittedState(projectRoot, stateRoot, repository, entries, counts, projectPatterns, stats) {
+  for (const entry of entries) {
+    if (entry.name === ".loopcompass/redaction.yaml") continue;
     // Git paths are canonical durable filenames. Never include them in diagnostics.
     scanText(entry.name, counts, projectPatterns);
     if (entry.mode === "120000") {
@@ -420,18 +582,32 @@ function scanCommittedState(projectRoot, counts, projectPatterns, stats) {
       stats.skipped += 1;
       continue;
     }
-    const sizeText = runGit(projectRoot, ["cat-file", "-s", entry.object], 1024)
-      .toString("ascii")
-      .trim();
-    const size = Number(sizeText);
-    if (!Number.isSafeInteger(size) || size < 0) throw new Error("invalid blob size");
-    if (size > MAX_FILE_BYTES) {
+    const candidate = path.join(projectRoot, entry.name);
+    const stat = lstatSync(candidate);
+    if (stat.size > MAX_FILE_BYTES) {
+      const realCandidate = realpathSync(candidate);
+      if (
+        !isWithin(projectRoot, realCandidate) ||
+        !isWithin(stateRoot, realCandidate) ||
+        !sameFile(stat, lstatSync(realCandidate))
+      ) {
+        throw new Error("real path escaped root");
+      }
+      verifyStableFileBlob(
+        realCandidate,
+        stat,
+        repository.objectFormat,
+        entry.object,
+      );
+      const after = lstatSync(candidate);
+      if (!sameFile(stat, after) || after.isSymbolicLink()) {
+        throw new Error("tracked file identity changed");
+      }
       increment(counts, "WARN_SIZE_LIMIT");
       stats.skipped += 1;
       continue;
     }
-    const raw = runGit(projectRoot, ["cat-file", "blob", entry.object], MAX_FILE_BYTES + 1);
-    if (raw.length !== size) throw new Error("blob size changed");
+    const raw = readTrackedFile(projectRoot, stateRoot, repository, entry);
     if (raw.includes(0)) {
       increment(counts, "WARN_BINARY_SKIPPED");
       stats.skipped += 1;
@@ -467,14 +643,37 @@ function main() {
       if (!sameFile(stateBefore, resolvedState)) fail("UNSAFE_STATE_ROOT");
     }
 
-    const projectPatterns = stateRoot
-      ? loadProjectPatterns(projectRoot, stateRoot)
-      : [];
+    const repository = repositoryContext(projectRoot);
+    assertCleanState(projectRoot, repository);
+    const entries = committedEntries(projectRoot, repository);
+    const trackedConfig = entries.find(
+      (entry) => entry.name === ".loopcompass/redaction.yaml",
+    );
+    const projectPatterns =
+      stateRoot && trackedConfig
+        ? loadProjectPatterns(projectRoot, stateRoot, {
+            ...trackedConfig,
+            objectFormat: repository.objectFormat,
+          })
+        : [];
     const counts = new Map();
     const stats = { scanned: 0, skipped: 0 };
-    scanCommittedState(projectRoot, counts, projectPatterns, stats);
+    if (!stateRoot && entries.length) throw new Error("tracked state unavailable");
+    if (stateRoot) {
+      scanCommittedState(
+        projectRoot,
+        stateRoot,
+        repository,
+        entries,
+        counts,
+        projectPatterns,
+        stats,
+      );
+    }
+    assertCleanState(projectRoot, repository);
     assertStableDirectory(projectRoot, projectBefore);
     if (stateRoot) assertStableDirectory(statePath, stateBefore);
+    assertStableDirectory(repository.gitDir, repository.gitDirStat);
 
     console.log(`loopcompass-redaction ${mode}`);
     console.log(`files_scanned ${stats.scanned}`);

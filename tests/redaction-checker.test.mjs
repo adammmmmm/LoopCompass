@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   lstatSync,
@@ -13,7 +14,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { after, beforeEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -56,11 +57,11 @@ function git(project, ...input) {
   return result;
 }
 
-function runHead(project, mode = "enforce") {
+function runHead(project, mode = "enforce", environment = process.env) {
   return spawnSync(
     process.execPath,
     [checker, "--project", project, "--mode", mode],
-    { encoding: "utf8" },
+    { encoding: "utf8", env: environment },
   );
 }
 
@@ -298,6 +299,20 @@ describe("shipped redaction checker", () => {
       [
         "version: 1",
         "patterns:",
+        "  - id: escaped-parity",
+        "    regex: '^a\\\\\\\\+b$'",
+        "",
+      ].join("\n"),
+    );
+    result = run(project, "audit");
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+
+    writeFileSync(
+      path.join(project, ".loopcompass", "redaction.yaml"),
+      [
+        "version: 1",
+        "patterns:",
         "  - id: fixed-account",
         '    regex: "\\\\bACCOUNT-[0-9]{8}\\\\b"',
         "    severity: warn",
@@ -391,6 +406,75 @@ describe("shipped redaction checker", () => {
     }
   });
 
+  it("never passes while the committed config is interleaved with an alternate file", async () => {
+    writeFileSync(
+      path.join(project, ".loopcompass", "redaction.yaml"),
+      [
+        "version: 1",
+        "patterns:",
+        "  - id: committed-rule",
+        '    literal: "Sensitive Synthetic Organization"',
+        "",
+      ].join("\n"),
+    );
+    writeState(
+      project,
+      "incidents",
+      "finding.md",
+      "Sensitive Synthetic Organization\n",
+    );
+    assert.equal(run(project).status, 1);
+
+    const config = path.join(project, ".loopcompass", "redaction.yaml");
+    const held = path.join(project, ".loopcompass", "redaction.held");
+    const alternate = path.join(tmp, `alternate-config-${Date.now()}.yaml`);
+    writeFileSync(alternate, "version: 1\npatterns:\n");
+    const swapper = spawn(
+      process.execPath,
+      [
+        "-e",
+        `
+          const fs = require("node:fs");
+          const [target, held, alternate] = process.argv.slice(1);
+          const until = Date.now() + 1200;
+          while (Date.now() < until) {
+            try {
+              fs.renameSync(target, held);
+              fs.copyFileSync(alternate, target);
+              fs.rmSync(target);
+              fs.renameSync(held, target);
+            } catch {}
+          }
+          try {
+            if (!fs.existsSync(target) && fs.existsSync(held)) fs.renameSync(held, target);
+          } catch {}
+        `,
+        config,
+        held,
+        alternate,
+      ],
+      { stdio: "ignore" },
+    );
+    const swapperDone = new Promise((resolve, reject) => {
+      swapper.once("error", reject);
+      swapper.once("exit", (code) =>
+        code === 0 ? resolve() : reject(new Error(`swapper exited ${code}`)),
+      );
+    });
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const result = runHead(project);
+      assert.notEqual(result.status, 0, result.stdout);
+      assert.ok([1, 2].includes(result.status), result.stderr || result.stdout);
+      assert.doesNotMatch(
+        result.stdout + result.stderr,
+        /Sensitive Synthetic Organization|alternate-config|finding\.md/,
+      );
+    }
+    await swapperDone;
+    assert.ok(existsSync(config));
+    assert.equal(runHead(project).status, 1);
+  });
+
   it("skips oversized and binary files with stable warnings", () => {
     writeState(project, "recoveries", "large.md", "a".repeat(1024 * 1024 + 1));
     writeState(project, "incidents", "binary.md", Buffer.from([0x61, 0x00, 0x62]));
@@ -421,7 +505,7 @@ describe("shipped redaction checker", () => {
     assert.equal(after, before);
   });
 
-  it("scans committed HEAD rather than a sanitized dirty worktree", () => {
+  it("rejects a sanitized dirty worktree that differs from committed HEAD", () => {
     writeState(
       project,
       "incidents",
@@ -431,12 +515,12 @@ describe("shipped redaction checker", () => {
     run(project, "audit");
     writeState(project, "incidents", "committed.md", "role: Operator\n");
     const result = runHead(project);
-    assert.equal(result.status, 1);
-    assert.match(result.stdout, /block BLOCK_EMAIL 1/);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
     assert.doesNotMatch(result.stdout + result.stderr, /committed@|committed\.md/);
   });
 
-  it("ignores untracked worktree content because it is not committed state", () => {
+  it("rejects untracked content in a committed-state lane", () => {
     writeState(project, "incidents", "clean.md", "role: Operator\n");
     run(project, "audit");
     writeState(
@@ -446,7 +530,85 @@ describe("shipped redaction checker", () => {
       "contact untracked@private-company.com\n",
     );
     const result = runHead(project);
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.equal(result.stdout.includes("BLOCK_EMAIL"), false);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    assert.doesNotMatch(result.stdout + result.stderr, /untracked@|untracked-private/);
+  });
+
+  it("does not let a dirty or deleted config hide a committed project rule", () => {
+    writeFileSync(
+      path.join(project, ".loopcompass", "redaction.yaml"),
+      [
+        "version: 1",
+        "patterns:",
+        "  - id: committed-rule",
+        '    literal: "Sensitive Synthetic Organization"',
+        "",
+      ].join("\n"),
+    );
+    writeState(
+      project,
+      "incidents",
+      "finding.md",
+      "Sensitive Synthetic Organization\n",
+    );
+    assert.equal(run(project).status, 1);
+
+    writeFileSync(
+      path.join(project, ".loopcompass", "redaction.yaml"),
+      "version: 1\npatterns:\n",
+    );
+    let result = runHead(project);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+    rmSync(path.join(project, ".loopcompass", "redaction.yaml"));
+    result = runHead(project);
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+  });
+
+  it("ignores ambient Git repository and replacement configuration", () => {
+    writeState(
+      project,
+      "incidents",
+      "secret.md",
+      "contact person@private-company.com\n",
+    );
+    assert.equal(run(project, "audit").status, 0);
+
+    const alternate = path.join(tmp, `alternate-${Date.now()}`);
+    mkdirSync(alternate);
+    git(alternate, "init", "-q");
+    git(alternate, "config", "user.name", "Worker");
+    git(alternate, "config", "user.email", "worker@example.com");
+    writeFileSync(path.join(alternate, "safe.txt"), "safe\n");
+    git(alternate, "add", "safe.txt");
+    git(alternate, "commit", "-m", "safe alternate");
+
+    const treeEntry = git(
+      project,
+      "ls-tree",
+      "HEAD",
+      ".loopcompass/incidents/secret.md",
+    ).stdout.trim();
+    const secretObject = treeEntry.split(/\s+/)[2];
+    const safeObject = spawnSync("git", ["hash-object", "-w", "--stdin"], {
+      cwd: project,
+      input: "role: Operator\n",
+      encoding: "utf8",
+    });
+    assert.equal(safeObject.status, 0, safeObject.stderr);
+    git(project, "replace", secretObject, safeObject.stdout.trim());
+
+    const result = runHead(project, "enforce", {
+      ...process.env,
+      GIT_DIR: path.join(alternate, ".git"),
+      GIT_WORK_TREE: alternate,
+      GIT_NAMESPACE: "alternate",
+      GIT_REPLACE_REF_BASE: "refs/replace",
+    });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stdout, /block BLOCK_EMAIL 1/);
+    assert.doesNotMatch(result.stdout + result.stderr, /person@|secret\.md|alternate-/);
   });
 });

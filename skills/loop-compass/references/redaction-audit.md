@@ -11,11 +11,12 @@ node <installed-skill>/scripts/redact-check.mjs --project <repo> --mode audit
 node <installed-skill>/scripts/redact-check.mjs --project <repo> --mode enforce
 ```
 
-Both modes require Git and scan the immutable `HEAD` blobs beneath `.loopcompass/incidents/`,
+Both modes require Git and scan files beneath `.loopcompass/incidents/`,
 `.loopcompass/recoveries/`, `.loopcompass/receipts/`, and `.loopcompass/terminal-receipts/`.
-Modified, deleted, and untracked worktree content is intentionally ignored: commit the intended
-state before treating the result as its audit. This prevents a sanitized dirty worktree from hiding
-sensitive content already committed in `HEAD`. `audit` reports
+Those lanes and `.loopcompass/redaction.yaml` must be tracked, clean, and byte-identical to `HEAD`;
+modified, deleted, or untracked state fails preflight. Reads use no-follow file descriptors and
+verify each blob identity against `HEAD`. Concurrent replacement of the repository root is outside
+the supported execution contract and fails when detected. `audit` reports
 historical findings without failing because of content findings. `enforce` exits nonzero for
 high-confidence blocking categories. Warnings do not fail either mode. Invocation, configuration,
 and filesystem-preflight errors fail safely in both modes.

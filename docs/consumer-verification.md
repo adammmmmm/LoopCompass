@@ -38,7 +38,7 @@ node <installed-skill>/scripts/redact-check.mjs --project /path/to/your/repo --m
 
 `audit` reports historical findings without failing on content. `enforce` fails on
 high-confidence findings. Both are local, require Git, and otherwise use only the Node standard
-library. They inspect immutable `HEAD` blobs, not dirty or untracked worktree content. See the installed
+library. Scanned state must be tracked, clean, and byte-identical to `HEAD`. See the installed
 `references/redaction-audit.md` for configuration, limits, and non-sensitive output guarantees.
 
 ## Related maintainer commands

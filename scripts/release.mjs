@@ -464,6 +464,34 @@ function compareSemver(a, b) {
   return 0;
 }
 
+function sameManifestPayload(left, right) {
+  const fields = [
+    "name",
+    "version",
+    "source",
+    "release",
+    "skill_schema",
+    "policy_version",
+    "state_schema",
+    "minimum_policy_version",
+  ];
+  return (
+    fields.every((field) => String(left[field]) === String(right[field])) &&
+    JSON.stringify(left.files) === JSON.stringify(right.files)
+  );
+}
+
+function installedPayloadMatchesManifest(installedDir, manifest) {
+  const expectedFiles = Object.keys(manifest.files).sort();
+  const actualFiles = listSkillFiles(installedDir).sort();
+  if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) return false;
+  return expectedFiles.every(
+    (relative) =>
+      sha256Buffer(readFileSync(path.join(installedDir, relative))) ===
+      manifest.files[relative],
+  );
+}
+
 function cmdCheck(args) {
   const installedIdx = args.indexOf("--installed");
   const releaseIdx = args.indexOf("--release-manifest");
@@ -488,6 +516,9 @@ function cmdCheck(args) {
 
   const installed = parseManifest(readFileSync(installedManifestPath, "utf8"));
   const release = parseManifest(readFileSync(releaseManifestPath, "utf8"));
+  if (!installedPayloadMatchesManifest(installedDir, installed)) {
+    die("installed skill payload does not match its manifest");
+  }
 
   console.log(`installed: ${installed.version} (commit ${installed.commit})`);
   console.log(`release:   ${release.version} (commit ${release.commit})`);
@@ -499,7 +530,10 @@ function cmdCheck(args) {
   );
 
   const cmp = compareSemver(installed.version, release.version);
-  if (cmp === 0 && installed.commit === release.commit) {
+  if (
+    cmp === 0 &&
+    (installed.commit === release.commit || sameManifestPayload(installed, release))
+  ) {
     console.log("status: up to date");
     process.exit(0);
   }
@@ -549,7 +583,7 @@ function cmdStageInstall(args) {
     if (!map[h]) die(`unknown host token: ${h} (use agents, claude, skills)`);
     const dest = path.join(project, map[h]);
     rmSync(dest, { recursive: true, force: true });
-    copyTree(SKILL_DIR, dest);
+    copyTree(SKILL_DIR, dest, { canonicalizeText: true });
     console.log(`staged ${path.relative(project, dest)}`);
   }
   console.log("stage-install ok (state and policy untouched)");

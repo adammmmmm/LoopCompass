@@ -78,8 +78,8 @@ node <installed-skill>/scripts/redact-check.mjs --project <repo> --mode <audit|e
 ```
 
 Use `audit` for historical assessment and `enforce` when high-confidence findings should fail an
-agent or CI check. Git is required because both modes inspect immutable `HEAD` state, not dirty or
-untracked worktree content. Neither mode sanitizes content or replaces review before the first write.
+agent or CI check. Git is required, and scanned state must be tracked, clean, and byte-identical to
+`HEAD`. Neither mode sanitizes content or replaces review before the first write.
 
 ## Create a recovery
 

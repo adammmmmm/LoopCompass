@@ -4,6 +4,7 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -221,6 +222,63 @@ describe("release tooling", () => {
           "utf8",
         ),
       );
+      const stagedManifest = path.join(staged, "manifest.yaml");
+      writeFileSync(
+        stagedManifest,
+        readFileSync(stagedManifest, "utf8").replace(
+          /^commit:\s*.+$/m,
+          `commit: ${"f".repeat(40)}`,
+        ),
+      );
+      const consumer = path.join(fixtureRoot, "consumer");
+      mkdirSync(consumer);
+      const stagedInstall = runReleaseAt(
+        fixtureRoot,
+        "stage-install",
+        "--project",
+        consumer,
+        "--hosts",
+        "agents",
+      );
+      assert.equal(stagedInstall.status, 0, stagedInstall.stderr || stagedInstall.stdout);
+      const installedSkill = path.join(
+        consumer,
+        ".agents",
+        "skills",
+        "loop-compass",
+      );
+      const compatibility = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        installedSkill,
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.equal(
+        compatibility.status,
+        0,
+        compatibility.stderr || compatibility.stdout,
+      );
+      assert.match(compatibility.stdout, /status: up to date/);
+      writeFileSync(
+        path.join(
+          installedSkill,
+          "scripts",
+          "redact-check.mjs",
+        ),
+        "// payload drift\n",
+      );
+      const drifted = runReleaseAt(
+        fixtureRoot,
+        "check",
+        "--installed",
+        path.join(fixtureRoot, "skills", "loop-compass"),
+        "--release-manifest",
+        stagedManifest,
+      );
+      assert.notEqual(drifted.status, 0);
+      assert.match(drifted.stderr, /payload does not match its manifest/);
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }

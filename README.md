@@ -131,7 +131,7 @@ skill tree (`manifest.yaml` included), docs, and a separate `SHA256SUMS` asset.
    [docs/consumer-verification.md](docs/consumer-verification.md)).
 5. Optional committed-state redaction check, directly from the installed skill:
    `node <installed-skill>/scripts/redact-check.mjs --project <repo> --mode enforce`.
-   The checker requires Git and reads immutable `HEAD` state rather than dirty worktree content.
+   The checker requires Git and requires scanned state to be clean and byte-identical to `HEAD`.
    Use `--mode audit` for a non-failing historical assessment. Passing is defense in depth, not
    proof that no PII remains.
 
