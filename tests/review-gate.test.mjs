@@ -1694,6 +1694,7 @@ async function runDriver(
 ) {
   const published = [];
   const reviewDecisions = [];
+  let observedStatuses = statuses ?? ownedStatuses(runUrl);
   let index = 1;
   const outcomePromise = runPolicyEvaluation({
     loadHead: async () => snapshots[0].pull.head.sha,
@@ -1704,11 +1705,26 @@ async function runDriver(
     loadAssociatedPullRequests: async () => associatedPullRequests(),
     publish: async (head, state, result, targetUrl) => {
       published.push({ head, state, result, targetUrl });
+      if (["pending", "terminal"].includes(state)) {
+        const terminalStates = {
+          "model-review-gate": result?.modelOk === true ? "success" : "failure",
+          "delivery-policy": result?.deliveryOk === true ? "success" : "failure",
+        };
+        observedStatuses = [
+          ...observedStatuses.filter(
+            (status) => status.target_url !== targetUrl,
+          ),
+          ...ownedStatuses(targetUrl).map((status) => ({
+            ...status,
+            state: state === "pending" ? "pending" : terminalStates[status.context],
+          })),
+        ];
+      }
     },
     publishReview: async (head, result) => {
       reviewDecisions.push(buildBotReviewDecision(result, head));
     },
-    listStatuses: async () => statuses ?? ownedStatuses(runUrl),
+    listStatuses: async () => observedStatuses,
     config,
     repository,
     pullNumber: 1,
@@ -2180,9 +2196,9 @@ test("stale review dismissal failure propagates while statuses remain blocking",
       pullNumber: 1,
       runUrl: lower,
     }),
-    /dismissal failed/,
+    /review ownership cleanup did not complete/,
   );
-  assert.deepEqual(published.map((item) => item.state), ["pending"]);
+  assert.deepEqual(published.map((item) => item.state), ["pending", "reassert"]);
 });
 
 test("post-review untrusted status dismisses the exact receipt and never publishes terminal", async () => {
@@ -2260,10 +2276,92 @@ test("post-terminal status read failure unconditionally restores blocking state 
   ]);
 });
 
+test("post-terminal foreign status restores blocking state and dismisses the exact receipt", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  const calls = [];
+  let terminalResult = null;
+  const result = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    loadAssociatedPullRequests: async () => associatedPullRequests(),
+    publish: async (head, state, value) => {
+      calls.push(state);
+      if (state === "terminal") terminalResult = value;
+    },
+    publishReview: async () => {
+      calls.push("review");
+      return { id: 504 };
+    },
+    dismissReview: async (review) => calls.push(`dismiss-${review.id}`),
+    listStatuses: async () => [
+      ...ownedStatuses(runUrl).map((status) => ({
+        ...status,
+        state: terminalResult
+          ? status.context === "model-review-gate"
+            ? terminalResult.modelOk ? "success" : "failure"
+            : terminalResult.deliveryOk ? "success" : "failure"
+          : "pending",
+      })),
+      ...(terminalResult
+        ? [{
+            context: "delivery-policy",
+            state: "success",
+            target_url: "https://invalid.example/run/1",
+          }]
+        : []),
+    ],
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl,
+  });
+  assert.equal(result.outcome, "blocked_after_terminal");
+  assert.deepEqual(calls, [
+    "pending",
+    "review",
+    "terminal",
+    "pending",
+    "dismiss-504",
+  ]);
+});
+
+test("cleanup attempts dismissal even when blocking status publication fails", async () => {
+  const lower = "https://github.com/example/project/actions/runs/100";
+  const higher = "https://github.com/example/project/actions/runs/101";
+  let reviewPosted = false;
+  let dismissalAttempted = false;
+  await assert.rejects(
+    runPolicyEvaluation({
+      loadHead: async () => sha,
+      loadSnapshot: async () => rawSnapshot(),
+      loadAssociatedPullRequests: async () => associatedPullRequests(),
+      publish: async (head, state) => {
+        if (state === "reassert") throw new Error("reassert failed");
+      },
+      publishReview: async () => {
+        reviewPosted = true;
+        return { id: 505 };
+      },
+      dismissReview: async () => {
+        dismissalAttempted = true;
+      },
+      listStatuses: async () =>
+        reviewPosted ? ownedStatuses(higher) : ownedStatuses(lower),
+      config,
+      repository,
+      pullNumber: 1,
+      runUrl: lower,
+    }),
+    /review ownership cleanup did not complete/,
+  );
+  assert.equal(dismissalAttempted, true);
+});
+
 test("post-terminal association failure blocks and dismisses the active receipt", async () => {
   const runUrl = "https://github.com/example/project/actions/runs/100";
   const calls = [];
   let associations = 0;
+  let terminalResult = null;
   const result = await runPolicyEvaluation({
     loadHead: async () => sha,
     loadSnapshot: async () => rawSnapshot(),
@@ -2272,13 +2370,24 @@ test("post-terminal association failure blocks and dismisses the active receipt"
       if (associations >= 4) throw new Error("association unavailable");
       return associatedPullRequests();
     },
-    publish: async (head, state) => calls.push(state),
+    publish: async (head, state, value) => {
+      calls.push(state);
+      if (state === "terminal") terminalResult = value;
+    },
     publishReview: async () => {
       calls.push("review");
       return { id: 503 };
     },
     dismissReview: async (review) => calls.push(`dismiss-${review.id}`),
-    listStatuses: async () => ownedStatuses(runUrl),
+    listStatuses: async () =>
+      ownedStatuses(runUrl).map((status) => ({
+        ...status,
+        state: terminalResult
+          ? status.context === "model-review-gate"
+            ? terminalResult.modelOk ? "success" : "failure"
+            : terminalResult.deliveryOk ? "success" : "failure"
+          : "pending",
+      })),
     config,
     repository,
     pullNumber: 1,
@@ -2297,6 +2406,7 @@ test("post-terminal association failure blocks and dismisses the active receipt"
 test("snapshot pager failure occurs only after pending and fails closed in review-first order", async () => {
   const runUrl = "https://github.com/example/project/actions/runs/100";
   const calls = [];
+  let terminalFailure = false;
   await assert.rejects(
     runPolicyEvaluation({
       loadHead: async () => sha,
@@ -2305,12 +2415,19 @@ test("snapshot pager failure occurs only after pending and fails closed in revie
         throw new Error("workflow history unavailable");
       },
       loadAssociatedPullRequests: async () => associatedPullRequests(),
-      publish: async (head, state) => calls.push(state),
+      publish: async (head, state) => {
+        calls.push(state);
+        if (state === "terminal") terminalFailure = true;
+      },
       publishReview: async () => {
         calls.push("review");
         return { id: 500 };
       },
-      listStatuses: async () => ownedStatuses(runUrl),
+      listStatuses: async () =>
+        ownedStatuses(runUrl).map((status) => ({
+          ...status,
+          state: terminalFailure ? "failure" : "pending",
+        })),
       config,
       repository,
       pullNumber: 1,
@@ -2367,9 +2484,12 @@ test("status ownership misses and pending publication failures overwrite old gre
     statuses: oldGreen,
     runUrl,
   });
-  assert.equal(ownershipMiss.outcome.outcome, "blocked_before_review");
-  assert.equal(ownershipMiss.published.at(-1).state, "pending");
-  assert.equal(ownershipMiss.reviewDecisions.length, 0);
+  assert.equal(ownershipMiss.outcome.outcome, "pass");
+  assert.equal(
+    ownershipMiss.published.some((item) => item.state === "terminal"),
+    true,
+  );
+  assert.equal(ownershipMiss.reviewDecisions.at(-1).event, "APPROVE");
 
   let ownershipReads = 0;
   const preTerminalPublished = [];
@@ -2397,6 +2517,7 @@ test("status ownership misses and pending publication failures overwrite old gre
 
   const published = [];
   const reviewDecisions = [];
+  let terminalFailure = false;
   await assert.rejects(
     runPolicyEvaluation({
       loadHead: async () => sha,
@@ -2607,6 +2728,7 @@ test("driver exception path fails only the original owned status contexts", asyn
   const runUrl = "https://github.com/example/project/actions/runs/7";
   const published = [];
   const reviewDecisions = [];
+  let terminalFailure = false;
   await assert.rejects(
     runPolicyEvaluation({
       loadHead: async () => sha,
@@ -2614,10 +2736,17 @@ test("driver exception path fails only the original owned status contexts", asyn
         throw new Error("synthetic driver failure");
       },
       loadAssociatedPullRequests: async () => associatedPullRequests(),
-      publish: async (head, state, result) => published.push({ head, state, result }),
+      publish: async (head, state, result) => {
+        published.push({ head, state, result });
+        if (state === "terminal") terminalFailure = true;
+      },
       publishReview: async (head, result) =>
         reviewDecisions.push(buildBotReviewDecision(result, head)),
-      listStatuses: async () => ownedStatuses(runUrl),
+      listStatuses: async () =>
+        ownedStatuses(runUrl).map((status) => ({
+          ...status,
+          state: terminalFailure ? "failure" : "pending",
+        })),
       config,
       repository,
       pullNumber: 1,

@@ -1220,6 +1220,28 @@ export function currentRunOwnsStatuses(statuses, runUrl) {
   );
 }
 
+export function currentRunOwnsTerminalStatuses(statuses, runUrl, result) {
+  const list = Array.isArray(statuses) ? statuses : [];
+  const currentRunId = actionsRunId(runUrl);
+  if (
+    currentRunId === null ||
+    statusHistoryTrustError(list, runUrl) ||
+    newestHigherRun(list, runUrl)
+  ) {
+    return false;
+  }
+  const current = latestRunStatuses(list, runUrl, currentRunId);
+  const expected = new Map([
+    ["model-review-gate", result?.modelOk === true ? "success" : "failure"],
+    ["delivery-policy", result?.deliveryOk === true ? "success" : "failure"],
+  ]);
+  return STATUS_CONTEXTS.every(
+    (context) =>
+      current.find((status) => status.context === context)?.state ===
+      expected.get(context),
+  );
+}
+
 export function actionsRunId(targetUrl) {
   const match = String(targetUrl ?? "").match(
     /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/actions\/runs\/(\d+)(?:\/.*)?$/,
@@ -1402,6 +1424,7 @@ export async function runPolicyEvaluation({
 }) {
   let originalHead = null;
   let activeReviewReceipt = null;
+  let cleanupInProgress = false;
   const policyFailure = (reason) => ({
     ok: false,
     modelOk: false,
@@ -1417,18 +1440,33 @@ export async function runPolicyEvaluation({
   };
   const dismissStaleReview = async (receipt, higherRun) => {
     if (!receipt?.id || typeof dismissReview !== "function") return;
-    try {
-      await dismissReview(receipt, higherRun);
-    } catch (error) {
-      error.reviewDismissalFailure = true;
-      throw error;
-    }
+    await dismissReview(receipt, higherRun);
   };
-  const blockWithoutRemoteRead = async (higherRun = null) => {
-    await publish(originalHead, "pending", undefined, runUrl);
-    if (activeReviewReceipt) {
-      await dismissStaleReview(activeReviewReceipt, higherRun);
-      activeReviewReceipt = null;
+  const cleanupOwnershipLoss = async (higherRun = null) => {
+    if (cleanupInProgress) return;
+    cleanupInProgress = true;
+    const receipt = activeReviewReceipt;
+    activeReviewReceipt = null;
+    const operations = [
+      higherRun
+        ? publish(originalHead, "reassert", higherRun.statuses)
+        : publish(originalHead, "pending", undefined, runUrl),
+    ];
+    if (receipt) {
+      operations.push(dismissStaleReview(receipt, higherRun));
+    }
+    const outcomes = await Promise.allSettled(operations);
+    cleanupInProgress = false;
+    const failures = outcomes
+      .filter((outcome) => outcome.status === "rejected")
+      .map((outcome) => outcome.reason);
+    if (failures.length > 0) {
+      const error = new AggregateError(
+        failures,
+        "review ownership cleanup did not complete",
+      );
+      error.cleanupAttempted = true;
+      throw error;
     }
   };
   const publishTerminalSafely = async (result) => {
@@ -1440,31 +1478,34 @@ export async function runPolicyEvaluation({
     }
     const beforeTrustError = statusHistoryTrustError(before, runUrl);
     if (beforeTrustError || !currentRunOwnsStatuses(before, runUrl)) {
-      await blockWithoutRemoteRead();
+      await cleanupOwnershipLoss();
       return "blocked_before_review";
     }
     activeReviewReceipt = await recordReview(result);
     const afterReview = await listStatuses(originalHead);
     const higherAfterReview = newestHigherRun(afterReview, runUrl);
     if (higherAfterReview) {
-      await dismissStaleReview(activeReviewReceipt, higherAfterReview);
-      activeReviewReceipt = null;
-      await publish(originalHead, "reassert", higherAfterReview.statuses);
+      await cleanupOwnershipLoss(higherAfterReview);
       return "superseded_after_review";
     }
     const afterReviewTrustError = statusHistoryTrustError(afterReview, runUrl);
     if (afterReviewTrustError || !currentRunOwnsStatuses(afterReview, runUrl)) {
-      await blockWithoutRemoteRead();
+      await cleanupOwnershipLoss();
       return "blocked_after_review";
     }
     await publish(originalHead, "terminal", result, runUrl);
     const afterTerminal = await listStatuses(originalHead);
     const higherAfterTerminal = newestHigherRun(afterTerminal, runUrl);
     if (higherAfterTerminal) {
-      await dismissStaleReview(activeReviewReceipt, higherAfterTerminal);
-      activeReviewReceipt = null;
-      await publish(originalHead, "reassert", higherAfterTerminal.statuses);
+      await cleanupOwnershipLoss(higherAfterTerminal);
       return "superseded_after_terminal";
+    }
+    if (
+      statusHistoryTrustError(afterTerminal, runUrl) ||
+      !currentRunOwnsTerminalStatuses(afterTerminal, runUrl, result)
+    ) {
+      await cleanupOwnershipLoss();
+      return "blocked_after_terminal";
     }
     const overwritten = lowerRunOverwriteStatuses(afterTerminal, runUrl);
     if (overwritten.length > 0) {
@@ -1498,7 +1539,7 @@ export async function runPolicyEvaluation({
     }
     if (!reason) return null;
     if (afterTerminal) {
-      await blockWithoutRemoteRead();
+      await cleanupOwnershipLoss();
       return {
         outcome: "blocked_post_terminal_association",
         headSha: originalHead,
@@ -1575,10 +1616,10 @@ export async function runPolicyEvaluation({
     if (postTerminalAssociationFailure) return postTerminalAssociationFailure;
     return { outcome: result.ok ? "pass" : "fail", headSha: originalHead, result };
   } catch (error) {
-    if (error?.reviewDismissalFailure) throw error;
+    if (error?.cleanupAttempted) throw error;
     if (activeReviewReceipt) {
       try {
-        await blockWithoutRemoteRead();
+        await cleanupOwnershipLoss();
       } catch {}
       throw error;
     }
