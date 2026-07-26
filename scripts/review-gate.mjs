@@ -8,12 +8,11 @@ import {
   currentWorkflowHeadGenerationCandidate,
   evaluateRepositoryPolicy,
   latestBotReviewMatches,
-  isGitHubActionsReview,
+  latestMatchingBotReview,
   loadStatusHistory,
   resolvePullRequestNumber,
   resolveWorkflowHeadGenerationHistory,
   runPolicyEvaluation,
-  selectWorkflowHeadGeneration,
 } from "./lib/review-gate.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -80,11 +79,6 @@ async function evaluatePullRequest() {
   const number = resolvePullRequestNumber(event);
   const repo = repository();
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-  const generation = await resolveHeadGeneration(
-    event,
-    repo,
-    number,
-  );
   const publish = async (sha, state, result, targetUrl = runUrl) => {
     const payloads =
       state === "reassert"
@@ -100,6 +94,7 @@ async function evaluatePullRequest() {
     );
   };
   const loadSnapshot = async () => {
+    const generation = await resolveHeadGeneration(event, repo, number);
     const pull = await api(`/repos/${repo}/pulls/${number}`);
     const [files, comments, reviews] = await Promise.all([
       pages(`/repos/${repo}/pulls/${number}/files`),
@@ -115,12 +110,7 @@ async function evaluatePullRequest() {
     const decision = buildBotReviewDecision(result, sha, runUrl);
     const reviews = await pages(`/repos/${repo}/pulls/${number}/reviews`);
     if (latestBotReviewMatches(reviews, decision)) {
-      return reviews.find(
-        (review) =>
-          isGitHubActionsReview(review) &&
-          review?.commit_id === decision.commit_id &&
-          review?.body === decision.body,
-      );
+      return latestMatchingBotReview(reviews, decision);
     }
     return api(`/repos/${repo}/pulls/${number}/reviews`, {
       method: "POST",

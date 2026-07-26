@@ -217,16 +217,22 @@ export function buildBotReviewDecision(result, headSha, runUrl) {
 }
 
 export function latestBotReviewMatches(reviews, decision) {
+  return latestMatchingBotReview(reviews, decision) !== null;
+}
+
+export function latestMatchingBotReview(reviews, decision) {
+  const expectedState =
+    decision?.event === "APPROVE" ? "APPROVED" : "CHANGES_REQUESTED";
   const latest = (Array.isArray(reviews) ? reviews : [])
     .filter(isGitHubActionsReview)
     .sort(newestFirst)[0];
-  const expectedState =
-    decision?.event === "APPROVE" ? "APPROVED" : "CHANGES_REQUESTED";
   return (
     latest?.commit_id === decision?.commit_id &&
     latest?.state === expectedState &&
     latest?.body === decision?.body
-  );
+  )
+    ? latest
+    : null;
 }
 
 export function isGitHubActionsReview(review) {
@@ -1410,22 +1416,12 @@ export async function runPolicyEvaluation({
   };
   const dismissStaleReview = async (receipt, higherRun) => {
     if (!receipt?.id || typeof dismissReview !== "function") return;
-    await dismissReview(receipt, higherRun);
-  };
-  const finishReviewSafely = async (result) => {
-    const receipt = await recordReview(result);
-    const afterReview = await listStatuses(originalHead);
-    const higherAfterReview = newestHigherRun(afterReview, runUrl);
-    if (higherAfterReview) {
-      await dismissStaleReview(receipt, higherAfterReview);
-      await publish(originalHead, "reassert", higherAfterReview.statuses);
-      return "superseded_after_review";
+    try {
+      await dismissReview(receipt, higherRun);
+    } catch (error) {
+      error.reviewDismissalFailure = true;
+      throw error;
     }
-    const overwritten = lowerRunOverwriteStatuses(afterReview, runUrl);
-    if (overwritten.length > 0) {
-      await publish(originalHead, "reassert", overwritten);
-    }
-    return "reviewed";
   };
   const publishTerminalSafely = async (result) => {
     const before = await listStatuses(originalHead);
@@ -1434,19 +1430,26 @@ export async function runPolicyEvaluation({
       await publish(originalHead, "reassert", higherBefore.statuses);
       return "superseded";
     }
+    const receipt = await recordReview(result);
+    const afterReview = await listStatuses(originalHead);
+    const higherAfterReview = newestHigherRun(afterReview, runUrl);
+    if (higherAfterReview) {
+      await dismissStaleReview(receipt, higherAfterReview);
+      await publish(originalHead, "reassert", higherAfterReview.statuses);
+      return "superseded_after_review";
+    }
     await publish(originalHead, "terminal", result, runUrl);
-    const after = await listStatuses(originalHead);
-    const higherAfter = newestHigherRun(after, runUrl);
-    if (higherAfter) {
-      await publish(originalHead, "reassert", higherAfter.statuses);
+    const afterTerminal = await listStatuses(originalHead);
+    const higherAfterTerminal = newestHigherRun(afterTerminal, runUrl);
+    if (higherAfterTerminal) {
+      await dismissStaleReview(receipt, higherAfterTerminal);
+      await publish(originalHead, "reassert", higherAfterTerminal.statuses);
       return "superseded_after_terminal";
     }
-    const overwritten = lowerRunOverwriteStatuses(after, runUrl);
+    const overwritten = lowerRunOverwriteStatuses(afterTerminal, runUrl);
     if (overwritten.length > 0) {
       await publish(originalHead, "reassert", overwritten);
     }
-    const reviewOutcome = await finishReviewSafely(result);
-    if (reviewOutcome !== "reviewed") return reviewOutcome;
     return "terminal";
   };
   const failPolicy = async (reason) => {
@@ -1537,60 +1540,15 @@ export async function runPolicyEvaluation({
     if (!currentRunOwnsStatuses(statuses, runUrl)) {
       return failPolicy("current run lost ownership of both policy status contexts");
     }
-    let successReview = null;
-    if (result.ok) {
-      const immediatelyBeforeReview = await listStatuses(originalHead);
-      const higherBeforeReview = newestHigherRun(
-        immediatelyBeforeReview,
-        runUrl,
-      );
-      if (higherBeforeReview) {
-        await publish(originalHead, "reassert", higherBeforeReview.statuses);
-        return { outcome: "superseded_before_review", headSha: originalHead };
-      }
-      if (!currentRunOwnsStatuses(immediatelyBeforeReview, runUrl)) {
-        return failPolicy("current run lost ownership before review publication");
-      }
-      successReview = await recordReview(result);
-      const afterReviewStatuses = await listStatuses(originalHead);
-      const higherAfterReview = newestHigherRun(afterReviewStatuses, runUrl);
-      if (higherAfterReview) {
-        await dismissStaleReview(successReview, higherAfterReview);
-        await publish(originalHead, "reassert", higherAfterReview.statuses);
-        return { outcome: "superseded_after_review", headSha: originalHead };
-      }
-      if (!currentRunOwnsStatuses(afterReviewStatuses, runUrl)) {
-        await dismissStaleReview(successReview, null);
-        return failPolicy("current run lost ownership before terminal success");
-      }
+    const terminalOutcome = await publishTerminalSafely(result);
+    if (terminalOutcome !== "terminal") {
+      return { outcome: terminalOutcome, headSha: originalHead };
     }
-    await publish(originalHead, "terminal", result, runUrl);
     const postTerminalAssociationFailure = await failUntrustedAssociation();
     if (postTerminalAssociationFailure) return postTerminalAssociationFailure;
-    const postTerminalStatuses = await listStatuses(originalHead);
-    const higherRun = newestHigherRun(postTerminalStatuses, runUrl);
-    if (higherRun) {
-      await dismissStaleReview(successReview, higherRun);
-      await publish(originalHead, "reassert", higherRun.statuses);
-      return { outcome: "superseded_after_terminal", headSha: originalHead };
-    }
-    const postTerminalFailure = await failUntrustedHistory(postTerminalStatuses);
-    if (postTerminalFailure) return postTerminalFailure;
-    const overwrittenTerminal = lowerRunOverwriteStatuses(
-      postTerminalStatuses,
-      runUrl,
-    );
-    if (overwrittenTerminal.length > 0) {
-      await publish(originalHead, "reassert", overwrittenTerminal);
-    }
-    if (!result.ok) {
-      const reviewOutcome = await finishReviewSafely(result);
-      if (reviewOutcome !== "reviewed") {
-        return { outcome: reviewOutcome, headSha: originalHead };
-      }
-    }
     return { outcome: result.ok ? "pass" : "fail", headSha: originalHead, result };
   } catch (error) {
+    if (error?.reviewDismissalFailure) throw error;
     if (originalHead) {
       const result = policyFailure("Policy evaluation did not complete");
       try {

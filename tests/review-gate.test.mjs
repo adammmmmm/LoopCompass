@@ -14,6 +14,7 @@ import {
   matchesSensitivePath,
   loadStatusHistory,
   latestBotReviewMatches,
+  latestMatchingBotReview,
   normalizeGitHubSnapshot,
   parseHumanAuthorization,
   parseReviewComment,
@@ -1510,6 +1511,31 @@ test("bot review attestations are durably bound to their policy run", () => {
   assert.match(decision.body, /Policy run 123\./);
 });
 
+test("idempotent bot review receipt selects the newest active identical review", () => {
+  const decision = buildBotReviewDecision(
+    { modelOk: true, deliveryOk: true },
+    sha,
+  );
+  const olderDismissed = {
+    id: 10,
+    state: "DISMISSED",
+    commit_id: sha,
+    body: decision.body,
+    submitted_at: "2026-01-01T00:00:00Z",
+    user: { login: "github-actions[bot]" },
+  };
+  const newerActive = {
+    ...olderDismissed,
+    id: 11,
+    state: "APPROVED",
+    submitted_at: "2026-01-01T00:01:00Z",
+  };
+  assert.equal(
+    latestMatchingBotReview([olderDismissed, newerActive], decision).id,
+    11,
+  );
+});
+
 test("workflow runs provide a trusted per-pull-request head generation", () => {
   const otherSha = "b".repeat(40);
   assert.deepEqual(
@@ -1923,7 +1949,7 @@ test("older runs restore higher-run pending contexts after interleaved terminal 
       pullNumber: 1,
       runUrl: runA,
     });
-    assert.equal(result.outcome, "superseded_before_review");
+    assert.equal(result.outcome, "superseded");
     assert.deepEqual(published.map((item) => item.state), [
       "pending",
       "reassert",
@@ -2063,16 +2089,16 @@ test("a lower-run failure reasserts higher success that appears after terminal p
     pullNumber: 1,
     runUrl: lower,
   });
-  assert.equal(result.outcome, "superseded_after_terminal");
+  assert.equal(result.outcome, "superseded_after_review");
   assert.deepEqual(
     published.map((item) => item.state),
-    ["pending", "terminal", "reassert"],
+    ["pending", "reassert"],
   );
   assert.deepEqual(
     buildObservedStatusPayloads(published.at(-1).value).map((status) => status.state),
     ["success", "success"],
   );
-  assert.equal(reviews.length, 0);
+  assert.equal(reviews.length, 1);
 });
 
 test("a lower bot approval is neutralized when a higher run appears during review publication", async () => {
@@ -2124,6 +2150,73 @@ test("a lower bot approval is neutralized when a higher run appears during revie
   );
 });
 
+test("stale review dismissal failure propagates while statuses remain blocking", async () => {
+  const lower = "https://github.com/example/project/actions/runs/100";
+  const higher = "https://github.com/example/project/actions/runs/101";
+  const lowerOwned = ownedStatuses(lower);
+  const higherSuccess = ownedStatuses(higher).map((status) => ({
+    ...status,
+    state: "success",
+  }));
+  let reviewPosted = false;
+  const published = [];
+  await assert.rejects(
+    runPolicyEvaluation({
+      loadHead: async () => sha,
+      loadSnapshot: async () => rawSnapshot(),
+      loadAssociatedPullRequests: async () => associatedPullRequests(),
+      publish: async (head, state, value, targetUrl) =>
+        published.push({ head, state, value, targetUrl }),
+      publishReview: async () => {
+        reviewPosted = true;
+        return { id: 500 };
+      },
+      dismissReview: async () => {
+        throw new Error("dismissal failed");
+      },
+      listStatuses: async () => (reviewPosted ? higherSuccess : lowerOwned),
+      config,
+      repository,
+      pullNumber: 1,
+      runUrl: lower,
+    }),
+    /dismissal failed/,
+  );
+  assert.deepEqual(published.map((item) => item.state), ["pending"]);
+});
+
+test("snapshot pager failure occurs only after pending and fails closed in review-first order", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  const calls = [];
+  await assert.rejects(
+    runPolicyEvaluation({
+      loadHead: async () => sha,
+      loadSnapshot: async () => {
+        calls.push("generation-history-read");
+        throw new Error("workflow history unavailable");
+      },
+      loadAssociatedPullRequests: async () => associatedPullRequests(),
+      publish: async (head, state) => calls.push(state),
+      publishReview: async () => {
+        calls.push("review");
+        return { id: 500 };
+      },
+      listStatuses: async () => ownedStatuses(runUrl),
+      config,
+      repository,
+      pullNumber: 1,
+      runUrl,
+    }),
+    /workflow history unavailable/,
+  );
+  assert.deepEqual(calls, [
+    "pending",
+    "generation-history-read",
+    "review",
+    "terminal",
+  ]);
+});
+
 test("a higher run appearing immediately before review prevents the lower bot write", async () => {
   const lower = "https://github.com/example/project/actions/runs/100";
   const higher = "https://github.com/example/project/actions/runs/101";
@@ -2151,7 +2244,7 @@ test("a higher run appearing immediately before review prevents the lower bot wr
     pullNumber: 1,
     runUrl: lower,
   });
-  assert.equal(result.outcome, "superseded_before_review");
+  assert.equal(result.outcome, "superseded");
   assert.deepEqual(published.map((item) => item.state), ["pending", "reassert"]);
   assert.equal(reviews.length, 0);
 });
