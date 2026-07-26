@@ -109,10 +109,51 @@ const parentSemanticsFields = new Set([
   "forwards_child_receipt",
 ]);
 const requiredCorpusCases = new Map([
-  ["lc-eval-001-known-recovery", "classified positive"],
-  ["lc-eval-003-expected-negative", "expected negative"],
-  ["lc-eval-008-subagent-readonly-handoff", "read-only proposal and parent closure"],
-  ["lc-eval-015-missing-parent-receipt", "missing-parent negative"],
+  ["lc-eval-001-known-recovery", {
+    partition: "classified positive",
+    matches: (c) =>
+      c.expected.classification === "recovery"
+      && c.expected.terminal_outcome === "persisted_artifact"
+      && c.expected.terminal_receipt_required === true
+      && c.expected.parent_receipt_required === false
+      && c.receipt.classification === "recovery"
+      && c.receipt.terminal_outcome === "persisted_artifact"
+      && c.receipt.terminal_receipt !== null,
+  }],
+  ["lc-eval-003-expected-negative", {
+    partition: "expected negative",
+    matches: (c) =>
+      c.expected.consulted === false
+      && c.expected.classification === "none"
+      && c.expected.terminal_outcome === "no_artifact"
+      && c.expected.terminal_receipt_required === false
+      && c.expected.parent_receipt_required === false
+      && c.receipt.classification === "none"
+      && c.receipt.terminal_outcome === "no_artifact"
+      && c.receipt.terminal_receipt === null
+      && c.receipt.parent_receipt === null,
+  }],
+  ["lc-eval-008-subagent-readonly-handoff", {
+    partition: "read-only proposal and parent closure",
+    matches: (c) =>
+      c.scope.agent_role === "subagent-readonly"
+      && c.expected.classification === "incident"
+      && c.expected.terminal_outcome === "proposed_artifact"
+      && c.expected.terminal_receipt_required === true
+      && c.expected.parent_receipt_required === true
+      && c.receipt.terminal_receipt !== null
+      && c.receipt.parent_receipt?.ingested === true
+      && c.receipt.parent_receipt?.terminal_action === "persisted_artifact",
+  }],
+  ["lc-eval-015-missing-parent-receipt", {
+    partition: "missing-parent negative",
+    matches: (c) =>
+      c.scope.agent_role === "subagent-readonly"
+      && c.expected.terminal_outcome === "proposed_artifact"
+      && c.expected.parent_receipt_required === true
+      && c.receipt.terminal_receipt !== null
+      && c.receipt.parent_receipt === null,
+  }],
 ]);
 
 function usage() {
@@ -606,6 +647,7 @@ function validateFixture(doc) {
   requireArray(requireField(doc, "cases", "fixture"), "fixture.cases");
   const receiptIds = new Map();
   const caseIds = new Map();
+  const casesById = new Map();
 
   doc.cases.forEach((c, index) => {
     const label = `cases[${index}]`;
@@ -616,6 +658,7 @@ function validateFixture(doc) {
       throw new Error(`${label}.id duplicates ${caseIds.get(caseId)}`);
     }
     caseIds.set(caseId, `${label}.id`);
+    casesById.set(caseId, c);
     requireFixtureProse(c, "scenario", label);
 
     const scope = requireField(c, "scope", label);
@@ -848,10 +891,16 @@ function validateFixture(doc) {
       );
     }
   });
-  for (const [caseId, partition] of requiredCorpusCases) {
-    if (!caseIds.has(caseId)) {
+  for (const [caseId, requirement] of requiredCorpusCases) {
+    const corpusCase = casesById.get(caseId);
+    if (!corpusCase) {
       throw new Error(
-        `fixture.cases is missing required ${partition} case ${caseId}`,
+        `fixture.cases is missing required ${requirement.partition} case ${caseId}`,
+      );
+    }
+    if (!requirement.matches(corpusCase)) {
+      throw new Error(
+        `fixture.cases required ${requirement.partition} case ${caseId} does not match its semantic partition`,
       );
     }
   }

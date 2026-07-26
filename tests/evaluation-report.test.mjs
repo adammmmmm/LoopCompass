@@ -240,6 +240,42 @@ describe("evaluation benchmark report", () => {
     }
   });
 
+  it("binds required corpus ids to their semantic partitions", () => {
+    const substitutions = [
+      ["lc-eval-001-known-recovery", "classified positive"],
+      ["lc-eval-008-subagent-readonly-handoff", "read-only proposal and parent closure"],
+      ["lc-eval-015-missing-parent-receipt", "missing-parent negative"],
+    ];
+    for (const [targetId, partition] of substitutions) {
+      const doc = readFixture();
+      const targetIndex = doc.cases.findIndex((c) => c.id === targetId);
+      const replacement = structuredClone(
+        doc.cases.find((c) => c.id === "lc-eval-003-expected-negative"),
+      );
+      replacement.id = targetId;
+      doc.cases[targetIndex] = replacement;
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1);
+      assert.match(
+        result.stderr,
+        new RegExp(`required ${partition} case ${targetId} does not match its semantic partition`),
+      );
+    }
+
+    const expectedNegative = readFixture();
+    const negativeCase = expectedNegative.cases.find(
+      (c) => c.id === "lc-eval-003-expected-negative",
+    );
+    negativeCase.receipt.consulted = true;
+    negativeCase.expected.consulted = true;
+    const result = runEvaluateWithDoc(expectedNegative);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /required expected negative case lc-eval-003-expected-negative does not match its semantic partition/,
+    );
+  });
+
   it("rejects a receipt whose host does not match its declared scope", () => {
     const doc = readFixture();
     doc.cases[0].receipt.host = "different-host";

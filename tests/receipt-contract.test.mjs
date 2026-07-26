@@ -8,6 +8,8 @@ import {
   validateParentReceipt,
   validateTerminalReceipt,
 } from "../scripts/lib/receipt.mjs";
+import { parseFrontmatter } from "../scripts/lib/frontmatter.mjs";
+import { slugFromSignature } from "../scripts/lib/signature.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const receiptReference = readFileSync(
@@ -751,6 +753,29 @@ describe("terminal receipt contract", () => {
     assert.doesNotThrow(() => validateTerminalReceipt(safe));
   });
 
+  it("rejects every long shipped prose marker inside comments", () => {
+    for (const marker of proseTemplateMarkers) {
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.proposed_artifact.content =
+        proposed.proposed_artifact.content.replace(
+          "# Repair panel launcher discovery",
+          `<!-- ${marker} -->\n# Repair panel launcher discovery`,
+        );
+      assert.throws(
+        () => validateTerminalReceipt(proposed),
+        /content must be a complete filled sanitized incident artifact/,
+        marker,
+      );
+    }
+
+    const safe = structuredClone(propagatedCase.terminal_receipt);
+    safe.proposed_artifact.content = safe.proposed_artifact.content.replace(
+      "# Repair panel launcher discovery",
+      "<!-- Candidate remains subject to normal verification. -->\n# Repair panel launcher discovery",
+    );
+    assert.doesNotThrow(() => validateTerminalReceipt(safe));
+  });
+
   it("rejects nested, default-ignorable, and whitespace-obscured template markers", () => {
     const mutations = [
       (content) => content.replace(
@@ -1013,6 +1038,58 @@ describe("terminal receipt contract", () => {
         /content must be a complete filled sanitized incident artifact/,
       );
     }
+  });
+
+  it("shares one decoded representation for valid quoted signature escapes", () => {
+    const signatures = [
+      [
+        '"Panel launcher \\"discovery\\" differs between sandbox and host contexts."',
+        'Panel launcher "discovery" differs between sandbox and host contexts.',
+      ],
+      [
+        '"Panel launcher \\\\ discovery differs between sandbox and host contexts."',
+        "Panel launcher \\ discovery differs between sandbox and host contexts.",
+      ],
+      [
+        '"Panel launcher \\/ discovery differs between sandbox and host contexts."',
+        "Panel launcher / discovery differs between sandbox and host contexts.",
+      ],
+      [
+        '"Panel launcher \\u0041 discovery differs between sandbox and host contexts."',
+        "Panel launcher A discovery differs between sandbox and host contexts.",
+      ],
+    ];
+    for (const [encoded, signature] of signatures) {
+      const shared = parseFrontmatter(`---\nsignature: ${encoded}\n---\n`);
+      assert.equal(shared.fields.signature, signature);
+      assert.equal(
+        slugFromSignature(shared.fields.signature),
+        slugFromSignature(signature),
+      );
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.signature = signature;
+      proposed.proposed_artifact.content = proposed.proposed_artifact.content
+        .replace(
+          "id: panel-launcher-discovery-differs-between-sandbox-and-host-contexts",
+          `id: ${slugFromSignature(signature)}`,
+        )
+        .replace(
+          'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+          `signature: ${encoded}`,
+        );
+      assert.doesNotThrow(() => validateTerminalReceipt(proposed), signature);
+    }
+
+    const decodedControl = structuredClone(propagatedCase.terminal_receipt);
+    decodedControl.proposed_artifact.content =
+      decodedControl.proposed_artifact.content.replace(
+        'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+        'signature: "Panel launcher \\u0000 discovery differs between sandbox and host contexts."',
+      );
+    assert.throws(
+      () => validateTerminalReceipt(decodedControl),
+      /unsafe Unicode or control character/,
+    );
   });
 
   it("rejects invalid recovery lifecycle, nested scope, dates, and empty sections", () => {

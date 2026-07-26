@@ -21,10 +21,16 @@ export function parseFrontmatter(text) {
     const match = /^([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
     if (!match) continue;
     let value = match[2].trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
+    if (value.startsWith('"') && value.endsWith('"')) {
+      try {
+        const decoded = JSON.parse(value);
+        if (typeof decoded === "string") {
+          value = decoded;
+        }
+      } catch {
+        // Strict proposal validation rejects malformed JSON-compatible strings.
+      }
+    } else if (value.startsWith("'") && value.endsWith("'")) {
       value = value.slice(1, -1);
     }
     fields[match[1]] = value;

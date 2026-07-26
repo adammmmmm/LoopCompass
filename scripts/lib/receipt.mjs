@@ -708,14 +708,13 @@ function unwrapStructuralPlaceholder(value) {
 }
 
 function containsShippedTemplatePlaceholder(content, source, body, kind) {
-  const prose = content.replace(/<!--[\s\S]*?-->/g, "");
-  const normalizedProse = normalizeTemplateMarker(prose);
+  const normalizedRawContent = normalizeTemplateMarker(content);
   if (
     [...proseTemplatePlaceholders].some((marker) =>
-      normalizedProse.includes(normalizeTemplateMarker(marker)),
+      normalizedRawContent.includes(normalizeTemplateMarker(marker)),
     )
     ||
-    angleCandidatesFromEveryStart(prose).some((candidate) =>
+    angleCandidatesFromEveryStart(content).some((candidate) =>
       proseTemplatePlaceholders.has(candidate),
     )
   ) {
