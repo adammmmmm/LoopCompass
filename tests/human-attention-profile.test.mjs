@@ -123,6 +123,7 @@ function assessConformance(testCase) {
 
   const errors = [];
   if (!config.authority) errors.push("invalid_profile:authority");
+  if (!config.history_retention) errors.push("invalid_profile:history_retention");
   if (!config.surface) errors.push("invalid_profile:surface");
 
   const openIncidents = new Map(
@@ -131,6 +132,17 @@ function assessConformance(testCase) {
       .map((incident) => [incident.slug, incident]),
   );
   const obligations = selectObligations(testCase.obligations, errors);
+  const knownObligations = new Set(testCase.known_obligations);
+  for (const slug of knownObligations) {
+    if (!obligations.has(slug)) {
+      errors.push(`missing_obligation_history:${slug}`);
+    }
+  }
+  for (const slug of obligations.keys()) {
+    if (!knownObligations.has(slug)) {
+      errors.push(`unregistered_obligation:${slug}`);
+    }
+  }
   const projectionsBySlug = new Map();
   for (const projection of testCase.projections) {
     const matches = projectionsBySlug.get(projection.incident_slug) ?? [];
@@ -201,6 +213,17 @@ function reconcileProjections(testCase) {
   if (!testCase.profile_config.enabled) return testCase.projections;
   const obligationErrors = [];
   const obligations = selectObligations(testCase.obligations, obligationErrors);
+  const knownObligations = new Set(testCase.known_obligations);
+  for (const slug of knownObligations) {
+    if (!obligations.has(slug)) {
+      obligationErrors.push(`missing_obligation_history:${slug}`);
+    }
+  }
+  for (const slug of obligations.keys()) {
+    if (!knownObligations.has(slug)) {
+      obligationErrors.push(`unregistered_obligation:${slug}`);
+    }
+  }
   assert.deepEqual(obligationErrors, [], "obligation conflict blocks reconciliation");
   const deterministic = [];
 
@@ -244,6 +267,8 @@ describe("optional human-attention profile", () => {
     assert.match(reference, /owner` remains the lifecycle coordinator/i);
     assert.match(reference, /State schema 1 needs no new incident fields/i);
     assert.match(reference, /persisted obligation marker/i);
+    assert.match(reference, /minimal known-obligation registry/i);
+    assert.match(reference, /otherwise empty current state[\s\S]*not evidence/i);
     assert.match(reference, /monotonically increasing integer `revision`/i);
     assert.match(
       reference,
@@ -289,6 +314,8 @@ describe("optional human-attention profile", () => {
       "non-human-action-has-no-human-projection",
       "wrong-slug-is-missing-plus-orphan",
       "orphan-with-verified-closure-must-be-cleaned",
+      "total-deletion-remains-detectable",
+      "failed-verification-renews-human-action",
       "enabled-profile-needs-one-authority-surface",
     ]) {
       assert.ok(ids.has(id), `missing human-attention fixture: ${id}`);
@@ -306,6 +333,46 @@ describe("optional human-attention profile", () => {
     assert.deepEqual(firstPass, [testCase.expected.reconciled_projection]);
     const replay = reconcileProjections({ ...testCase, projections: firstPass });
     assert.deepEqual(replay, firstPass);
+  });
+
+  it("uses higher revision after failed verification even when the state looks earlier", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "failed-verification-renews-human-action",
+    );
+    const testCase = resolveCase(fixture, rawCase);
+    const staleProjection = {
+      incident_slug: "production-release-needs-approval",
+      state: "verification_pending",
+      obligation_revision: 2,
+    };
+
+    const firstPass = reconcileProjections({
+      ...testCase,
+      projections: [staleProjection],
+    });
+    assert.deepEqual(firstPass, [testCase.expected.reconciled_projection]);
+    const replay = reconcileProjections({ ...testCase, projections: firstPass });
+    assert.deepEqual(replay, firstPass);
+  });
+
+  it("detects total deletion from the retained known-obligation registry", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "total-deletion-remains-detectable",
+    );
+    const testCase = resolveCase(fixture, rawCase);
+
+    assert.deepEqual(testCase.incidents, []);
+    assert.deepEqual(testCase.obligations, []);
+    assert.deepEqual(testCase.projections, []);
+    assert.deepEqual(testCase.closure_evidence, []);
+    assert.deepEqual(testCase.known_obligations, [
+      "production-console-action-is-required",
+    ]);
+    assert.deepEqual(assessConformance(testCase), [
+      "missing_obligation_history:production-console-action-is-required",
+    ]);
   });
 
   it("does not mutate a consumer-owned projection during install", () => {

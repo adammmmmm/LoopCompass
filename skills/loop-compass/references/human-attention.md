@@ -18,7 +18,8 @@ An enabled project declares, in one project-governed configuration or policy sur
 - exactly one durable, project-designated attention surface, such as `HANDOFF.md` or an equivalent
   project file, project issue tracker, or operator queue; and
 - the project-designated integration authority responsible for writing and reconciling that
-  surface.
+  surface;
+- an explicit audit/retention policy for the minimal known-obligation registry described below.
 
 The declaration is project configuration, not incident state. It must be available to every
 coordinator responsible for incident lifecycle. A host adapter may choose its syntax, but it must
@@ -51,7 +52,7 @@ Formatting is consumer-defined. At minimum, the entry must convey:
 
 - canonical incident slug;
 - requested human action or decision;
-- whether human action is pending or coordinator verification is pending; and
+- whether human action is pending or coordinator verification is pending;
 - the current obligation revision described below; and
 - enough location information to reach the canonical incident.
 
@@ -74,6 +75,18 @@ Each marker is keyed by canonical incident slug and carries:
 - for `verified_closed`, a non-sensitive durable reference to the normal-path verification and
   closure evidence.
 
+The surface also maintains a minimal known-obligation registry keyed by canonical incident slug.
+Register the slug before or atomically with the first obligation marker. This registry is the
+durable expected-slug source used to detect accidental deletion of the incident, marker,
+projection, and closure evidence together. It may contain only the slug and a project retention
+policy reference; it need not repeat incident evidence or requested-action prose.
+
+Do not remove a known-obligation registry entry as part of projection cleanup, incident deletion,
+reassignment, installation, or ordinary reconciliation. It remains through the explicit
+project-declared audit/retention period. Purging it is a distinct, authorized retention action
+after the terminal marker and its evidence have satisfied that policy. Until then, a known slug
+with no obligation marker is non-conformant even when every other current-state record is absent.
+
 `human_action_pending` and `verification_pending` are active obligations and require exactly one
 visible projection. `reassigned_nonhuman` and `verified_closed` are release markers and require no
 human projection. Retain a release marker long enough for reconciliation and the project's normal
@@ -89,23 +102,30 @@ A true human-to-non-human reassignment is a separate coordinator event: first up
 incident so `requires` no longer matches a human-only identifier, then advance the marker to
 `reassigned_nonhuman`. Merely removing the token after a human action is not a reassignment.
 
+If verification fails and renewed human action is required, increment `revision` and transition
+the marker from `verification_pending` back to `human_action_pending`. The greater revision wins
+even though the state name may look earlier in the lifecycle. State names have no precedence;
+reconciliation orders only by the explicit integer revision.
+
 ## Idempotent lifecycle
 
 Reconciliation is an idempotent upsert by canonical incident slug:
 
-1. Read the enabled profile declaration, canonical open incidents, persisted obligation markers,
-   and referenced closure evidence.
-2. Match current `requires` values exactly and reconcile them with the markers using the rules
+1. Read the enabled profile declaration, known-obligation registry, canonical open incidents,
+   persisted obligation markers, and referenced closure evidence.
+2. Fail reconciliation for any known slug whose marker is absent; an otherwise empty current state
+   is not evidence that the obligation never existed or was correctly closed.
+3. Match current `requires` values exactly and reconcile them with the markers using the rules
    above.
-3. If marker history contains several revisions for a slug, select the greatest valid integer
+4. If marker history contains several revisions for a slug, select the greatest valid integer
    revision. Divergent records with the same greatest revision are a hard conflict for the
    designated authority; never choose by document order or prose.
-4. Deterministically render one projection for each active marker from the canonical slug,
+5. Deterministically render one projection for each active marker from the canonical slug,
    marker state and revision, requested action, and canonical incident location.
-5. Replace all existing projections for that slug with the deterministic result. Do not merge
+6. Replace all existing projections for that slug with the deterministic result. Do not merge
    fields from duplicates or guess which entry is newest or most advanced.
-6. Reconcile entries that no longer match an active obligation as described below.
-7. Re-read the surface and confirm the exactly-one invariant and matching obligation revision
+7. Reconcile entries that no longer match an active obligation as described below.
+8. Re-read the surface and confirm the exactly-one invariant and matching obligation revision
    before reporting projection success.
 
 Human acknowledgment or completion of the requested action is progress, not closure. Update the
@@ -185,8 +205,12 @@ copy raw logs, private payloads, secrets, or unnecessary identity data into the 
   conformant.
 - Human token removed by true reassignment, `reassigned_nonhuman` marker and no projection:
   conformant.
+- Verification fails, greater-revision `human_action_pending` marker replaces the earlier
+  `verification_pending` projection: conformant.
 - `verified_closed` marker with durable closure evidence and no projection: conformant.
 - Projection removed with no durable closure evidence: non-conformant.
+- Known-obligation slug remains but incident, marker, projection, and closure evidence are all
+  absent: non-conformant.
 - Open incident requiring only an agent capability, no entry: conformant.
 
 Deterministic cases live at `fixtures/human-attention/cases.json` in the source repository. They

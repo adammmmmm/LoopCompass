@@ -10,6 +10,7 @@
       "enabled": true,
       "surface": "HANDOFF.md",
       "authority": "incident-coordinator",
+      "history_retention": "project-audit-policy",
       "human_only_capabilities": ["production-console"],
       "human_only_decisions": []
     },
@@ -17,6 +18,7 @@
       "enabled": true,
       "surface": "OPERATOR_QUEUE.md",
       "authority": "incident-coordinator",
+      "history_retention": "project-audit-policy",
       "human_only_capabilities": [],
       "human_only_decisions": ["production-release"]
     },
@@ -24,6 +26,7 @@
       "enabled": true,
       "surface": "",
       "authority": "",
+      "history_retention": "",
       "human_only_capabilities": ["production-console"],
       "human_only_decisions": []
     }
@@ -39,6 +42,7 @@
           "requires": ["decision:production-release"]
         }
       ],
+      "known_obligations": [],
       "obligations": [],
       "projections": [],
       "closure_evidence": [],
@@ -57,6 +61,7 @@
           "requires": ["production-console"]
         }
       ],
+      "known_obligations": ["production-console-action-is-required"],
       "obligations": [
         {
           "incident_slug": "production-console-action-is-required",
@@ -88,6 +93,7 @@
           "requires": ["production-console"]
         }
       ],
+      "known_obligations": [],
       "obligations": [],
       "projections": [],
       "closure_evidence": [],
@@ -108,6 +114,7 @@
           "requires": ["production-console"]
         }
       ],
+      "known_obligations": ["production-console-action-is-required"],
       "obligations": [
         {
           "incident_slug": "production-console-action-is-required",
@@ -135,6 +142,7 @@
           "requires": ["production-console"]
         }
       ],
+      "known_obligations": ["production-console-action-is-required"],
       "obligations": [
         {
           "incident_slug": "production-console-action-is-required",
@@ -180,6 +188,7 @@
           "requires": ["decision:production-release"]
         }
       ],
+      "known_obligations": ["production-release-needs-approval"],
       "obligations": [
         {
           "incident_slug": "production-release-needs-approval",
@@ -211,6 +220,7 @@
           "requires": ["decision:production-release"]
         }
       ],
+      "known_obligations": ["production-release-needs-approval"],
       "obligations": [
         {
           "incident_slug": "production-release-needs-approval",
@@ -238,6 +248,7 @@
           "requires": ["ci-runner"]
         }
       ],
+      "known_obligations": ["production-release-needs-approval"],
       "obligations": [
         {
           "incident_slug": "production-release-needs-approval",
@@ -269,6 +280,7 @@
           "requires": ["ci-runner"]
         }
       ],
+      "known_obligations": ["production-release-needs-approval"],
       "obligations": [
         {
           "incident_slug": "production-release-needs-approval",
@@ -294,6 +306,7 @@
           "requires": ["ci-runner"]
         }
       ],
+      "known_obligations": ["production-release-needs-approval"],
       "obligations": [
         {
           "incident_slug": "production-release-needs-approval",
@@ -321,6 +334,7 @@
       "id": "verified-closure-permits-cleanup",
       "profile_config": "capability",
       "incidents": [],
+      "known_obligations": ["production-console-action-is-required"],
       "obligations": [
         {
           "incident_slug": "production-console-action-is-required",
@@ -348,6 +362,7 @@
       "id": "cleanup-without-closure-evidence-fails",
       "profile_config": "capability",
       "incidents": [],
+      "known_obligations": ["production-console-action-is-required"],
       "obligations": [
         {
           "incident_slug": "production-console-action-is-required",
@@ -375,6 +390,7 @@
           "requires": ["ci-runner"]
         }
       ],
+      "known_obligations": [],
       "obligations": [],
       "projections": [],
       "closure_evidence": [],
@@ -393,6 +409,7 @@
           "requires": ["production-console"]
         }
       ],
+      "known_obligations": ["production-console-action-is-required"],
       "obligations": [
         {
           "incident_slug": "production-console-action-is-required",
@@ -421,6 +438,7 @@
       "id": "orphan-with-verified-closure-must-be-cleaned",
       "profile_config": "capability",
       "incidents": [],
+      "known_obligations": ["production-console-action-is-required"],
       "obligations": [
         {
           "incident_slug": "production-console-action-is-required",
@@ -453,9 +471,70 @@
       }
     },
     {
+      "id": "total-deletion-remains-detectable",
+      "profile_config": "capability",
+      "incidents": [],
+      "known_obligations": ["production-console-action-is-required"],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "missing_obligation_history:production-console-action-is-required"
+        ]
+      }
+    },
+    {
+      "id": "failed-verification-renews-human-action",
+      "profile_config": "decision",
+      "incidents": [
+        {
+          "slug": "production-release-needs-approval",
+          "open": true,
+          "requires": ["decision:production-release"]
+        }
+      ],
+      "known_obligations": ["production-release-needs-approval"],
+      "obligations": [
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "verification_pending",
+          "revision": 2,
+          "requested_action": "Approve the production release."
+        },
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "human_action_pending",
+          "revision": 3,
+          "requested_action": "Correct the release approval."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "production-release-needs-approval",
+          "state": "human_action_pending",
+          "obligation_revision": 3
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": [],
+        "reconciled_projection": {
+          "incident_slug": "production-release-needs-approval",
+          "state": "human_action_pending",
+          "obligation_revision": 3,
+          "requested_action": "Correct the release approval.",
+          "incident_path": ".loopcompass/incidents/production-release-needs-approval.md"
+        }
+      }
+    },
+    {
       "id": "enabled-profile-needs-one-authority-surface",
       "profile_config": "invalid",
       "incidents": [],
+      "known_obligations": [],
       "obligations": [],
       "projections": [],
       "closure_evidence": [],
@@ -463,6 +542,7 @@
         "conformant": false,
         "errors": [
           "invalid_profile:authority",
+          "invalid_profile:history_retention",
           "invalid_profile:surface"
         ]
       }
