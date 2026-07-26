@@ -34,7 +34,8 @@ failure or a credential diagnosis.
 ## Consumer update
 
 A detached validation worktree linked to the `hedge-collector` consumer was updated with both
-project host skill installs. The release comparison reported 0.4.0, policy 2, state schema 1, and
+project host skill installs. Separate release comparisons for `.agents/skills/loop-compass` and
+`.claude/skills/loop-compass` each reported 0.4.0, policy 2, state schema 1, and
 `status: up to date`.
 
 The complete consumer `.loopcompass` file-set digest was
