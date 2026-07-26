@@ -5,6 +5,7 @@ import {
   buildBotReviewDecision,
   buildObservedStatusPayloads,
   buildStatusPayloads,
+  currentWorkflowHeadGenerationCandidate,
   evaluateRepositoryPolicy,
   latestBotReviewMatches,
   loadStatusHistory,
@@ -47,7 +48,7 @@ function repository() {
   return value;
 }
 
-async function resolveHeadGeneration(event, repo, pullNumber, headSha) {
+async function resolveHeadGeneration(event, repo, pullNumber) {
   const candidates = [];
   for (let page = 1; ; page += 1) {
     const response = await api(
@@ -65,12 +66,8 @@ async function resolveHeadGeneration(event, repo, pullNumber, headSha) {
     ["opened", "synchronize"].includes(event.action)
   ) {
     const run = await api(`/repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`);
-    candidates.push({
-      ...run,
-      display_title:
-        `delivery-policy-${event.action}-pr-${pullNumber}-head-${headSha}`,
-      pull_requests: [{ number: pullNumber }],
-    });
+    const current = currentWorkflowHeadGenerationCandidate(run, event, pullNumber);
+    if (current) candidates.push(current);
   }
   return selectWorkflowHeadGeneration(candidates, pullNumber);
 }
@@ -80,12 +77,10 @@ async function evaluatePullRequest() {
   const number = resolvePullRequestNumber(event);
   const repo = repository();
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-  const initialHead = await api(`/repos/${repo}/pulls/${number}`);
   const generation = await resolveHeadGeneration(
     event,
     repo,
     number,
-    initialHead.head.sha,
   );
   const publish = async (sha, state, result, targetUrl = runUrl) => {
     const payloads =

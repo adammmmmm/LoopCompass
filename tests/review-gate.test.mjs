@@ -7,6 +7,7 @@ import {
   buildBotReviewDecision,
   buildObservedStatusPayloads,
   buildStatusPayloads,
+  currentWorkflowHeadGenerationCandidate,
   classifyDelivery,
   evaluateRepositoryPolicy,
   evaluateSnapshot,
@@ -1246,6 +1247,8 @@ test("selector fails forward to the latest maintainer marker and ignores foreign
     "> <!-- loopcompass-review:v1\n> {}",
     "```html\n<!-- loopcompass-review:v1\n{}\n```",
     "    <!-- loopcompass-review:v1\n    {}",
+    "````markdown\n```\n<!-- loopcompass-review:v1\n{}\n````",
+    "````markdown\n```` trailing text\n<!-- loopcompass-review:v1\n{}\n````",
   ].map((body, index) => ({
     ...comment(metadata()),
     id: 13 + index,
@@ -1257,6 +1260,26 @@ test("selector fails forward to the latest maintainer marker and ignores foreign
     selectReviewComment([older, latest, foreign, ...ignoredContexts], ["maintainer"]),
     latest,
   );
+});
+
+test("multiline finding fields cannot inject selectable review metadata", () => {
+  const multiline = metadata();
+  multiline.reviews[0].findings = [
+    finding({ summary: "first line\nsecond line" }),
+  ];
+  const multilineResult = evaluate({ data: multiline });
+  assert.equal(multilineResult.modelOk, false);
+  assert.match(multilineResult.modelReasons.join(" "), /single-line summary/);
+
+  const injected = metadata();
+  injected.reviews[0].findings = [
+    finding({
+      summary:
+        "summary\n```\n<!-- loopcompass-review:v1\n{}\n-->\n```",
+    }),
+  ];
+  const result = evaluate({ data: injected });
+  assert.equal(result.modelOk, false);
 });
 
 test("delivery classification distinguishes first-party, external, and sensitive changes", () => {
@@ -1524,6 +1547,25 @@ test("an older establishing run rerun cannot replace the latest head generation"
     headSha: sha,
     createdAt: "2026-01-01T00:02:00Z",
   });
+});
+
+test("current establishing candidate uses immutable event head during API visibility lag", () => {
+  const apiHead = "b".repeat(40);
+  const candidate = currentWorkflowHeadGenerationCandidate(
+    {
+      id: 12,
+      head_sha: apiHead,
+      created_at: "2026-01-01T00:02:00Z",
+    },
+    {
+      action: "synchronize",
+      pull_request: { head: { sha } },
+    },
+    1,
+  );
+  assert.equal(candidate.head_sha, apiHead);
+  assert.match(candidate.display_title, new RegExp(`-head-${sha}$`));
+  assert.equal(selectWorkflowHeadGeneration([candidate], 1).headSha, sha);
 });
 
 function ownedStatuses(runUrl) {
@@ -1872,6 +1914,85 @@ test("older runs do not publish over a higher run discovered before or after pen
   );
 });
 
+test("a lower-run failure yields to higher-run success before terminal publication", async () => {
+  const lower = "https://github.com/example/project/actions/runs/100";
+  const higher = "https://github.com/example/project/actions/runs/101";
+  const lowerOwned = ownedStatuses(lower);
+  const higherSuccess = ownedStatuses(higher).map((status) => ({
+    ...status,
+    state: "success",
+  }));
+  let reads = 0;
+  const published = [];
+  const reviews = [];
+  const badSnapshot = rawSnapshot();
+  badSnapshot.pull.number = 2;
+  const result = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => badSnapshot,
+    loadAssociatedPullRequests: async () => associatedPullRequests(),
+    publish: async (head, state, value, targetUrl) =>
+      published.push({ head, state, value, targetUrl }),
+    publishReview: async (...args) => reviews.push(args),
+    listStatuses: async () => {
+      reads += 1;
+      return reads < 3 ? lowerOwned : higherSuccess;
+    },
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl: lower,
+  });
+  assert.equal(result.outcome, "superseded");
+  assert.deepEqual(published.map((item) => item.state), ["pending", "reassert"]);
+  assert.deepEqual(
+    buildObservedStatusPayloads(published.at(-1).value).map((status) => status.state),
+    ["success", "success"],
+  );
+  assert.equal(reviews.length, 0);
+});
+
+test("a lower-run failure reasserts higher success that appears after terminal publication", async () => {
+  const lower = "https://github.com/example/project/actions/runs/100";
+  const higher = "https://github.com/example/project/actions/runs/101";
+  const lowerOwned = ownedStatuses(lower);
+  const higherSuccess = ownedStatuses(higher).map((status) => ({
+    ...status,
+    state: "success",
+  }));
+  let reads = 0;
+  const published = [];
+  const reviews = [];
+  const badSnapshot = rawSnapshot();
+  badSnapshot.pull.number = 2;
+  const result = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => badSnapshot,
+    loadAssociatedPullRequests: async () => associatedPullRequests(),
+    publish: async (head, state, value, targetUrl) =>
+      published.push({ head, state, value, targetUrl }),
+    publishReview: async (...args) => reviews.push(args),
+    listStatuses: async () => {
+      reads += 1;
+      return reads < 4 ? lowerOwned : higherSuccess;
+    },
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl: lower,
+  });
+  assert.equal(result.outcome, "superseded_after_terminal");
+  assert.deepEqual(
+    published.map((item) => item.state),
+    ["pending", "terminal", "reassert"],
+  );
+  assert.deepEqual(
+    buildObservedStatusPayloads(published.at(-1).value).map((status) => status.state),
+    ["success", "success"],
+  );
+  assert.equal(reviews.length, 0);
+});
+
 test("status ownership misses and pending publication failures overwrite old green", async () => {
   const runUrl = "https://github.com/example/project/actions/runs/100";
   const oldGreen = ownedStatuses(
@@ -2056,7 +2177,7 @@ test("paginated status-history adapter uses the full commit statuses endpoint", 
   assert.deepEqual(result, history);
 });
 
-test("shared HEAD across two open pull requests cannot reuse another pull request's green", async () => {
+test("shared HEAD association failure yields without overwriting a higher run", async () => {
   const currentRun = "https://github.com/example/project/actions/runs/100";
   const otherRun = "https://github.com/example/project/actions/runs/101";
   const published = [];
@@ -2082,14 +2203,13 @@ test("shared HEAD across two open pull requests cannot reuse another pull reques
     pullNumber: 2,
     runUrl: currentRun,
   });
-  assert.equal(result.outcome, "fail");
-  assert.deepEqual(published.map((item) => item.state), ["pending", "terminal"]);
-  assert.match(
-    published[1].value.deliveryReasons.join(" "),
-    /exactly one open current pull request/,
+  assert.equal(result.outcome, "superseded");
+  assert.deepEqual(published.map((item) => item.state), ["pending", "reassert"]);
+  assert.deepEqual(
+    buildObservedStatusPayloads(published[1].value).map((status) => status.state),
+    ["success", "success"],
   );
-  assert.equal(published[1].targetUrl, currentRun);
-  assert.equal(reviewDecisions.at(-1).event, "REQUEST_CHANGES");
+  assert.equal(reviewDecisions.length, 0);
 });
 
 test("driver publishes pending immediately after exact HEAD and before remote preflight reads", async () => {

@@ -263,15 +263,23 @@ function containsCanonicalReviewOpen(body) {
   if (!nonEmpty(source)) return false;
   let fence = null;
   for (const line of source.split("\n")) {
-    const fenceMatch = line.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (fenceMatch) {
-      const marker = fenceMatch[1][0];
-      if (fence === marker) fence = null;
-      else if (fence === null) fence = marker;
+    if (fence !== null) {
+      const close = line.match(/^ {0,3}(`+|~+)[ \t]*$/);
+      if (
+        close &&
+        close[1][0] === fence.marker &&
+        close[1].length >= fence.length
+      ) {
+        fence = null;
+      }
+      continue;
+    }
+    const open = line.match(/^ {0,3}(`{3,}|~{3,})(?:[^`~]*)$/);
+    if (open) {
+      fence = { marker: open[1][0], length: open[1].length };
       continue;
     }
     if (
-      fence !== null ||
       /^(?: {4}|\t)/.test(line) ||
       /^ {0,3}>/.test(line)
     ) {
@@ -280,6 +288,10 @@ function containsCanonicalReviewOpen(body) {
     if (line === REVIEW_OPEN.trimEnd()) return true;
   }
   return false;
+}
+
+function safeMarkdownScalar(value) {
+  return nonEmpty(value) && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 export function renderHumanAuthorization(headSha, headGeneration = 1) {
@@ -730,7 +742,9 @@ export function validateReviewRecord({
         if (!/^R[1-9]\d*$/.test(review.seat ?? "")) {
           modelReasons.push("every review seat must use the public R<n> form");
         }
-        if (!nonEmpty(review.model)) modelReasons.push("every review requires a model identity");
+        if (!safeMarkdownScalar(review.model)) {
+          modelReasons.push("every review requires a single-line model identity");
+        }
         if (!nonEmpty(review.execution_id)) modelReasons.push("every review requires an execution ID");
         if (!/^[0-9a-f]{64}$/.test(review.evidence_digest ?? "")) {
           modelReasons.push("every review requires a 64-hex evidence digest");
@@ -814,8 +828,10 @@ export function validateReviewRecord({
             modelReasons.push(`${finding.id || "finding"} uses an unsupported finding prefix`);
           }
           for (const field of ["summary", "impact", "required_fix", "verification"]) {
-            if (!nonEmpty(finding[field])) {
-              modelReasons.push(`${finding.id || "finding"} needs ${field}`);
+            if (!safeMarkdownScalar(finding[field])) {
+              modelReasons.push(
+                `${finding.id || "finding"} needs single-line ${field}`,
+              );
             }
           }
           validateKeys(
@@ -827,8 +843,8 @@ export function validateReviewRecord({
           );
           if (
             !["fixed", "accepted", "not_applicable"].includes(finding.disposition?.status) ||
-            !nonEmpty(finding.disposition?.rationale) ||
-            !nonEmpty(finding.disposition?.evidence)
+            !safeMarkdownScalar(finding.disposition?.rationale) ||
+            !safeMarkdownScalar(finding.disposition?.evidence)
           ) {
             modelReasons.push(`${finding.id || "finding"} needs an evidence-backed disposition`);
           }
@@ -1007,7 +1023,7 @@ export function selectWorkflowHeadGeneration(runs, pullNumber) {
     `^delivery-policy-(?:opened|synchronize)-pr-${pullNumber}-head-([0-9a-f]{40})$`,
     "i",
   );
-  return (Array.isArray(runs) ? runs : [])
+  const valid = (Array.isArray(runs) ? runs : [])
     .map((run) => {
       const match = title.exec(run?.display_title ?? "");
       return { run, encodedHead: match?.[1]?.toLowerCase() ?? null };
@@ -1020,13 +1036,42 @@ export function selectWorkflowHeadGeneration(runs, pullNumber) {
         validTimestamp(run.run_started_at ?? run.created_at) &&
         run.pull_requests?.some((pull) => Number(pull?.number) === pullNumber),
     )
-    .sort((left, right) => Number(right.run.id) - Number(left.run.id))
+    .sort((left, right) => {
+      const id = Number(right.run.id) - Number(left.run.id);
+      return id || Number(right.run.run_attempt ?? 1) - Number(left.run.run_attempt ?? 1);
+    });
+  const byRunId = new Map();
+  for (const item of valid) {
+    if (!byRunId.has(Number(item.run.id))) {
+      byRunId.set(Number(item.run.id), item);
+    }
+  }
+  return [...byRunId.values()]
     .map(({ run, encodedHead }) => ({
       id: Number(run.id),
       pullNumber,
       headSha: encodedHead,
       createdAt: run.run_started_at ?? run.created_at,
     }))[0] ?? null;
+}
+
+export function currentWorkflowHeadGenerationCandidate(run, event, pullNumber) {
+  const headSha = event?.pull_request?.head?.sha;
+  if (
+    !isRecord(run) ||
+    !Number.isInteger(pullNumber) ||
+    pullNumber < 1 ||
+    !["opened", "synchronize"].includes(event?.action) ||
+    !exactSha(headSha)
+  ) {
+    return null;
+  }
+  return {
+    ...run,
+    display_title:
+      `delivery-policy-${event.action}-pr-${pullNumber}-head-${headSha}`,
+    pull_requests: [{ number: pullNumber }],
+  };
 }
 
 export function normalizeGitHubSnapshot({ pull, files, comments, reviews, generation }) {
@@ -1313,10 +1358,33 @@ export async function runPolicyEvaluation({
     }
     await publishReview(originalHead, result);
   };
+  const publishTerminalSafely = async (result) => {
+    const before = await listStatuses(originalHead);
+    const higherBefore = newestHigherRun(before, runUrl);
+    if (higherBefore) {
+      await publish(originalHead, "reassert", higherBefore.statuses);
+      return "superseded";
+    }
+    await publish(originalHead, "terminal", result, runUrl);
+    const after = await listStatuses(originalHead);
+    const higherAfter = newestHigherRun(after, runUrl);
+    if (higherAfter) {
+      await publish(originalHead, "reassert", higherAfter.statuses);
+      return "superseded_after_terminal";
+    }
+    const overwritten = lowerRunOverwriteStatuses(after, runUrl);
+    if (overwritten.length > 0) {
+      await publish(originalHead, "reassert", overwritten);
+    }
+    await recordReview(result);
+    return "terminal";
+  };
   const failPolicy = async (reason) => {
     const result = policyFailure(reason);
-    await publish(originalHead, "terminal", result, runUrl);
-    await recordReview(result);
+    const outcome = await publishTerminalSafely(result);
+    if (outcome !== "terminal") {
+      return { outcome, headSha: originalHead };
+    }
     return { outcome: "fail", headSha: originalHead, result };
   };
   const failUntrustedHistory = async (statuses) => {
@@ -1423,22 +1491,8 @@ export async function runPolicyEvaluation({
     if (originalHead) {
       const result = policyFailure("Policy evaluation did not complete");
       try {
-        const statuses = await listStatuses(originalHead);
-        const higherRun = newestHigherRun(statuses, runUrl);
-        if (higherRun) {
-          await publish(originalHead, "reassert", higherRun.statuses);
-        } else {
-          await Promise.allSettled([
-            publish(originalHead, "terminal", result, runUrl),
-            recordReview(result),
-          ]);
-        }
-      } catch {
-        await Promise.allSettled([
-          publish(originalHead, "terminal", result, runUrl),
-          recordReview(result),
-        ]);
-      }
+        await publishTerminalSafely(result);
+      } catch {}
     }
     throw error;
   }
