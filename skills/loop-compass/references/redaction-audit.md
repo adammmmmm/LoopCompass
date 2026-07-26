@@ -11,8 +11,11 @@ node <installed-skill>/scripts/redact-check.mjs --project <repo> --mode audit
 node <installed-skill>/scripts/redact-check.mjs --project <repo> --mode enforce
 ```
 
-Both modes scan `.loopcompass/incidents/`, `.loopcompass/recoveries/`,
-`.loopcompass/receipts/`, and `.loopcompass/terminal-receipts/` when present. `audit` reports
+Both modes require Git and scan the immutable `HEAD` blobs beneath `.loopcompass/incidents/`,
+`.loopcompass/recoveries/`, `.loopcompass/receipts/`, and `.loopcompass/terminal-receipts/`.
+Modified, deleted, and untracked worktree content is intentionally ignored: commit the intended
+state before treating the result as its audit. This prevents a sanitized dirty worktree from hiding
+sensitive content already committed in `HEAD`. `audit` reports
 historical findings without failing because of content findings. `enforce` exits nonzero for
 high-confidence blocking categories. Warnings do not fail either mode. Invocation, configuration,
 and filesystem-preflight errors fail safely in both modes.
@@ -41,8 +44,8 @@ patterns:
 Each entry requires a non-sensitive `id` plus exactly one `literal` or safely bounded `regex`.
 Severity is `block` by default or may be `warn`. Flags are limited to `i`, `m`, and `u`.
 Literals and expressions are bounded in count and length. Regular expressions must use an anchor
-or word boundary and cannot use groups, backreferences, unbounded quantifiers, or a repetition
-upper bound greater than 256. Invalid,
+or word boundary and are restricted to a linear, fixed-width subset: groups, backreferences,
+variable-width quantifiers, and fixed repetitions above 256 are rejected. Invalid,
 binary, oversized, or symlinked configuration fails without echoing configuration content.
 
 Do not commit sensitive configured values merely to scan for them. Restrict or ignore the

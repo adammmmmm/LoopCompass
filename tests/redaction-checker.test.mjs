@@ -6,6 +6,7 @@ import {
   lstatSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -26,6 +27,36 @@ const checker = path.join(
 );
 
 function run(project, mode = "enforce") {
+  git(project, "add", ".loopcompass");
+  const staged = git(project, "diff", "--cached", "--quiet", { allowFailure: true });
+  if (staged.status !== 0) git(project, "commit", "-m", "test state");
+  return spawnSync(
+    process.execPath,
+    [checker, "--project", project, "--mode", mode],
+    { encoding: "utf8" },
+  );
+}
+
+function git(project, ...input) {
+  let options = {};
+  if (
+    input.length &&
+    typeof input[input.length - 1] === "object" &&
+    !Array.isArray(input[input.length - 1])
+  ) {
+    options = input.pop();
+  }
+  const result = spawnSync("git", input, {
+    cwd: project,
+    encoding: "utf8",
+  });
+  if (!options.allowFailure && result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || `git ${input[0]} failed`);
+  }
+  return result;
+}
+
+function runHead(project, mode = "enforce") {
   return spawnSync(
     process.execPath,
     [checker, "--project", project, "--mode", mode],
@@ -63,6 +94,9 @@ describe("shipped redaction checker", () => {
   beforeEach(() => {
     project = path.join(tmp, `project-${Date.now()}-${Math.random()}`);
     mkdirSync(path.join(project, ".loopcompass"), { recursive: true });
+    git(project, "init", "-q");
+    git(project, "config", "user.name", "Worker");
+    git(project, "config", "user.email", "worker@example.com");
   });
   after(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -104,6 +138,62 @@ describe("shipped redaction checker", () => {
     assert.doesNotMatch(result.stdout + result.stderr, /person@|private-person|ghp_|actualcredential/);
   });
 
+  it("detects a quoted JSON credential assignment without revealing it", () => {
+    writeState(
+      project,
+      "receipts",
+      "receipt.json",
+      '{"password":"p@ssw0rd!:$value"}\n',
+    );
+    const result = run(project);
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stdout, /block BLOCK_CREDENTIAL_VALUE 1/);
+    assert.doesNotMatch(result.stdout + result.stderr, /p@ss|receipt\.json/);
+  });
+
+  it("detects a bounded bearer credential without revealing it", () => {
+    writeState(
+      project,
+      "incidents",
+      "incident.md",
+      "Authorization: Bearer opaque:credential$value-123\n",
+    );
+    const result = run(project);
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stdout, /block BLOCK_CREDENTIAL_VALUE 1/);
+    assert.doesNotMatch(result.stdout + result.stderr, /opaque:|incident\.md/);
+  });
+
+  it("detects a fine-grained GitHub token without revealing it", () => {
+    writeState(
+      project,
+      "recoveries",
+      "recovery.md",
+      "credential github_pat_abcdefghijklmnopqrstuvwxyz1234567890\n",
+    );
+    const result = run(project);
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stdout, /block BLOCK_KNOWN_TOKEN 1/);
+    assert.doesNotMatch(result.stdout + result.stderr, /github_pat_|recovery\.md/);
+  });
+
+  it("detects a credential URL parameter after an earlier parameter", () => {
+    writeState(
+      project,
+      "recoveries",
+      "recovery.md",
+      "url: https://service.example/path?mode=read&api_key=credentialvalue123\n",
+    );
+    const result = run(project);
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stdout, /block BLOCK_CREDENTIAL_URL 1/);
+    assert.doesNotMatch(result.stdout, /BLOCK_CREDENTIAL_VALUE/);
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /credentialvalue|recovery\.md/,
+    );
+  });
+
   it("warns for lower-confidence values and permits reserved examples and roles", () => {
     writeState(
       project,
@@ -124,6 +214,19 @@ describe("shipped redaction checker", () => {
     assert.match(result.stdout, /warn WARN_POSSIBLE_HANDLE 1/);
     assert.match(result.stdout, /warn WARN_POSSIBLE_PHONE 1/);
     assert.doesNotMatch(result.stdout, /BLOCK_EMAIL|BLOCK_PERSONAL_HOME_PATH/);
+  });
+
+  it("does not treat root as a functional-role home directory", () => {
+    writeState(
+      project,
+      "incidents",
+      "homes.md",
+      "/home/root/private\n/Users/root/private\n",
+    );
+    const result = run(project);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /block BLOCK_PERSONAL_HOME_PATH 2/);
+    assert.doesNotMatch(result.stdout + result.stderr, /homes\.md|\/home\/root|\/Users\/root/);
   });
 
   it("applies bounded project patterns without echoing config content or identifiers", () => {
@@ -175,6 +278,38 @@ describe("shipped redaction checker", () => {
     assert.doesNotMatch(result.stderr, /hidden-pattern|catastrophic/);
   });
 
+  it("rejects adjacent variable-width project quantifiers and accepts fixed width", () => {
+    writeFileSync(
+      path.join(project, ".loopcompass", "redaction.yaml"),
+      [
+        "version: 1",
+        "patterns:",
+        "  - id: adversarial",
+        `    regex: "^${"a{0,256}".repeat(20)}b$"`,
+        "",
+      ].join("\n"),
+    );
+    let result = run(project, "audit");
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, "error SCAN_FAILED\n");
+
+    writeFileSync(
+      path.join(project, ".loopcompass", "redaction.yaml"),
+      [
+        "version: 1",
+        "patterns:",
+        "  - id: fixed-account",
+        '    regex: "\\\\bACCOUNT-[0-9]{8}\\\\b"',
+        "    severity: warn",
+        "",
+      ].join("\n"),
+    );
+    writeState(project, "incidents", "fixed.md", "ACCOUNT-12345678\n");
+    result = run(project, "audit");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /warn WARN_PROJECT_PATTERN 1/);
+  });
+
   it("scans durable filenames but never echoes a sensitive filename", () => {
     writeState(project, "incidents", "person@private-company.com.md", "sanitized body\n");
     const result = run(project);
@@ -208,6 +343,54 @@ describe("shipped redaction checker", () => {
     assert.doesNotMatch(result.stdout + result.stderr, /external-state/);
   });
 
+  it("fails closed across repeated atomic config and state-directory swaps", () => {
+    writeState(project, "incidents", "clean.md", "role: Operator\n");
+    writeFileSync(
+      path.join(project, ".loopcompass", "redaction.yaml"),
+      "version: 1\npatterns:\n",
+    );
+    assert.equal(run(project, "audit").status, 0);
+
+    const config = path.join(project, ".loopcompass", "redaction.yaml");
+    const safeConfig = path.join(project, ".loopcompass", "redaction.safe");
+    const outsideConfig = path.join(tmp, "outside-config.yaml");
+    writeFileSync(
+      outsideConfig,
+      "version: 1\npatterns:\n  - id: outside\n    literal: outside-marker\n",
+    );
+    for (let iteration = 0; iteration < 8; iteration += 1) {
+      renameSync(config, safeConfig);
+      symlinkSync(outsideConfig, config);
+      const swapped = runHead(project, "audit");
+      assert.equal(swapped.status, 2);
+      assert.equal(swapped.stderr, "error SCAN_FAILED\n");
+      assert.doesNotMatch(swapped.stdout + swapped.stderr, /outside-marker|outside-config/);
+      rmSync(config);
+      renameSync(safeConfig, config);
+      assert.equal(runHead(project, "audit").status, 0);
+    }
+
+    const state = path.join(project, ".loopcompass");
+    const savedState = path.join(project, ".loopcompass-safe");
+    const outsideState = path.join(tmp, "outside-state-swap");
+    mkdirSync(path.join(outsideState, "incidents"), { recursive: true });
+    writeFileSync(
+      path.join(outsideState, "incidents", "outside.md"),
+      "outside-marker@private-company.com\n",
+    );
+    for (let iteration = 0; iteration < 8; iteration += 1) {
+      renameSync(state, savedState);
+      symlinkSync(outsideState, state);
+      const swapped = runHead(project, "audit");
+      assert.equal(swapped.status, 2);
+      assert.equal(swapped.stderr, "error UNSAFE_STATE_ROOT\n");
+      assert.doesNotMatch(swapped.stdout + swapped.stderr, /outside-marker|outside-state/);
+      rmSync(state);
+      renameSync(savedState, state);
+      assert.equal(runHead(project, "audit").status, 0);
+    }
+  });
+
   it("skips oversized and binary files with stable warnings", () => {
     writeState(project, "recoveries", "large.md", "a".repeat(1024 * 1024 + 1));
     writeState(project, "incidents", "binary.md", Buffer.from([0x61, 0x00, 0x62]));
@@ -236,5 +419,34 @@ describe("shipped redaction checker", () => {
     const after = stateDigest(path.join(project, ".loopcompass"));
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(after, before);
+  });
+
+  it("scans committed HEAD rather than a sanitized dirty worktree", () => {
+    writeState(
+      project,
+      "incidents",
+      "committed.md",
+      "contact committed@private-company.com\n",
+    );
+    run(project, "audit");
+    writeState(project, "incidents", "committed.md", "role: Operator\n");
+    const result = runHead(project);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /block BLOCK_EMAIL 1/);
+    assert.doesNotMatch(result.stdout + result.stderr, /committed@|committed\.md/);
+  });
+
+  it("ignores untracked worktree content because it is not committed state", () => {
+    writeState(project, "incidents", "clean.md", "role: Operator\n");
+    run(project, "audit");
+    writeState(
+      project,
+      "incidents",
+      "untracked-private.md",
+      "contact untracked@private-company.com\n",
+    );
+    const result = runHead(project);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(result.stdout.includes("BLOCK_EMAIL"), false);
   });
 });

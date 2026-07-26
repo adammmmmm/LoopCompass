@@ -32,6 +32,16 @@ describe("stage-install dual host", () => {
     const stateRec = path.join(project, ".loopcompass", "recoveries");
     mkdirSync(stateRec, { recursive: true });
     writeFileSync(path.join(stateRec, "keep-me.md"), "# keep\n", "utf8");
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.name", "Worker"],
+      ["config", "user.email", "worker@example.com"],
+      ["add", ".loopcompass"],
+      ["commit", "-m", "test state"],
+    ]) {
+      const git = spawnSync("git", args, { cwd: project, encoding: "utf8" });
+      assert.equal(git.status, 0, git.stderr || git.stdout);
+    }
 
     const r = runRelease([
       "stage-install",

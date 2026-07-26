@@ -12,12 +12,16 @@
  *   2  invocation, configuration, or filesystem preflight failed safely
  */
 import {
+  closeSync,
   existsSync,
+  fstatSync,
   lstatSync,
+  openSync,
   readFileSync,
-  readdirSync,
   realpathSync,
 } from "node:fs";
+import { constants as fsConstants } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -29,7 +33,6 @@ const ROLE_NAMES = new Set([
   "customer",
   "reviewer",
   "worker",
-  "root",
 ]);
 const TEST_DOMAINS = new Set(["example.com", "example.net", "example.org"]);
 
@@ -41,6 +44,7 @@ const RULES = {
   BLOCK_CREDENTIAL_VALUE: "block",
   BLOCK_PROJECT_PATTERN: "block",
   BLOCK_SYMLINK: "block",
+  BLOCK_UNSUPPORTED_ENTRY: "block",
   WARN_POSSIBLE_HANDLE: "warn",
   WARN_POSSIBLE_PHONE: "warn",
   WARN_PROJECT_PATTERN: "warn",
@@ -74,7 +78,50 @@ function parseArgs(argv) {
 
 function isWithin(root, candidate) {
   const relative = path.relative(root, candidate);
-  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== "..");
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) &&
+      !relative.startsWith(`..${path.sep}`) &&
+      relative !== "..")
+  );
+}
+
+function sameFile(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+function assertStableDirectory(directory, expected) {
+  const current = lstatSync(directory);
+  if (
+    !current.isDirectory() ||
+    current.isSymbolicLink() ||
+    !sameFile(current, expected)
+  ) {
+    throw new Error("directory identity changed");
+  }
+}
+
+function readStableFile(filePath, expected, maxBytes) {
+  const noFollow = fsConstants.O_NOFOLLOW || 0;
+  const descriptor = openSync(filePath, fsConstants.O_RDONLY | noFollow);
+  try {
+    const opened = fstatSync(descriptor);
+    if (
+      !opened.isFile() ||
+      !sameFile(opened, expected) ||
+      opened.size > maxBytes
+    ) {
+      throw new Error("unsafe file identity");
+    }
+    const raw = readFileSync(descriptor);
+    const afterRead = fstatSync(descriptor);
+    if (!sameFile(opened, afterRead) || opened.size !== afterRead.size) {
+      throw new Error("file changed while reading");
+    }
+    return raw;
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 function parseScalar(raw) {
@@ -118,6 +165,7 @@ function compileProjectPattern(entry) {
     source = entry.literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   } else {
     source = entry.regex;
+    const withoutFixedRepetitions = source.replace(/\{[1-9]\d{0,2}\}/g, "");
     if (
       source.length < 3 ||
       source.length > 256 ||
@@ -128,10 +176,10 @@ function compileProjectPattern(entry) {
       ) ||
       /[()]/.test(source) ||
       /\\[1-9]/.test(source) ||
-      /(^|[^\\])[*+]/.test(source) ||
-      /\{\d+,\}/.test(source) ||
-      [...source.matchAll(/\{\d+(?:,(\d+))?\}/g)].some(
-        (match) => match[1] && Number(match[1]) > 256,
+      /(^|[^\\])[*+?]/.test(source) ||
+      /[{}]/.test(withoutFixedRepetitions) ||
+      [...source.matchAll(/\{(\d+)\}/g)].some(
+        (match) => Number(match[1]) < 1 || Number(match[1]) > 256,
       )
     ) {
       throw new Error("regex is not safely bounded");
@@ -193,15 +241,19 @@ function parseConfig(text) {
 function loadProjectPatterns(projectRoot, stateRoot) {
   const configPath = path.join(stateRoot, "redaction.yaml");
   if (!existsSync(configPath)) return [];
-  const stat = lstatSync(configPath);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_CONFIG_BYTES) {
+  const before = lstatSync(configPath);
+  if (!before.isFile() || before.isSymbolicLink() || before.size > MAX_CONFIG_BYTES) {
     throw new Error("unsafe config");
   }
   const realConfig = realpathSync(configPath);
   if (!isWithin(projectRoot, realConfig) || !isWithin(stateRoot, realConfig)) {
     throw new Error("config escaped root");
   }
-  const raw = readFileSync(realConfig);
+  const raw = readStableFile(realConfig, before, MAX_CONFIG_BYTES);
+  const after = lstatSync(configPath);
+  if (!sameFile(before, after) || after.isSymbolicLink()) {
+    throw new Error("config identity changed");
+  }
   if (raw.includes(0)) throw new Error("binary config");
   return parseConfig(raw.toString("utf8"));
 }
@@ -255,13 +307,22 @@ function scanText(text, counts, projectPatterns) {
 
   const credentialUrlCount = countMatches(
     text,
-    /\bhttps?:\/\/(?:[^/\s:@]+:[^/\s@]+@|[^\s?#]+[?&](?:access_?token|api_?key|auth|password|secret)=([^&#\s]+))/giu,
-    (match) => !match[1] || !safePlaceholder(match[1]),
+    /\bhttps?:\/\/[^\s<>"']+/giu,
+    (match) => {
+      if (/^https?:\/\/[^/\s:@]+:[^/\s@]+@/iu.test(match[0])) return true;
+      for (const parameter of match[0].matchAll(
+        /[?&](?:access_?token|api_?key|auth|password|secret)=([^&#\s]+)/giu,
+      )) {
+        if (!safePlaceholder(parameter[1])) return true;
+      }
+      return false;
+    },
   );
   if (credentialUrlCount) increment(counts, "BLOCK_CREDENTIAL_URL", credentialUrlCount);
 
   const tokenPatterns = [
     /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g,
+    /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
     /\bxox[baprs]-[A-Za-z0-9-]{12,}\b/g,
     /\bAKIA[0-9A-Z]{16}\b/g,
     /\bAIza[0-9A-Za-z_-]{30,}\b/g,
@@ -274,12 +335,19 @@ function scanText(text, counts, projectPatterns) {
 
   const credentialValueCount = countMatches(
     text,
-    /\b(?:access[-_]?token|api[-_]?key|auth[-_]?token|client[-_]?secret|password|private[-_]?key|secret|token)\b\s*(?:=|:)\s*["']?([A-Za-z0-9+/_.,-]{8,})["']?/giu,
-    (match) => !safePlaceholder(match[1]),
+    /(?<![?&])\b(?:access[-_]?token|api[-_]?key|auth[-_]?token|client[-_]?secret|password|private[-_]?key|secret|token)\b["']?\s*(?:=|:)\s*(?:"([^"\r\n]{1,1024})"|'([^'\r\n]{1,1024})'|([^\s,;#]{8,1024}))/giu,
+    (match) => !safePlaceholder(match[1] || match[2] || match[3]),
   );
   if (credentialValueCount) {
     increment(counts, "BLOCK_CREDENTIAL_VALUE", credentialValueCount);
   }
+
+  const bearerCount = countMatches(
+    text,
+    /\bBearer\s+(?:"([^"\r\n]{1,1024})"|'([^'\r\n]{1,1024})'|([A-Za-z0-9._~+/$:@!-]{12,512}))/giu,
+    (match) => !safePlaceholder(match[1] || match[2] || match[3]),
+  );
+  if (bearerCount) increment(counts, "BLOCK_CREDENTIAL_VALUE", bearerCount);
 
   const phoneCount = countMatches(
     text,
@@ -306,47 +374,71 @@ function scanText(text, counts, projectPatterns) {
   }
 }
 
-function scanTree(scanRoot, projectRoot, stateRoot, counts, projectPatterns, stats) {
-  const stack = [scanRoot];
-  while (stack.length) {
-    const directory = stack.pop();
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const candidate = path.join(directory, entry.name);
-      if (!isWithin(stateRoot, candidate)) {
-        throw new Error("path escaped state root");
-      }
+function runGit(projectRoot, args, maxBuffer = 32 * 1024 * 1024) {
+  const result = spawnSync("git", args, {
+    cwd: projectRoot,
+    encoding: null,
+    maxBuffer,
+    windowsHide: true,
+  });
+  if (result.status !== 0 || result.error) throw new Error("git preflight failed");
+  return result.stdout;
+}
 
-      // Filenames are durable surfaces too. Never include them in diagnostics.
-      scanText(entry.name, counts, projectPatterns);
-      const stat = lstatSync(candidate);
-      if (stat.isSymbolicLink()) {
-        increment(counts, "BLOCK_SYMLINK");
-        stats.skipped += 1;
-        continue;
-      }
-      const realCandidate = realpathSync(candidate);
-      if (!isWithin(projectRoot, realCandidate) || !isWithin(stateRoot, realCandidate)) {
-        throw new Error("real path escaped root");
-      }
-      if (stat.isDirectory()) {
-        stack.push(realCandidate);
-        continue;
-      }
-      if (!stat.isFile()) continue;
-      if (stat.size > MAX_FILE_BYTES) {
-        increment(counts, "WARN_SIZE_LIMIT");
-        stats.skipped += 1;
-        continue;
-      }
-      const raw = readFileSync(realCandidate);
-      if (raw.includes(0)) {
-        increment(counts, "WARN_BINARY_SKIPPED");
-        stats.skipped += 1;
-        continue;
-      }
-      stats.scanned += 1;
-      scanText(raw.toString("utf8"), counts, projectPatterns);
+function committedEntries(projectRoot) {
+  const roots = SCAN_DIRS.map((name) => `.loopcompass/${name}`);
+  const output = runGit(projectRoot, [
+    "ls-tree",
+    "-rz",
+    "--full-tree",
+    "HEAD",
+    "--",
+    ...roots,
+  ]);
+  return output
+    .toString("utf8")
+    .split("\0")
+    .filter(Boolean)
+    .map((record) => {
+      const match = record.match(/^(\d{6}) ([a-z]+) ([0-9a-f]{40,64})\t([\s\S]+)$/);
+      if (!match) throw new Error("invalid git tree entry");
+      return { mode: match[1], type: match[2], object: match[3], name: match[4] };
+    });
+}
+
+function scanCommittedState(projectRoot, counts, projectPatterns, stats) {
+  for (const entry of committedEntries(projectRoot)) {
+    // Git paths are canonical durable filenames. Never include them in diagnostics.
+    scanText(entry.name, counts, projectPatterns);
+    if (entry.mode === "120000") {
+      increment(counts, "BLOCK_SYMLINK");
+      stats.skipped += 1;
+      continue;
     }
+    if (entry.type !== "blob" || entry.mode === "160000") {
+      increment(counts, "BLOCK_UNSUPPORTED_ENTRY");
+      stats.skipped += 1;
+      continue;
+    }
+    const sizeText = runGit(projectRoot, ["cat-file", "-s", entry.object], 1024)
+      .toString("ascii")
+      .trim();
+    const size = Number(sizeText);
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error("invalid blob size");
+    if (size > MAX_FILE_BYTES) {
+      increment(counts, "WARN_SIZE_LIMIT");
+      stats.skipped += 1;
+      continue;
+    }
+    const raw = runGit(projectRoot, ["cat-file", "blob", entry.object], MAX_FILE_BYTES + 1);
+    if (raw.length !== size) throw new Error("blob size changed");
+    if (raw.includes(0)) {
+      increment(counts, "WARN_BINARY_SKIPPED");
+      stats.skipped += 1;
+      continue;
+    }
+    stats.scanned += 1;
+    scanText(raw.toString("utf8"), counts, projectPatterns);
   }
 }
 
@@ -354,40 +446,35 @@ function main() {
   const { project, mode } = parseArgs(process.argv.slice(2));
   try {
     if (!existsSync(project)) fail("PROJECT_UNAVAILABLE");
-    const projectStat = lstatSync(project);
-    if (!projectStat.isDirectory() || projectStat.isSymbolicLink()) {
+    const projectBefore = lstatSync(project);
+    if (!projectBefore.isDirectory() || projectBefore.isSymbolicLink()) {
       fail("UNSAFE_PROJECT_ROOT");
     }
     const projectRoot = realpathSync(project);
+    const resolvedProject = lstatSync(projectRoot);
+    if (!sameFile(projectBefore, resolvedProject)) fail("UNSAFE_PROJECT_ROOT");
     const statePath = path.join(projectRoot, ".loopcompass");
-    if (!existsSync(statePath)) {
-      console.log(`loopcompass-redaction ${mode}`);
-      console.log("files_scanned 0");
-      console.log("files_skipped 0");
-      console.log("result pass");
-      return;
+    let stateRoot = null;
+    let stateBefore = null;
+    if (existsSync(statePath)) {
+      stateBefore = lstatSync(statePath);
+      if (!stateBefore.isDirectory() || stateBefore.isSymbolicLink()) {
+        fail("UNSAFE_STATE_ROOT");
+      }
+      stateRoot = realpathSync(statePath);
+      if (!isWithin(projectRoot, stateRoot)) fail("STATE_ROOT_ESCAPE");
+      const resolvedState = lstatSync(stateRoot);
+      if (!sameFile(stateBefore, resolvedState)) fail("UNSAFE_STATE_ROOT");
     }
-    const stateStat = lstatSync(statePath);
-    if (!stateStat.isDirectory() || stateStat.isSymbolicLink()) {
-      fail("UNSAFE_STATE_ROOT");
-    }
-    const stateRoot = realpathSync(statePath);
-    if (!isWithin(projectRoot, stateRoot)) fail("STATE_ROOT_ESCAPE");
 
-    const projectPatterns = loadProjectPatterns(projectRoot, stateRoot);
+    const projectPatterns = stateRoot
+      ? loadProjectPatterns(projectRoot, stateRoot)
+      : [];
     const counts = new Map();
     const stats = { scanned: 0, skipped: 0 };
-    for (const name of SCAN_DIRS) {
-      const scanRoot = path.join(stateRoot, name);
-      if (!existsSync(scanRoot)) continue;
-      const stat = lstatSync(scanRoot);
-      if (!stat.isDirectory() || stat.isSymbolicLink()) {
-        increment(counts, "BLOCK_SYMLINK");
-        stats.skipped += 1;
-        continue;
-      }
-      scanTree(scanRoot, projectRoot, stateRoot, counts, projectPatterns, stats);
-    }
+    scanCommittedState(projectRoot, counts, projectPatterns, stats);
+    assertStableDirectory(projectRoot, projectBefore);
+    if (stateRoot) assertStableDirectory(statePath, stateBefore);
 
     console.log(`loopcompass-redaction ${mode}`);
     console.log(`files_scanned ${stats.scanned}`);
