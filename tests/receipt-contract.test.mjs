@@ -25,6 +25,16 @@ const recoveryTemplate = readFileSync(
   "utf8",
 );
 const prohibitedLineSeparators = ["\r", "\n", "\u0085", "\u2028", "\u2029"];
+const legacyHtmlNoSemicolonNames = `
+AElig AMP Aacute Acirc Agrave Aring Atilde Auml COPY Ccedil ETH Eacute Ecirc
+Egrave Euml GT Iacute Icirc Igrave Iuml LT Ntilde Oacute Ocirc Ograve Oslash
+Otilde Ouml QUOT REG THORN Uacute Ucirc Ugrave Uuml Yacute aacute acirc acute
+aelig agrave amp aring atilde auml brvbar ccedil cedil cent copy curren deg
+divide eacute ecirc egrave eth euml frac12 frac14 frac34 gt iacute icirc iexcl
+igrave iquest iuml laquo lt macr micro middot nbsp not ntilde oacute ocirc
+ograve ordf ordm oslash otilde ouml para plusmn pound quot raquo reg sect shy
+sup1 sup2 sup3 szlig thorn times uacute ucirc ugrave uml uuml yacute yen yuml
+`.trim().split(/\s+/u);
 
 function rawTemplateMarkers(template) {
   const prose = template.replace(/<!--[\s\S]*?-->/g, "");
@@ -1536,6 +1546,25 @@ describe("terminal receipt contract", () => {
     const literalAmpersand = structuredClone(persisted);
     literalAmpersand.evidence = ["AT&T-compatible launcher behavior verified."];
     assert.doesNotThrow(() => validateTerminalReceipt(literalAmpersand));
+  });
+
+  it("rejects the complete legacy HTML no-semicolon name set", () => {
+    assert.equal(legacyHtmlNoSemicolonNames.length, 106);
+    for (const name of legacyHtmlNoSemicolonNames) {
+      const receipt = structuredClone(persisted);
+      receipt.evidence = [`Encoded marker &${name} remains unsafe.`];
+      assert.throws(
+        () => validateTerminalReceipt(receipt),
+        /contains character-reference syntax/,
+        name,
+      );
+    }
+
+    for (const literal of ["AT&T behavior verified.", "R&D validation passed."]) {
+      const receipt = structuredClone(persisted);
+      receipt.evidence = [literal];
+      assert.doesNotThrow(() => validateTerminalReceipt(receipt), literal);
+    }
   });
 
   it("requires NFC-normalized receipt signatures", () => {

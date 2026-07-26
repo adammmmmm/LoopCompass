@@ -354,6 +354,15 @@ describe("evaluation benchmark report", () => {
       (doc) => {
         doc.cases[0].scenario = "Copyright marker &copy";
       },
+      (doc) => {
+        doc.cases[0].receipt.failure = "Soft hyphen marker &shy concealed.";
+      },
+      (doc) => {
+        doc.cases[0].scenario = "Currency markers &cent and &pound.";
+      },
+      (doc) => {
+        doc.description = "Legacy uppercase marker &AElig";
+      },
     ];
     for (const mutate of mutations) {
       const doc = readFixture();
@@ -365,7 +374,7 @@ describe("evaluation benchmark report", () => {
     }
 
     const safe = readFixture();
-    safe.cases[0].scenario = "AT&T-compatible launcher behavior.";
+    safe.cases[0].scenario = "AT&T and R&D launcher behavior.";
     const safeResult = runEvaluateWithDoc(safe);
     assert.equal(safeResult.status, 0, safeResult.stderr || safeResult.stdout);
   });

@@ -57,8 +57,22 @@ const highConfidenceSensitivePatterns = [
   /\b[A-Za-z]:\\Users\\[^\\\s"'`]+(?:\\[^\s"'`]*)?/,
   /\b(?:sk-[A-Za-z0-9_-]{10,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|Bearer\s+[A-Za-z0-9._~+/=-]{10,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/i,
 ];
-const htmlCharacterReferencePattern =
-  /&(?:#[0-9]{1,7};?|#x[0-9a-f]{1,6};?|[a-z][a-z0-9]+;|amp|lt|gt|quot|copy|reg|nbsp)/i;
+// Complete HTML legacy named-reference set whose semicolon may be omitted.
+// Source: WHATWG named character references (the names exposed without `;`).
+const legacyHtmlNoSemicolonNames = new Set(`
+AElig AMP Aacute Acirc Agrave Aring Atilde Auml COPY Ccedil ETH Eacute Ecirc
+Egrave Euml GT Iacute Icirc Igrave Iuml LT Ntilde Oacute Ocirc Ograve Oslash
+Otilde Ouml QUOT REG THORN Uacute Ucirc Ugrave Uuml Yacute aacute acirc acute
+aelig agrave amp aring atilde auml brvbar ccedil cedil cent copy curren deg
+divide eacute ecirc egrave eth euml frac12 frac14 frac34 gt iacute icirc iexcl
+igrave iquest iuml laquo lt macr micro middot nbsp not ntilde oacute ocirc
+ograve ordf ordm oslash otilde ouml para plusmn pound quot raquo reg sect shy
+sup1 sup2 sup3 szlig thorn times uacute ucirc ugrave uml uuml yacute yen yuml
+`.trim().split(/\s+/u));
+const numericCharacterReferencePattern =
+  /&#(?:[0-9]{1,7};?|[xX][0-9a-fA-F]{1,6};?)/;
+const terminatedNamedCharacterReferencePattern =
+  /&[A-Za-z][A-Za-z0-9]+;/;
 const requiredArtifactFields = Object.freeze({
   incident: [
     "id",
@@ -170,6 +184,21 @@ function hasHighConfidenceSensitiveValue(value) {
   return highConfidenceSensitivePatterns.some((pattern) => pattern.test(value));
 }
 
+function hasHtmlCharacterReference(value) {
+  if (
+    numericCharacterReferencePattern.test(value)
+    || terminatedNamedCharacterReferencePattern.test(value)
+  ) {
+    return true;
+  }
+  for (const name of legacyHtmlNoSemicolonNames) {
+    if (value.includes(`&${name}`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasUnsafeTextControl(value, { allowLf = false } = {}) {
   for (const character of value) {
     if (allowLf && character === "\n") {
@@ -202,7 +231,7 @@ export function validateSanitizedProse(
   ) {
     fail(label, " contains an unpaired Unicode surrogate; sanitize it before use");
   }
-  if (htmlCharacterReferencePattern.test(value)) {
+  if (hasHtmlCharacterReference(value)) {
     fail(label, " contains character-reference syntax; sanitize it before use");
   }
   if (hasUnsafeTextControl(value, options)) {
