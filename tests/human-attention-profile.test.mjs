@@ -162,6 +162,19 @@ function isCanonicalSlug(value) {
   );
 }
 
+function hasValidEnabledProfile(config) {
+  return Boolean(
+    isPlainRecord(config) &&
+      config.enabled === true &&
+      typeof config.surface === "string" &&
+      config.surface.trim() &&
+      typeof config.authority === "string" &&
+      config.authority.trim() &&
+      typeof config.history_retention === "string" &&
+      config.history_retention.trim(),
+  );
+}
+
 function incidentsBySlug(testCase, errors = []) {
   const openIncidents = new Map();
   const failed = new Set();
@@ -337,12 +350,21 @@ function hasVerifiedClosure(testCase, obligation) {
 function registryBySlug(testCase, errors) {
   const registry = new Map();
   const failed = new Set();
-  const seen = new Set();
   const duplicateReported = new Set();
+  const canonicalSlugCounts = new Map();
   let unscopedInvalid = false;
   if (!Array.isArray(testCase.known_obligations)) {
     errors.push("invalid_registry_collection");
     return { registry, failed, unscopedInvalid: true };
+  }
+  for (const record of testCase.known_obligations) {
+    if (!isPlainRecord(record) || !isCanonicalSlug(record.incident_slug)) {
+      continue;
+    }
+    canonicalSlugCounts.set(
+      record.incident_slug,
+      (canonicalSlugCounts.get(record.incident_slug) ?? 0) + 1,
+    );
   }
   for (const record of testCase.known_obligations) {
     if (!isPlainRecord(record)) {
@@ -351,29 +373,31 @@ function registryBySlug(testCase, errors) {
       continue;
     }
     const slug = record.incident_slug;
-    if (
-      !isCanonicalSlug(slug) ||
-      !Number.isInteger(record.last_known_revision) ||
-      record.last_known_revision < 0
-    ) {
-      const diagnosticSlug = isCanonicalSlug(slug) ? slug : "invalid-slug";
-      errors.push(`invalid_registry_record:${diagnosticSlug}`);
-      if (isCanonicalSlug(slug)) {
-        failed.add(slug);
-        registry.delete(slug);
-      } else unscopedInvalid = true;
-      continue;
-    }
-    if (seen.has(slug)) {
+    const slugIsCanonical = isCanonicalSlug(slug);
+    const slugIsDuplicated =
+      slugIsCanonical && canonicalSlugCounts.get(slug) > 1;
+    if (slugIsDuplicated) {
       if (!duplicateReported.has(slug)) {
         errors.push(`duplicate_registry_record:${slug}`);
         duplicateReported.add(slug);
       }
       failed.add(slug);
       registry.delete(slug);
+    }
+    if (
+      !slugIsCanonical ||
+      !Number.isInteger(record.last_known_revision) ||
+      record.last_known_revision < 0
+    ) {
+      const diagnosticSlug = slugIsCanonical ? slug : "invalid-slug";
+      errors.push(`invalid_registry_record:${diagnosticSlug}`);
+      if (slugIsCanonical) {
+        failed.add(slug);
+        registry.delete(slug);
+      } else unscopedInvalid = true;
       continue;
     }
-    seen.add(slug);
+    if (slugIsDuplicated) continue;
     if (!failed.has(slug)) registry.set(slug, record);
   }
   return { registry, failed, unscopedInvalid };
@@ -729,7 +753,9 @@ function assessConformance(testCase) {
 }
 
 function reconcileProjections(testCase) {
-  if (!testCase.profile_config.enabled) return testCase.projections;
+  if (!hasValidEnabledProfile(testCase.profile_config)) {
+    return testCase.projections;
+  }
   const obligationErrors = [];
   const {
     openIncidents,
@@ -819,6 +845,9 @@ function reconcileProjections(testCase) {
 function repairRegistryCrash(testCase) {
   const config = testCase.profile_config;
   const errors = [];
+  if (!hasValidEnabledProfile(config)) {
+    return structuredClone(testCase);
+  }
   if (
     !Array.isArray(testCase.incidents) ||
     !Array.isArray(testCase.known_obligations) ||
@@ -1819,6 +1848,85 @@ describe("optional human-attention profile", () => {
     assert.deepEqual(assessConformance(testCase), [
       "duplicate_registry_record:console-action-required",
     ]);
+  });
+
+  it("counts duplicate registry slugs even when a sibling record is malformed", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "multi-slug-repair-is-isolated",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    const malformedDuplicate = {
+      incident_slug: "second-console-action",
+      last_known_revision: "invalid",
+      duplicate_note: "preserve",
+    };
+    testCase.known_obligations.push(malformedDuplicate);
+    const original = structuredClone(testCase);
+    const duplicateRecords = original.known_obligations.filter(
+      (record) => record.incident_slug === "second-console-action",
+    );
+
+    const errors = assessConformance(testCase);
+    assert.equal(
+      errors.filter(
+        (error) =>
+          error === "duplicate_registry_record:second-console-action",
+      ).length,
+      1,
+    );
+    assert.ok(
+      errors.includes("invalid_registry_record:second-console-action"),
+    );
+    assert.ok(
+      errors.includes("recoverable_registry_lag:console-action-required"),
+    );
+    assert.ok(
+      !errors.includes("recoverable_registry_lag:second-console-action"),
+    );
+    const repaired = repairRegistryCrash(testCase);
+    assert.equal(repaired.known_obligations[0].last_known_revision, 2);
+    assert.deepEqual(
+      repaired.known_obligations.filter(
+        (record) => record.incident_slug === "second-console-action",
+      ),
+      duplicateRecords,
+    );
+    assert.deepEqual(repaired.obligations, original.obligations);
+    assert.deepEqual(repaired.projections, original.projections);
+  });
+
+  it("does not mutate without a complete enabled profile declaration", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const valid = resolveCase(fixture, structuredClone(rawCase));
+    const invalidProfiles = [
+      {
+        ...structuredClone(valid.profile_config),
+        enabled: false,
+      },
+      {
+        ...structuredClone(valid.profile_config),
+        authority: "",
+      },
+      {
+        ...structuredClone(valid.profile_config),
+        history_retention: null,
+      },
+    ];
+
+    for (const profile_config of invalidProfiles) {
+      const testCase = {
+        ...structuredClone(valid),
+        profile_config,
+      };
+      const original = structuredClone(testCase);
+      assert.deepEqual(repairRegistryCrash(testCase), original);
+      assert.deepEqual(reconcileProjections(testCase), original.projections);
+      assert.deepEqual(testCase, original);
+    }
   });
 
   it("treats malformed closure evidence as unusable without blocking safe repair diagnostics", () => {
