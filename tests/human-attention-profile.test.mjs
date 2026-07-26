@@ -166,7 +166,6 @@ function isCanonicalSlug(value) {
 function isStableIdentifier(value) {
   return (
     typeof value === "string" &&
-    value.length <= 96 &&
     STABLE_IDENTIFIER.test(value)
   );
 }
@@ -1007,10 +1006,7 @@ function repairRegistryCrash(testCase) {
     failed: failedRegistry,
     unscopedInvalid: unscopedRegistry,
   } = registryBySlug(working, errors);
-  const {
-    failed: failedProjections,
-    unscopedInvalid: unscopedProjection,
-  } = projectionsBySlug(
+  const { unscopedInvalid: unscopedProjection } = projectionsBySlug(
     testCase,
     errors,
   );
@@ -1043,8 +1039,7 @@ function repairRegistryCrash(testCase) {
       registry.get(slug) !== record ||
       failedIncidents.has(slug) ||
       failed.has(slug) ||
-      failedRegistry.has(slug) ||
-      failedProjections.has(slug)
+      failedRegistry.has(slug)
     ) {
       continue;
     }
@@ -1329,7 +1324,7 @@ describe("optional human-attention profile", () => {
     assert.deepEqual(replay, firstPass);
   });
 
-  it("rejects unsafe marker, registry, and projection revisions before repair or reconciliation", () => {
+  it("rejects unsafe marker and registry revisions before repair or reconciliation", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     const rawCase = fixture.cases.find(
       (testCase) => testCase.id === "registry-lag-repairable",
@@ -1348,12 +1343,6 @@ describe("optional human-attention profile", () => {
           testCase.known_obligations[0].last_known_revision = unsafeRevision;
         },
       },
-      {
-        error: "invalid_projection_revision:console-action-required",
-        mutate(testCase) {
-          testCase.projections[0].obligation_revision = unsafeRevision;
-        },
-      },
     ];
 
     for (const { error, mutate } of variants) {
@@ -1369,6 +1358,83 @@ describe("optional human-attention profile", () => {
       );
       assert.deepEqual(testCase, original, error);
     }
+  });
+
+  it("repairs registry state independently while preserving an unsafe projection", () => {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const rawCase = fixture.cases.find(
+      (testCase) => testCase.id === "registry-lag-repairable",
+    );
+    const testCase = resolveCase(fixture, structuredClone(rawCase));
+    testCase.projections[0].obligation_revision =
+      Number.MAX_SAFE_INTEGER + 1;
+    const original = structuredClone(testCase);
+
+    assert.ok(
+      assessConformance(testCase).includes(
+        "invalid_projection_revision:console-action-required",
+      ),
+    );
+    const repaired = repairRegistryCrash(testCase);
+    assert.equal(repaired.known_obligations[0].last_known_revision, 2);
+    assert.deepEqual(repaired.projections, original.projections);
+    assert.deepEqual(repaired.obligations, original.obligations);
+    assert.deepEqual(testCase, original);
+    assert.throws(
+      () => reconcileProjections(repaired),
+      /obligation conflict blocks reconciliation/,
+    );
+  });
+
+  it("accepts a 97-character schema-1 capability identifier end to end", () => {
+    const identifier = "a".repeat(97);
+    const testCase = {
+      profile_config: {
+        enabled: true,
+        surface: "HANDOFF.md",
+        authority: "incident-coordinator",
+        history_retention: "project-audit-policy",
+        human_only_capabilities: [identifier],
+        human_only_decisions: [],
+      },
+      incidents: [
+        {
+          slug: "long-capability-required",
+          open: true,
+          requires: [identifier],
+        },
+      ],
+      known_obligations: [
+        {
+          incident_slug: "long-capability-required",
+          last_known_revision: 1,
+        },
+      ],
+      obligations: [
+        {
+          incident_slug: "long-capability-required",
+          state: "human_action_pending",
+          revision: 1,
+          human_requirement: identifier,
+          requested_action: "Perform the declared capability.",
+        },
+      ],
+      projections: [
+        {
+          incident_slug: "long-capability-required",
+          requested_action: "Perform the declared capability.",
+          incident_path:
+            ".loopcompass/incidents/long-capability-required.md",
+          state: "human_action_pending",
+          obligation_revision: 1,
+          surface: "HANDOFF.md",
+        },
+      ],
+      closure_evidence: [],
+    };
+
+    assert.deepEqual(assessConformance(testCase), []);
+    assert.deepEqual(reconcileProjections(testCase), testCase.projections);
   });
 
   it("detects total deletion from the retained known-obligation registry", () => {
