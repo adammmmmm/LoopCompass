@@ -69,7 +69,12 @@ Trusted first-party, non-sensitive pull requests require independently green `ve
 current human maintainer review.
 Sensitive changes always require current human maintainer review, including Actions and workflows,
 authentication or permissions, migrations, release credentials, security boundaries, and the
-review gate itself. Auto-merge may be armed only after the applicable checks and review are green.
+review gate itself; all `scripts/`, `tests/`, and `fixtures/` changes are sensitive. The trusted
+delivery workflow records a pull-request-scoped approval only after every applicable requirement is
+green and records changes requested otherwise. That automation review is a delivery attestation,
+not one of the three independent model reviews. A push dismisses stale approvals and requires a new
+approval after the latest push. Auto-merge may be armed only after the applicable checks and review
+are green.
 Pull requests merge by squash; merged remote branches are deleted automatically.
 
 The compact public evidence format and maintainer procedure are in

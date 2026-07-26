@@ -2,9 +2,11 @@
 import { readFile } from "node:fs/promises";
 import {
   auditBranches,
+  buildBotReviewDecision,
   buildObservedStatusPayloads,
   buildStatusPayloads,
   evaluateRepositoryPolicy,
+  latestBotReviewMatches,
   loadStatusHistory,
   resolvePullRequestNumber,
   runPolicyEvaluation,
@@ -75,6 +77,15 @@ async function evaluatePullRequest() {
   const loadHead = async () => (await api(`/repos/${repo}/pulls/${number}`)).head.sha;
   const loadAssociatedPullRequests = async (sha) =>
     pages(`/repos/${repo}/commits/${sha}/pulls`);
+  const publishReview = async (sha, result) => {
+    const decision = buildBotReviewDecision(result, sha);
+    const reviews = await pages(`/repos/${repo}/pulls/${number}/reviews`);
+    if (latestBotReviewMatches(reviews, decision)) return;
+    await api(`/repos/${repo}/pulls/${number}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(decision),
+    });
+  };
   const listStatuses = async (sha) =>
     loadStatusHistory({ repository: repo, sha, pages });
   const outcome = await runPolicyEvaluation({
@@ -82,6 +93,7 @@ async function evaluatePullRequest() {
     loadSnapshot,
     loadAssociatedPullRequests,
     publish,
+    publishReview,
     listStatuses,
     config,
     repository: repo,
@@ -96,6 +108,7 @@ async function auditRepositoryPolicy() {
   const repo = repository();
   let ruleset;
   let settings;
+  let workflowPermissions;
   try {
     const summaries = await api(`/repos/${repo}/rulesets`);
     const named = summaries.filter(
@@ -109,9 +122,10 @@ async function auditRepositoryPolicy() {
           item.source === config.desired_ruleset.source,
       ) ?? named[0];
     if (!summary) throw new Error("configured ruleset is not visible");
-    [ruleset, settings] = await Promise.all([
+    [ruleset, settings, workflowPermissions] = await Promise.all([
       api(`/repos/${repo}/rulesets/${summary.id}`),
       api(`/repos/${repo}`),
+      api(`/repos/${repo}/actions/permissions/workflow`),
     ]);
   } catch (error) {
     throw new Error(`repository delivery policy is unverifiable: ${error.message}`);
@@ -119,9 +133,11 @@ async function auditRepositoryPolicy() {
   const drifts = evaluateRepositoryPolicy({
     ruleset,
     settings,
+    workflowPermissions,
     desired: {
       ...config.desired_ruleset,
       repository_settings: config.desired_repository_settings,
+      actions_workflow_permissions: config.desired_actions_workflow_permissions,
     },
   });
   console.log(JSON.stringify({ repository: repo, policy_drift: drifts }, null, 2));
@@ -138,7 +154,7 @@ async function evaluateBranches() {
     branches,
     openPullRequests: pulls,
     repository: repo,
-    branchPatterns: config.implementation_branch_patterns,
+    exemptions: config.branch_audit_exemptions,
   });
   console.log(JSON.stringify({ orphaned_branches: orphaned }, null, 2));
   if (orphaned.length > 0) process.exitCode = 1;

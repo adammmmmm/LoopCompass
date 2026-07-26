@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   analyzeReviewHistory,
   auditBranches,
+  buildBotReviewDecision,
   buildObservedStatusPayloads,
   buildStatusPayloads,
   classifyDelivery,
@@ -11,6 +12,7 @@ import {
   evaluateSnapshot,
   matchesSensitivePath,
   loadStatusHistory,
+  latestBotReviewMatches,
   normalizeGitHubSnapshot,
   parseHumanAuthorization,
   renderHumanAuthorization,
@@ -157,6 +159,7 @@ function authorizationComment({
 function rawSnapshot({
   headSha = sha,
   pullNumber = 1,
+  author = "maintainer",
   files = [{ filename: "README.md" }],
   comments = [apiComment()],
   reviews = [],
@@ -166,7 +169,7 @@ function rawSnapshot({
     pull: {
       number: pullNumber,
       head: { sha: headSha },
-      user: { login: "maintainer" },
+      user: { login: author },
       changed_files: changedFiles,
     },
     files,
@@ -290,6 +293,12 @@ test("external and sensitive changes require current human maintainer review", (
       authorization_reference: "https://github.com/example/project/pull/1",
     },
   });
+  assert.match(renderVisibleReview(maintainerReviewed), /\*\*Human approval:\*\*/);
+  assert.match(renderVisibleReview(maintainerReviewed), /Reviewer: maintainer/);
+  assert.match(
+    renderVisibleReview(maintainerReviewed),
+    /Authorization: https:\/\/github\.com\/example\/project\/pull\/1/,
+  );
   assert.equal(evaluate({ data: maintainerReviewed, author: "external" }).ok, true);
   assert.equal(
     evaluate({
@@ -1181,7 +1190,8 @@ test("durable remote implementation branches need a same-repository pull request
     { name: "codex/covered" },
     { name: "codex/orphaned" },
     { name: "feature/fork-collision" },
-    { name: "release/ignored" },
+    { name: "release/orphaned" },
+    { name: "archive/explicitly-exempt" },
   ];
   assert.deepEqual(
     auditBranches({
@@ -1191,9 +1201,17 @@ test("durable remote implementation branches need a same-repository pull request
         { head: { ref: "feature/fork-collision", repo: { full_name: "fork/project" } } },
       ],
       repository: "owner/project",
-      branchPatterns: ["codex/**", "feature/**"],
+      exemptions: ["archive/explicitly-exempt"],
     }),
-    ["codex/orphaned", "feature/fork-collision"],
+    ["codex/orphaned", "feature/fork-collision", "release/orphaned"],
+  );
+  assert.deepEqual(
+    auditBranches({
+      branches: [{ name: "main" }, { name: "codex/null-head" }],
+      openPullRequests: [{ head: null }, null],
+      repository: "owner/project",
+    }),
+    ["codex/null-head"],
   );
 });
 
@@ -1228,6 +1246,82 @@ test("event resolution and layered status payloads are deterministic", () => {
     targetUrl: "https://github.com/example/project/actions/runs/1",
   });
   assert.deepEqual(terminal.map((item) => item.state), ["success", "failure"]);
+
+  const approval = buildBotReviewDecision(
+    { modelOk: true, deliveryOk: true },
+    sha,
+  );
+  assert.equal(approval.event, "APPROVE");
+  assert.match(approval.body, /Three independent model reviews/);
+  assert.doesNotMatch(approval.body, /\b(?:I|we|our|ours|my|mine)\b/i);
+  assert.doesNotMatch(
+    approval.body,
+    new RegExp(`\\b${["pa", "nel"].join("")}\\b`, "i"),
+  );
+  const changes = buildBotReviewDecision(
+    { modelOk: true, deliveryOk: false },
+    sha,
+  );
+  assert.equal(changes.event, "REQUEST_CHANGES");
+  assert.equal(
+    latestBotReviewMatches(
+      [
+        {
+          id: 1,
+          state: "APPROVED",
+          commit_id: sha,
+          body: approval.body,
+          user: { login: "github-actions[bot]" },
+        },
+      ],
+      approval,
+    ),
+    true,
+  );
+  assert.equal(
+    latestBotReviewMatches(
+      [
+        {
+          id: 1,
+          state: "APPROVED",
+          commit_id: sha,
+          body: approval.body,
+          user: { login: "github-actions[bot]" },
+        },
+        {
+          id: 2,
+          state: "CHANGES_REQUESTED",
+          commit_id: sha,
+          body: changes.body,
+          performed_via_github_app: { slug: "github-actions" },
+        },
+      ],
+      changes,
+    ),
+    true,
+  );
+  assert.equal(
+    latestBotReviewMatches(
+      [
+        {
+          id: 1,
+          state: "APPROVED",
+          commit_id: sha,
+          body: approval.body,
+          user: { login: "github-actions[bot]" },
+        },
+        {
+          id: 2,
+          state: "CHANGES_REQUESTED",
+          commit_id: sha,
+          body: changes.body,
+          performed_via_github_app: { slug: "github-actions" },
+        },
+      ],
+      approval,
+    ),
+    false,
+  );
 });
 
 function ownedStatuses(runUrl) {
@@ -1250,6 +1344,7 @@ async function runDriver(
   } = {},
 ) {
   const published = [];
+  const reviewDecisions = [];
   let index = 1;
   const outcomePromise = runPolicyEvaluation({
     loadHead: async () => snapshots[0].pull.head.sha,
@@ -1261,13 +1356,16 @@ async function runDriver(
     publish: async (head, state, result, targetUrl) => {
       published.push({ head, state, result, targetUrl });
     },
+    publishReview: async (head, result) => {
+      reviewDecisions.push(buildBotReviewDecision(result, head));
+    },
     listStatuses: async () => statuses ?? ownedStatuses(runUrl),
     config,
     repository,
     pullNumber: 1,
     runUrl,
   });
-  return { outcome: await outcomePromise, published };
+  return { outcome: await outcomePromise, published, reviewDecisions };
 }
 
 test("driver revalidates same-SHA comment deletion and edit before terminal status", async () => {
@@ -1276,12 +1374,52 @@ test("driver revalidates same-SHA comment deletion and edit before terminal stat
   const deletion = await runDriver([initial, deleted]);
   assert.equal(deletion.outcome.outcome, "fail");
   assert.equal(deletion.published.at(-1).result.modelOk, false);
+  assert.equal(deletion.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
 
   const editedComment = apiComment();
   editedComment.updated_at = "2026-01-01T00:01:00Z";
   const edit = await runDriver([initial, rawSnapshot({ comments: [editedComment] })]);
   assert.equal(edit.outcome.outcome, "fail");
   assert.match(edit.published.at(-1).result.modelReasons.join(" "), /immutable/);
+  assert.equal(edit.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
+});
+
+test("trusted non-sensitive pull requests receive an autonomous bot approval", async () => {
+  const result = await runDriver([rawSnapshot(), rawSnapshot()]);
+  assert.equal(result.outcome.outcome, "pass");
+  assert.equal(result.reviewDecisions.length, 1);
+  assert.equal(result.reviewDecisions[0].event, "APPROVE");
+  assert.equal(result.reviewDecisions[0].commit_id, sha);
+});
+
+test("external and sensitive pull requests cannot receive bot approval without human input", async () => {
+  for (const snapshot of [
+    rawSnapshot({ author: "external" }),
+    rawSnapshot({ files: [{ filename: ".github/workflows/verify.yml" }] }),
+  ]) {
+    const result = await runDriver([snapshot, snapshot]);
+    assert.equal(result.outcome.outcome, "fail");
+    assert.equal(result.outcome.result.deliveryOk, false);
+    assert.equal(result.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
+  }
+});
+
+test("current human approval allows an external pull request to receive bot approval", async () => {
+  const nativeApproval = {
+    id: 1,
+    state: "APPROVED",
+    commit_id: sha,
+    submitted_at: "2026-01-01T00:00:00Z",
+    user: { login: "maintainer", type: "User" },
+    performed_via_github_app: null,
+  };
+  const snapshot = rawSnapshot({
+    author: "external",
+    reviews: [nativeApproval],
+  });
+  const result = await runDriver([snapshot, snapshot]);
+  assert.equal(result.outcome.outcome, "pass");
+  assert.equal(result.reviewDecisions.at(-1).event, "APPROVE");
 });
 
 test("driver revalidates same-SHA approval dismissal", async () => {
@@ -1302,6 +1440,7 @@ test("driver revalidates same-SHA approval dismissal", async () => {
   assert.equal(result.outcome.outcome, "fail");
   assert.equal(result.published.at(-1).result.modelOk, true);
   assert.equal(result.published.at(-1).result.deliveryOk, false);
+  assert.equal(result.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
 });
 
 test("driver fence yields to newer runs and never writes terminal status after HEAD drift", async () => {
@@ -1358,6 +1497,9 @@ test("older runs restore higher-run pending contexts after interleaved terminal 
       publish: async (head, state, value, targetUrl) => {
         published.push({ head, state, value, targetUrl });
       },
+      publishReview: async () => {
+        throw new Error("superseded run must not publish a pull request review");
+      },
       listStatuses: async () => {
         reads += 1;
         if (reads <= 3) return ownedStatuses(runA);
@@ -1397,6 +1539,9 @@ test("older runs do not publish over a higher run discovered before or after pen
     loadSnapshot: async () => rawSnapshot(),
     loadAssociatedPullRequests: async () => associatedPullRequests(),
     publish: async (...args) => before.push(args),
+    publishReview: async () => {
+      throw new Error("superseded run must not publish a pull request review");
+    },
     listStatuses: async () => ownedStatuses(runB),
     config,
     repository,
@@ -1414,6 +1559,9 @@ test("older runs do not publish over a higher run discovered before or after pen
     loadAssociatedPullRequests: async () => associatedPullRequests(),
     publish: async (head, state, result, targetUrl) =>
       after.push({ head, state, result, targetUrl }),
+    publishReview: async () => {
+      throw new Error("superseded run must not publish a pull request review");
+    },
     listStatuses: async () => {
       reads += 1;
       return reads === 1 ? [] : ownedStatuses(runB);
@@ -1435,6 +1583,75 @@ test("older runs do not publish over a higher run discovered before or after pen
     buildObservedStatusPayloads(after.at(-1).result).map((status) => status.target_url),
     [runB, runB],
   );
+});
+
+test("status ownership misses and pending publication failures overwrite old green", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  const oldGreen = ownedStatuses(
+    "https://github.com/example/project/actions/runs/99",
+  ).map((status) => ({ ...status, state: "success" }));
+  const ownershipMiss = await runDriver([rawSnapshot(), rawSnapshot()], {
+    statuses: oldGreen,
+    runUrl,
+  });
+  assert.equal(ownershipMiss.outcome.outcome, "fail");
+  assert.equal(ownershipMiss.published.at(-1).state, "terminal");
+  assert.match(
+    ownershipMiss.published.at(-1).result.deliveryReasons.join(" "),
+    /did not acquire/,
+  );
+  assert.equal(ownershipMiss.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
+
+  let ownershipReads = 0;
+  const preTerminalPublished = [];
+  const preTerminalReviews = [];
+  const preTerminalMiss = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    loadAssociatedPullRequests: async () => associatedPullRequests(),
+    publish: async (head, state, result, targetUrl) =>
+      preTerminalPublished.push({ head, state, result, targetUrl }),
+    publishReview: async (head, result) =>
+      preTerminalReviews.push(buildBotReviewDecision(result, head)),
+    listStatuses: async () => {
+      ownershipReads += 1;
+      return ownershipReads < 3 ? ownedStatuses(runUrl) : oldGreen;
+    },
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl,
+  });
+  assert.equal(preTerminalMiss.outcome, "fail");
+  assert.match(
+    preTerminalPublished.at(-1).result.deliveryReasons.join(" "),
+    /lost ownership/,
+  );
+  assert.equal(preTerminalReviews.at(-1).event, "REQUEST_CHANGES");
+
+  const published = [];
+  const reviewDecisions = [];
+  await assert.rejects(
+    runPolicyEvaluation({
+      loadHead: async () => sha,
+      loadSnapshot: async () => rawSnapshot(),
+      loadAssociatedPullRequests: async () => associatedPullRequests(),
+      publish: async (head, state, result, targetUrl) => {
+        published.push({ head, state, result, targetUrl });
+        if (state === "pending") throw new Error("pending publication failed");
+      },
+      publishReview: async (head, result) =>
+        reviewDecisions.push(buildBotReviewDecision(result, head)),
+      listStatuses: async () => oldGreen,
+      config,
+      repository,
+      pullNumber: 1,
+      runUrl,
+    }),
+  );
+  assert.equal(published.at(-1).state, "terminal");
+  assert.equal(published.at(-1).result.ok, false);
+  assert.equal(reviewDecisions.at(-1).event, "REQUEST_CHANGES");
 });
 
 test("run 101 reclaims both contexts from later terminal writes by run 100", async () => {
@@ -1470,12 +1687,15 @@ test("run 101 reclaims both contexts from later terminal writes by run 100", asy
   ];
   let reads = 0;
   const published = [];
+  const reviewDecisions = [];
   const result = await runPolicyEvaluation({
     loadHead: async () => sha,
     loadSnapshot: async () => rawSnapshot(),
     loadAssociatedPullRequests: async () => associatedPullRequests(),
     publish: async (head, state, value, targetUrl) =>
       published.push({ head, state, value, targetUrl }),
+    publishReview: async (head, value) =>
+      reviewDecisions.push(buildBotReviewDecision(value, head)),
     listStatuses: async () =>
       histories[Math.min(reads++, histories.length - 1)],
     config,
@@ -1493,6 +1713,7 @@ test("run 101 reclaims both contexts from later terminal writes by run 100", asy
     ["pending", "pending"],
   );
   assert.equal(published[2].targetUrl, higher);
+  assert.equal(reviewDecisions.at(-1).event, "APPROVE");
 });
 
 test("foreign or unparseable policy status URLs fail closed", async () => {
@@ -1552,6 +1773,7 @@ test("shared HEAD across two open pull requests cannot reuse another pull reques
   const currentRun = "https://github.com/example/project/actions/runs/100";
   const otherRun = "https://github.com/example/project/actions/runs/101";
   const published = [];
+  const reviewDecisions = [];
   const result = await runPolicyEvaluation({
     loadHead: async () => sha,
     loadSnapshot: async () => rawSnapshot({ pullNumber: 2 }),
@@ -1561,6 +1783,8 @@ test("shared HEAD across two open pull requests cannot reuse another pull reques
     ],
     publish: async (head, state, value, targetUrl) =>
       published.push({ head, state, value, targetUrl }),
+    publishReview: async (head, value) =>
+      reviewDecisions.push(buildBotReviewDecision(value, head)),
     listStatuses: async () =>
       ownedStatuses(otherRun).map((status) => ({
         ...status,
@@ -1578,11 +1802,13 @@ test("shared HEAD across two open pull requests cannot reuse another pull reques
     /exactly one open current pull request/,
   );
   assert.equal(published[0].targetUrl, currentRun);
+  assert.equal(reviewDecisions.at(-1).event, "REQUEST_CHANGES");
 });
 
 test("driver exception path fails only the original owned status contexts", async () => {
   const runUrl = "https://github.com/example/project/actions/runs/7";
   const published = [];
+  const reviewDecisions = [];
   await assert.rejects(
     runPolicyEvaluation({
       loadHead: async () => sha,
@@ -1591,6 +1817,8 @@ test("driver exception path fails only the original owned status contexts", asyn
       },
       loadAssociatedPullRequests: async () => associatedPullRequests(),
       publish: async (head, state, result) => published.push({ head, state, result }),
+      publishReview: async (head, result) =>
+        reviewDecisions.push(buildBotReviewDecision(result, head)),
       listStatuses: async () => ownedStatuses(runUrl),
       config,
       repository,
@@ -1604,6 +1832,7 @@ test("driver exception path fails only the original owned status contexts", asyn
   ]);
   assert.equal(published[1].result.modelOk, false);
   assert.equal(published[1].result.deliveryOk, false);
+  assert.equal(reviewDecisions.at(-1).event, "REQUEST_CHANGES");
 });
 
 test("snapshot normalization includes rename sources and fails closed on truncated file lists", () => {
@@ -1626,6 +1855,8 @@ test("repository policy drift fixtures cover every required live control", () =>
   const desired = {
     ...repositoryConfig.desired_ruleset,
     repository_settings: repositoryConfig.desired_repository_settings,
+    actions_workflow_permissions:
+      repositoryConfig.desired_actions_workflow_permissions,
   };
   const ruleset = {
     name: desired.name,
@@ -1640,11 +1871,12 @@ test("repository policy drift fixtures cover every required live control", () =>
         type: "pull_request",
         parameters: {
           allowed_merge_methods: ["squash"],
-          dismiss_stale_reviews_on_push: false,
+          dismiss_stale_reviews_on_push: true,
           require_code_owner_review: false,
-          require_last_push_approval: false,
-          required_approving_review_count: 0,
+          require_last_push_approval: true,
+          required_approving_review_count: 1,
           required_review_thread_resolution: true,
+          required_reviewers: [],
         },
       },
       {
@@ -1658,7 +1890,32 @@ test("repository policy drift fixtures cover every required live control", () =>
     ],
   };
   const settings = { ...repositoryConfig.desired_repository_settings };
-  assert.deepEqual(evaluateRepositoryPolicy({ ruleset, settings, desired }), []);
+  const workflowPermissions = {
+    ...repositoryConfig.desired_actions_workflow_permissions,
+  };
+  assert.deepEqual(
+    evaluateRepositoryPolicy({
+      ruleset,
+      settings,
+      workflowPermissions,
+      desired,
+    }),
+    [],
+  );
+  const withDismissalRestrictions = structuredClone(ruleset);
+  withDismissalRestrictions.rules[0].parameters.dismissal_restriction = {
+    enabled: false,
+    allowed_actors: [],
+  };
+  assert.deepEqual(
+    evaluateRepositoryPolicy({
+      ruleset: withDismissalRestrictions,
+      settings,
+      workflowPermissions,
+      desired,
+    }),
+    [],
+  );
   const reorderedRuleset = structuredClone(ruleset);
   const reorderedDesired = structuredClone(desired);
   reorderedRuleset.conditions.ref_name = {
@@ -1673,6 +1930,7 @@ test("repository policy drift fixtures cover every required live control", () =>
     evaluateRepositoryPolicy({
       ruleset: reorderedRuleset,
       settings,
+      workflowPermissions,
       desired: reorderedDesired,
     }),
     [],
@@ -1696,17 +1954,24 @@ test("repository policy drift fixtures cover every required live control", () =>
     (value) =>
       (value.ruleset.rules[0].parameters.required_review_thread_resolution = false),
     (value) =>
-      (value.ruleset.rules[0].parameters.dismiss_stale_reviews_on_push = true),
+      (value.ruleset.rules[0].parameters.dismiss_stale_reviews_on_push = false),
     (value) =>
       (value.ruleset.rules[0].parameters.require_code_owner_review = true),
     (value) =>
-      (value.ruleset.rules[0].parameters.require_last_push_approval = true),
+      (value.ruleset.rules[0].parameters.require_last_push_approval = false),
     (value) =>
-      (value.ruleset.rules[0].parameters.required_approving_review_count = 1),
+      (value.ruleset.rules[0].parameters.required_approving_review_count = 0),
+    (value) => (value.ruleset.rules[0].parameters.required_reviewers = [{}]),
+    (value) => (value.ruleset.rules[0].parameters.future_option = true),
+    (value) => delete value.ruleset.rules[0].parameters.required_reviewers,
+    (value) => (value.ruleset.rules[1].parameters.future_option = true),
     (value) => (value.settings.allow_auto_merge = false),
+    (value) => (value.workflowPermissions.default_workflow_permissions = "write"),
+    (value) => (value.workflowPermissions.can_approve_pull_request_reviews = false),
+    (value) => (value.workflowPermissions.future_option = true),
   ];
   for (const mutate of mutations) {
-    const value = structuredClone({ ruleset, settings });
+    const value = structuredClone({ ruleset, settings, workflowPermissions });
     mutate(value);
     assert.ok(
       evaluateRepositoryPolicy({ ...value, desired }).length > 0,
@@ -1715,7 +1980,12 @@ test("repository policy drift fixtures cover every required live control", () =>
   const hiddenBypass = structuredClone(ruleset);
   delete hiddenBypass.bypass_actors;
   assert.ok(
-    evaluateRepositoryPolicy({ ruleset: hiddenBypass, settings, desired }).includes(
+    evaluateRepositoryPolicy({
+      ruleset: hiddenBypass,
+      settings,
+      workflowPermissions,
+      desired,
+    }).includes(
       "ruleset bypass actors are unverifiable",
     ),
   );

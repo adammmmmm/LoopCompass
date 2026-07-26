@@ -101,13 +101,31 @@ test("GitHub workflows use immutable actions and bounded permissions", async () 
   assert.match(releaseWorkflow, /needs: verify-tag/);
   assert.match(releaseWorkflow, /loopcompass-release-dist/);
   assert.match(reviewWorkflow, /statuses: write/);
+  assert.match(reviewWorkflow, /pull-requests: write/);
+  for (const otherWorkflow of [
+    verifyWorkflow,
+    releaseWorkflow,
+    branchWorkflow,
+    pagesWorkflow,
+  ]) {
+    assert.doesNotMatch(otherWorkflow, /pull-requests: write/);
+  }
   assert.match(reviewWorkflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(reviewWorkflow, /group: delivery-policy-/);
   assert.match(reviewWorkflow, /cancel-in-progress: true/);
   assert.match(reviewWorkflow, /types: \[opened, reopened, synchronize, ready_for_review, edited\]/);
+  assert.match(reviewWorkflow, /github-actions\[bot\]/);
   assert.match(
     reviewGateScript,
     /\/repos\/\$\{repo\}\/commits\/\$\{sha\}\/pulls/,
+  );
+  assert.match(
+    reviewGateScript,
+    /\/repos\/\$\{repo\}\/pulls\/\$\{number\}\/reviews/,
+  );
+  assert.match(
+    reviewGateScript,
+    /\/repos\/\$\{repo\}\/actions\/permissions\/workflow/,
   );
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs branches/);
   assert.match(branchWorkflow, /scripts\/review-gate\.mjs audit/);
@@ -133,17 +151,31 @@ test("delivery policy records the exact desired live ruleset and settings", asyn
     { context: "delivery-policy", integration_id: 15368 },
   ]);
   assert.deepEqual(policy.desired_ruleset.allowed_merge_methods, ["squash"]);
-  assert.equal(policy.desired_ruleset.dismiss_stale_reviews_on_push, false);
+  assert.equal(policy.desired_ruleset.dismiss_stale_reviews_on_push, true);
   assert.equal(policy.desired_ruleset.require_code_owner_review, false);
-  assert.equal(policy.desired_ruleset.require_last_push_approval, false);
-  assert.equal(policy.desired_ruleset.required_approving_review_count, 0);
+  assert.equal(policy.desired_ruleset.require_last_push_approval, true);
+  assert.equal(policy.desired_ruleset.required_approving_review_count, 1);
   assert.equal(policy.desired_ruleset.required_review_thread_resolution, true);
+  assert.deepEqual(policy.desired_ruleset.required_reviewers, []);
+  assert.deepEqual(policy.desired_ruleset.dismissal_restriction, {
+    enabled: false,
+    allowed_actors: [],
+  });
   assert.deepEqual(policy.desired_ruleset.bypass_actors, []);
+  assert.deepEqual(policy.branch_audit_exemptions, []);
+  assert.equal("implementation_branch_patterns" in policy, false);
+  for (const pattern of ["scripts/**", "tests/**", "fixtures/**"]) {
+    assert.ok(policy.sensitive_paths.includes(pattern));
+  }
   assert.deepEqual(policy.desired_repository_settings, {
     allow_auto_merge: true,
     allow_squash_merge: true,
     allow_merge_commit: false,
     allow_rebase_merge: false,
     delete_branch_on_merge: true,
+  });
+  assert.deepEqual(policy.desired_actions_workflow_permissions, {
+    default_workflow_permissions: "read",
+    can_approve_pull_request_reviews: true,
   });
 });

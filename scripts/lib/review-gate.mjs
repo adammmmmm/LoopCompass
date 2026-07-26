@@ -20,6 +20,17 @@ const validTimestamp = (value) =>
   nonEmpty(value) && Number.isFinite(new Date(value).getTime());
 const normalizeLineEndings = (value) =>
   typeof value === "string" ? value.replace(/\r\n/g, "\n") : value;
+const canonicalJson = (value) => {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonicalJson(value[key])]),
+  );
+};
+const sameJson = (left, right) =>
+  JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
 
 function globRegex(pattern) {
   let source = "^";
@@ -83,6 +94,15 @@ export function renderVisibleReview(metadata) {
       ? review.findings.map((finding) => findingLines(review, finding))
       : [],
   );
+  const humanApproval = isRecord(metadata.human_approval)
+    ? [
+        "",
+        "**Human approval:** `Approved`",
+        `- Reviewer: ${metadata.human_approval.reviewer}`,
+        `- Kind: ${metadata.human_approval.kind}`,
+        `- Authorization: ${metadata.human_approval.authorization_reference}`,
+      ]
+    : [];
   return [
     "### Independent model reviews — 3/3 complete",
     "",
@@ -93,7 +113,37 @@ export function renderVisibleReview(metadata) {
     ...verdictLines,
     "",
     findings.length > 0 ? findings.join("\n\n") : "No blocking findings identified.",
+    ...humanApproval,
   ].join("\n");
+}
+
+export function buildBotReviewDecision(result, headSha) {
+  if (!exactSha(headSha)) throw new Error("bot review requires an exact HEAD SHA");
+  const approved = result?.modelOk === true && result?.deliveryOk === true;
+  return {
+    commit_id: headSha,
+    event: approved ? "APPROVE" : "REQUEST_CHANGES",
+    body: approved
+      ? `Delivery policy attestation for ${headSha}: approved. Three independent model reviews and applicable delivery requirements are satisfied.`
+      : `Delivery policy attestation for ${headSha}: changes requested. Three independent model reviews or applicable delivery requirements are not satisfied.`,
+  };
+}
+
+export function latestBotReviewMatches(reviews, decision) {
+  const latest = (Array.isArray(reviews) ? reviews : [])
+    .filter(
+      (review) =>
+        normalize(review?.user?.login) === "github-actions[bot]" ||
+        normalize(review?.performed_via_github_app?.slug) === "github-actions",
+    )
+    .sort(newestFirst)[0];
+  const expectedState =
+    decision?.event === "APPROVE" ? "APPROVED" : "CHANGES_REQUESTED";
+  return (
+    latest?.commit_id === decision?.commit_id &&
+    latest?.state === expectedState &&
+    latest?.body === decision?.body
+  );
 }
 
 export function parseReviewComment(body) {
@@ -986,6 +1036,7 @@ export async function runPolicyEvaluation({
   loadSnapshot,
   loadAssociatedPullRequests,
   publish,
+  publishReview,
   listStatuses,
   config,
   repository,
@@ -1000,12 +1051,22 @@ export async function runPolicyEvaluation({
     modelReasons: [reason],
     deliveryReasons: [reason],
   });
+  const recordReview = async (result) => {
+    if (typeof publishReview !== "function") {
+      throw new Error("pull request review publisher is required");
+    }
+    await publishReview(originalHead, result);
+  };
+  const failPolicy = async (reason) => {
+    const result = policyFailure(reason);
+    await publish(originalHead, "terminal", result, runUrl);
+    await recordReview(result);
+    return { outcome: "fail", headSha: originalHead, result };
+  };
   const failUntrustedHistory = async (statuses) => {
     const reason = statusHistoryTrustError(statuses, runUrl);
     if (!reason) return null;
-    const result = policyFailure(reason);
-    await publish(originalHead, "terminal", result, runUrl);
-    return { outcome: "fail", headSha: originalHead, result };
+    return failPolicy(reason);
   };
   const failUntrustedAssociation = async () => {
     let reason;
@@ -1019,9 +1080,7 @@ export async function runPolicyEvaluation({
       reason = "pull request association is unverifiable";
     }
     if (!reason) return null;
-    const result = policyFailure(reason);
-    await publish(originalHead, "terminal", result, runUrl);
-    return { outcome: "fail", headSha: originalHead, result };
+    return failPolicy(reason);
   };
   try {
     originalHead = await loadHead();
@@ -1048,7 +1107,7 @@ export async function runPolicyEvaluation({
     const postPendingFailure = await failUntrustedHistory(postPendingStatuses);
     if (postPendingFailure) return postPendingFailure;
     if (!currentRunOwnsStatuses(postPendingStatuses, runUrl)) {
-      return { outcome: "superseded", headSha: originalHead };
+      return failPolicy("current run did not acquire both policy status contexts");
     }
     const overwrittenPending = lowerRunOverwriteStatuses(
       postPendingStatuses,
@@ -1063,9 +1122,7 @@ export async function runPolicyEvaluation({
       return { outcome: "head_drift", headSha: originalHead };
     }
     if (finalSnapshot.pullNumber !== pullNumber) {
-      const result = policyFailure("pull request snapshot identity changed");
-      await publish(originalHead, "terminal", result, runUrl);
-      return { outcome: "fail", headSha: originalHead, result };
+      return failPolicy("pull request snapshot identity changed");
     }
     const result = evaluateSnapshot(finalSnapshot, config, repository);
     const preTerminalAssociationFailure = await failUntrustedAssociation();
@@ -1079,7 +1136,7 @@ export async function runPolicyEvaluation({
     const preTerminalFailure = await failUntrustedHistory(statuses);
     if (preTerminalFailure) return preTerminalFailure;
     if (!currentRunOwnsStatuses(statuses, runUrl)) {
-      return { outcome: "superseded", headSha: originalHead };
+      return failPolicy("current run lost ownership of both policy status contexts");
     }
     await publish(originalHead, "terminal", result, runUrl);
     const postTerminalAssociationFailure = await failUntrustedAssociation();
@@ -1099,32 +1156,27 @@ export async function runPolicyEvaluation({
     if (overwrittenTerminal.length > 0) {
       await publish(originalHead, "reassert", overwrittenTerminal);
     }
+    await recordReview(result);
     return { outcome: result.ok ? "pass" : "fail", headSha: originalHead, result };
   } catch (error) {
     if (originalHead) {
+      const result = policyFailure("Policy evaluation did not complete");
       try {
-        const associationFailure = await failUntrustedAssociation();
-        if (!associationFailure) {
-          const statuses = await listStatuses(originalHead);
-          const higherRun = newestHigherRun(statuses, runUrl);
-          if (higherRun) {
-            await publish(originalHead, "reassert", higherRun.statuses);
-          } else {
-            const historyError = statusHistoryTrustError(statuses, runUrl);
-            if (historyError) {
-              await publish(originalHead, "terminal", policyFailure(historyError), runUrl);
-            } else if (currentRunOwnsStatuses(statuses, runUrl)) {
-              await publish(
-                originalHead,
-                "terminal",
-                policyFailure("Policy evaluation did not complete"),
-                runUrl,
-              );
-            }
-          }
+        const statuses = await listStatuses(originalHead);
+        const higherRun = newestHigherRun(statuses, runUrl);
+        if (higherRun) {
+          await publish(originalHead, "reassert", higherRun.statuses);
+        } else {
+          await Promise.allSettled([
+            publish(originalHead, "terminal", result, runUrl),
+            recordReview(result),
+          ]);
         }
       } catch {
-        // The workflow failure remains visible when status publication is unavailable.
+        await Promise.allSettled([
+          publish(originalHead, "terminal", result, runUrl),
+          recordReview(result),
+        ]);
       }
     }
     throw error;
@@ -1165,25 +1217,71 @@ export function buildStatusPayloads({ state, result, targetUrl }) {
   });
 }
 
-export function auditBranches({ branches, openPullRequests, repository, branchPatterns }) {
+export function auditBranches({
+  branches,
+  openPullRequests,
+  repository,
+  exemptions = [],
+}) {
   const covered = new Set(
-    openPullRequests
-      .filter((pull) => normalize(pull.head.repo?.full_name) === normalize(repository))
+    (Array.isArray(openPullRequests) ? openPullRequests : [])
+      .filter(
+        (pull) =>
+          isRecord(pull) &&
+          isRecord(pull.head) &&
+          normalize(pull.head.repo?.full_name) === normalize(repository) &&
+          nonEmpty(pull.head.ref),
+      )
       .map((pull) => pull.head.ref),
   );
-  return branches
+  const exempt = Array.isArray(exemptions) ? exemptions : [];
+  return (Array.isArray(branches) ? branches : [])
+    .filter((branch) => isRecord(branch) && nonEmpty(branch.name))
     .filter((branch) => branch.name !== "main")
-    .filter((branch) => matchesSensitivePath(branch.name, branchPatterns))
+    .filter((branch) => !matchesSensitivePath(branch.name, exempt))
     .filter((branch) => !covered.has(branch.name))
     .map((branch) => branch.name);
 }
 
-export function evaluateRepositoryPolicy({ ruleset, settings, desired }) {
+export function evaluateRepositoryPolicy({
+  ruleset,
+  settings,
+  workflowPermissions,
+  desired,
+}) {
   const drifts = [];
   const pullRule = ruleset?.rules?.find((rule) => rule.type === "pull_request");
   const checksRule = ruleset?.rules?.find((rule) => rule.type === "required_status_checks");
   const pull = pullRule?.parameters ?? {};
   const checks = checksRule?.parameters ?? {};
+  const requiredPullKeys = [
+    "allowed_merge_methods",
+    "dismiss_stale_reviews_on_push",
+    "require_code_owner_review",
+    "require_last_push_approval",
+    "required_approving_review_count",
+    "required_review_thread_resolution",
+    "required_reviewers",
+  ];
+  const optionalPullKeys = ["dismissal_restriction"];
+  const expectedCheckKeys = [
+    "do_not_enforce_on_create",
+    "required_status_checks",
+    "strict_required_status_checks_policy",
+  ];
+  const unknownPullKeys = Object.keys(pull).filter(
+    (key) => ![...requiredPullKeys, ...optionalPullKeys].includes(key),
+  );
+  const missingPullKeys = requiredPullKeys.filter((key) => !(key in pull));
+  if (unknownPullKeys.length > 0 || missingPullKeys.length > 0) {
+    drifts.push("pull request rule parameter keys differ");
+  }
+  if (
+    Object.keys(checks).sort().join(",") !==
+    [...expectedCheckKeys].sort().join(",")
+  ) {
+    drifts.push("status-check rule parameter keys differ");
+  }
   for (const key of ["name", "source_type", "source", "target"]) {
     if (ruleset?.[key] !== desired[key]) drifts.push(`ruleset ${key} differs`);
   }
@@ -1249,8 +1347,34 @@ export function evaluateRepositoryPolicy({ ruleset, settings, desired }) {
       drifts.push(`pull request rule ${key} differs`);
     }
   }
+  if (
+    !sameJson(pull.required_reviewers, desired.required_reviewers)
+  ) {
+    drifts.push("required reviewers differ");
+  }
+  if (
+    "dismissal_restriction" in pull &&
+    !sameJson(pull.dismissal_restriction, desired.dismissal_restriction)
+  ) {
+    drifts.push("dismissal restrictions differ");
+  }
   for (const [key, value] of Object.entries(desired.repository_settings)) {
     if (settings?.[key] !== value) drifts.push(`repository setting ${key} differs`);
+  }
+  const desiredWorkflowPermissions = isRecord(desired.actions_workflow_permissions)
+    ? desired.actions_workflow_permissions
+    : {};
+  if (
+    !isRecord(workflowPermissions) ||
+    Object.keys(workflowPermissions).sort().join(",") !==
+      Object.keys(desiredWorkflowPermissions).sort().join(",")
+  ) {
+    drifts.push("Actions workflow permission keys differ");
+  }
+  for (const [key, value] of Object.entries(desiredWorkflowPermissions)) {
+    if (workflowPermissions?.[key] !== value) {
+      drifts.push(`Actions workflow permission ${key} differs`);
+    }
   }
   return drifts;
 }

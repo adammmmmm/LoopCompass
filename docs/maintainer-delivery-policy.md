@@ -12,7 +12,7 @@ request with green `verify`, and assembled closure evidence. Exit to Done requir
 model reviews of the current pull request HEAD. Every review has a verdict and a distinct seat and
 model identity; public seat identifiers use `R<n>`. Every material finding has an evidence-backed
 disposition, blocker fixes are re-verified, and review conversations are resolved. A push changes
-the HEAD and invalidates all earlier evidence.
+the HEAD, dismisses stale approvals, and invalidates all earlier evidence.
 
 Concurrent gate runs are ordered by their numeric Actions run identifiers. The gate reads the full
 paginated commit-status history, lets a higher run reclaim later writes from a lower run, and
@@ -63,6 +63,10 @@ independence remains a process obligation verified before the maintainer records
 Execution identifiers and evidence digests cannot be reused in a later review comment, including
 one for a different HEAD.
 
+When structured `human_approval` evidence is present, its reviewer, kind, and authorization link
+must also appear in the visible summary. Hidden authorization is rejected by the exact-rendering
+check.
+
 Review evidence comments are immutable. Post a new reconciled comment after a new HEAD or verdict;
 set `previous_comment_id` to the preceding review comment's numeric identifier. Carry every earlier
 material finding into the new comment with its final disposition. The gate validates the immutable
@@ -78,11 +82,15 @@ repository audit logs are the external evidence for destructive administrative c
   against the exact current HEAD.
 - `delivery-policy` independently validates the trusted, external, sensitive-path, and human-review
   conditions.
-- Trusted first-party, non-sensitive pull requests need both checks.
+- Trusted first-party, non-sensitive pull requests need both checks. After both pass, the trusted
+  workflow posts a pull-request-scoped GitHub Actions approval for the exact HEAD. If either fails,
+  it posts changes requested instead. The latest automation review is a delivery attestation and
+  never counts as one of the three independent model reviews.
 - External pull requests additionally need current human maintainer review.
 - Sensitive paths always need current human maintainer review, regardless of author. This includes
   Actions and workflows, authentication or permissions, migrations, release credentials, security
-  boundaries, policy configuration, validator code and fixtures, and this policy.
+  boundaries, policy configuration, this policy, and every file under `scripts/`, `tests/`, or
+  `fixtures/`.
 - Human review can be a native approval targeting the current HEAD or a `human_approval` object in
   the canonical maintainer comment. The object contains `reviewer`, `head_sha`,
   `verdict: "approved"`, `kind`, and `authorization_reference`; its reviewer must be the configured
@@ -114,20 +122,34 @@ repository audit logs are the external evidence for destructive administrative c
   ```
 - Native approval clicks do not count as independent model records and cannot replace the structured
   three-review evidence.
+- The main-branch ruleset requires one approval, dismisses stale reviews on push, and requires an
+  approval after the latest push. This PR-scoped approval is a backstop for commit-scoped status
+  checks and preserves autonomous delivery for trusted, non-sensitive changes.
 - Auto-merge is armed only after applicable checks and review are green. Squash is the only merge
   method, all review conversations must be resolved, and the remote branch is deleted after merge.
-- Every durable remote implementation branch receives a draft or open pull request promptly. The
-  hourly read-only branch audit reports matching branches that lack a same-repository pull request;
-  a same-named fork branch does not satisfy the rule.
+- Every durable non-`main` remote branch receives a draft or open pull request promptly unless it
+  matches a narrow explicit exemption in the policy configuration. The hourly read-only branch
+  audit reports every other branch without a same-repository pull request; a same-named fork branch
+  or malformed pull-request head does not satisfy the rule.
 - A commit SHA must be the HEAD of exactly one open pull request for the gate to evaluate it. Shared
   open HEADs fail closed so commit-scoped statuses cannot be reused by another pull request.
 
 The auditable repository policy is `.github/delivery-policy.json`. Changes to the policy or its
 enforcement are themselves sensitive. It also records the desired live ruleset: strict required
 `verify`, `model-review-gate`, and `delivery-policy` contexts; squash-only merge; required review
-conversation resolution; and no bypass actors. Each required context is source-bound to the
+conversation resolution; current-HEAD approval; stale-review dismissal; and no bypass actors. Each
+required context is source-bound to the
 GitHub Actions application ID recorded from the repository API. The scheduled audit runs even when
 branch hygiene fails and compares the visible live repository-scoped ruleset and merge settings
-with this desired state. Hidden bypass actors or insufficient visibility are `unverifiable`, never
-compliant. Complete closure evidence requires running `node scripts/review-gate.mjs audit` with an
-explicit read-only maintainer or administrator credential. No credential is stored by the workflow.
+with this desired state. It also requires repository Actions defaults to remain read-only while
+allowing Actions to approve pull-request reviews; only the trusted gate workflow receives local
+`pull-requests: write`. Hidden bypass actors, unknown rule parameters, or insufficient visibility
+are `unverifiable`, never compliant. Complete closure evidence requires running
+`node scripts/review-gate.mjs audit` with an explicit read-only maintainer or administrator
+credential. No credential is stored by the workflow.
+
+Policy enablement is not complete when files merely merge. Closure requires the workflow on the
+default branch, `can_approve_pull_request_reviews: true` with default workflow permissions still
+`read`, the audited ruleset active with one current-HEAD approval required, and a live trusted,
+non-sensitive pull request proving that invalid evidence receives changes requested and valid
+evidence receives the automation approval.
