@@ -289,6 +289,105 @@ describe("evaluation benchmark report", () => {
     }
   });
 
+  it("bounds every rendered identifier and rejects table-cell injection", () => {
+    const exact = readFixture();
+    exact.benchmark = "b".repeat(128);
+    exact.cases[0].id = "c".repeat(128);
+    exact.cases[0].scope.host = "h".repeat(128);
+    exact.cases[0].receipt.host = "h".repeat(128);
+    let result = runEvaluateWithDoc(exact);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const mutations = [
+      (doc) => {
+        doc.benchmark = "b".repeat(129);
+      },
+      (doc) => {
+        doc.cases[0].id = "c".repeat(129);
+      },
+      (doc) => {
+        doc.cases[0].scope.host = "h".repeat(129);
+        doc.cases[0].receipt.host = "h".repeat(129);
+      },
+      (doc) => {
+        doc.benchmark = "benchmark|injected";
+      },
+      (doc) => {
+        doc.cases[0].id = "case|injected";
+      },
+      (doc) => {
+        doc.cases[0].scope.host = "host|injected";
+        doc.cases[0].receipt.host = "host|injected";
+      },
+    ];
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      mutate(doc);
+      result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(
+        result.stderr,
+        /must be a lowercase host-neutral identifier of at most 128 characters/,
+      );
+    }
+  });
+
+  it("bounds and de-structures every stored fixture prose field", () => {
+    const exact = readFixture();
+    exact.description = "d".repeat(512);
+    exact.cases[0].scenario = "s".repeat(512);
+    exact.cases[0].receipt.failure = "f".repeat(512);
+    let result = runEvaluateWithDoc(exact);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const mutations = [
+      (doc) => {
+        doc.cases[0].scenario = "s".repeat(513);
+      },
+      (doc) => {
+        doc.cases[0].receipt.failure = "f".repeat(513);
+      },
+      (doc) => {
+        doc.cases[0].scenario = "Safe\u2029Injected";
+      },
+      (doc) => {
+        doc.cases[0].receipt.failure = "Safe | injected";
+      },
+      (doc) => {
+        doc.cases[0].scenario = "Safe [link](target)";
+      },
+      (doc) => {
+        doc.cases[0].receipt.failure = "Safe `code`";
+      },
+    ];
+    for (const mutate of mutations) {
+      const doc = readFixture();
+      mutate(doc);
+      result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(
+        result.stderr,
+        /must be one non-Markdown line of at most 512 characters/,
+      );
+    }
+  });
+
+  it("bounds the baseline repository identifier", () => {
+    const exact = readFixture();
+    exact.baseline.repository = `${"a".repeat(99)}/${"b".repeat(100)}`;
+    let result = runEvaluateWithDoc(exact);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const oversized = readFixture();
+    oversized.baseline.repository = `${"a".repeat(100)}/${"b".repeat(100)}`;
+    result = runEvaluateWithDoc(oversized);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(
+      result.stderr,
+      /repository must be an owner\/repository identifier of at most 200 characters/,
+    );
+  });
+
   it("validates optional artifact-observation fields when present", () => {
     const accepted = readFixture();
     accepted.cases[0].receipt.applied_existing_artifact = null;

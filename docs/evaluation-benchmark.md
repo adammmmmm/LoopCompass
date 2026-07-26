@@ -57,21 +57,25 @@ and budget are explicit.
 Attempt counts, step counts, and step budgets must be nonnegative integers (with `null` allowed
 only for `receipt.steps_to_verified_normal_path`). Invalid values stop evaluation before scoring.
 Each `receipt.host` must exactly match its declared `scope.host`; schema 1 has no mismatch override
-or justification field, so mismatches fail closed before the report is generated. Case ids and
-scope/receipt hosts are sanitized lowercase host-neutral identifiers. The fixture, baseline, case,
+or justification field, so mismatches fail closed before the report is generated. The benchmark
+name, case ids, and scope/receipt hosts are sanitized lowercase host-neutral identifiers of at most
+128 characters. Their grammar excludes Markdown table delimiters. The fixture, baseline, case,
 scope, receipt, and expected-result objects are closed schemas; unknown fields fail validation
 rather than silently changing a metric denominator. Scenario text and recorded failure text follow
-the receipt sanitation boundary and are rejected when they contain a high-confidence personal home
-path, email, or secret shape.
+the receipt sanitation boundary. Each is a non-Markdown single line of at most 512 characters and
+is rejected when it contains a high-confidence personal home path, email, or secret shape.
 
 `fixture.metrics` must exactly match the evaluator's single ordered metric registry. Missing,
 duplicate, unknown, or reordered entries fail validation. The same registry drives report
 rendering, including `skill_decision_quality`, so inventory and output cannot drift independently.
-The benchmark name is a sanitized host-neutral identifier. Baseline repository and commit values
-use strict `owner/repository` and lowercase 40-character Git commit shapes. The stored description
-is a sanitized, non-Markdown single line of at most 512 characters, preventing report or fixture
-metadata from injecting extra structure. When present, `receipt.applied_existing_artifact` is
-boolean or null, and `receipt.candidate_artifact_status` is null or a recovery lifecycle status.
+Baseline repository and commit values use a strict `owner/repository` shape of at most 200
+characters and a lowercase 40-character Git commit shape. The stored description is a sanitized,
+non-Markdown single line of at most 512 characters, preventing report or fixture metadata from
+injecting extra structure. The functional tokens `<user-home>`, `<project-root>`, `<secret>`,
+`<id>`, `<hex>`, `<ts>`, `<path>`, and `<email>` are allowed inside fixture prose; other angle
+brackets and Markdown metacharacters are rejected. When present,
+`receipt.applied_existing_artifact` is boolean or null, and
+`receipt.candidate_artifact_status` is null or a recovery lifecycle status.
 
 Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and optionally
 `receipt.parent_receipt`, following the shipped

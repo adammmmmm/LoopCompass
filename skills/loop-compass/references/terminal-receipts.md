@@ -54,22 +54,30 @@ return, line feed, next line (`U+0085`), line separator (`U+2028`), and paragrap
 
 The schema is closed: do not add raw-log, transcript, private-payload, or host-specific fields.
 Sanitize and summarize necessary evidence into the modeled fields. `signature` is a normalized
-one-line identity. Evidence, containment, escalation, reasons, and artifact bodies retain useful
-prose and safe dates; they are sanitized but are not signature-normalized or whitespace-collapsed.
-Receipt ids, dedupe keys, and artifact references use lowercase host-neutral identifiers; receipt
-ids are unique within the handoff chain.
+one-line identity of at most 512 characters. Evidence, containment, escalation, reasons, and
+artifact bodies retain useful prose and safe dates; they are sanitized but are not
+signature-normalized or whitespace-collapsed. Receipt ids and artifact references are lowercase
+host-neutral identifiers of at most 128 characters. Dedupe keys use the same character set and
+additionally permit `|` as a component separator; they are at most 256 characters. Receipt ids are
+unique within the handoff chain.
 
 `proposed_artifact.content` is the complete filled recovery or incident Markdown artifact,
 including type-correct, non-empty required frontmatter and a non-empty body under every required
-template section. Incident dates must be real calendar dates. Recovery scope contains only the
-required non-empty OS, shell, tool, and versions values; its dates and positive expiry follow the
-recovery schema, and `expires_after_days` is a positive base-10 integer without alternate numeric
-notation. Its id is the mechanical signature slug or that slug plus an unpadded `-N` collision
-suffix where `N` is at least 2. Every exact shipped template placeholder is unfilled, including a
-marker split across lines. Normalized signature tokens such as `<path>` and `<ts>`, safe Markdown
-autolinks, HTML, and technical angle-bracket prose are not template placeholders and remain valid
-when otherwise sanitized. The content is not a one-line instruction, summary, patch fragment, or
-artifact id.
+template section. It is at most 32,768 UTF-8 bytes; CRLF is canonicalized to LF before parsing and
+validation. Incident dates must be real calendar dates. Recovery scope contains only the required
+non-empty OS, shell, tool, and versions values; its dates and positive expiry follow the recovery
+schema, and `expires_after_days` is a positive base-10 integer without alternate numeric notation.
+Its signature is itself normalized, one-line, at most 512 characters, and exactly matches the
+terminal receipt signature. Its id is the mechanical signature slug or that slug plus an unpadded
+`-N` collision suffix where `N` is at least 2.
+
+Long prose placeholders shipped in a template are invalid anywhere in the proposed artifact,
+including nested angle brackets, format-control insertion, or line splitting. Short structural
+tokens such as `<integer>` and `<capability>` are invalid when they are the complete value of a
+frontmatter field or required section, but remain valid in ordinary technical prose. Normalized
+signature tokens such as `<path>` and `<ts>`, safe Markdown autolinks, HTML, and other technical
+angle-bracket prose remain valid when otherwise sanitized. The content is not a one-line
+instruction, summary, patch fragment, or artifact id.
 
 Outcome-specific rules:
 

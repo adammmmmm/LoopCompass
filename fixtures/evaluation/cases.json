@@ -591,7 +591,7 @@
         "terminal_receipt": {
           "receipt_schema": 1,
           "receipt_id": "worker-lc-eval-008",
-          "signature": "Read-only worker observes deterministic Windows path normalization failure and cannot persist the incident.",
+          "signature": "Windows path normalization fails deterministically.",
           "dedupe_key": "path-normalizer|windows-path|read-only-worker",
           "classification": "incident",
           "evidence": [
@@ -624,7 +624,7 @@
           "receipt_schema": 1,
           "receipt_id": "parent-lc-eval-008",
           "child_receipt_id": "worker-lc-eval-008",
-          "child_payload_sha256": "01ffe8099dc66ad6378b3b1eb2eb7395c7d7b2aac66a1e3c8bf7865bbc8d2864",
+          "child_payload_sha256": "22bbe657ec3a3570ab3fc62e27c801aa441bad3cd456bfa83949d579bfe9787e",
           "ingested": true,
           "terminal_action": "persisted_artifact",
           "artifact_ref": "windows-path-normalization-fails-deterministically",
@@ -653,7 +653,7 @@
         "terminal_receipt_required": true,
         "parent_receipt_required": true,
         "terminal_receipt_semantics": {
-          "signature": "Read-only worker observes deterministic Windows path normalization failure and cannot persist the incident.",
+          "signature": "Windows path normalization fails deterministically.",
           "dedupe_key": "path-normalizer|windows-path|read-only-worker",
           "evidence": [
             "The same normalized input fails twice in the documented path.",
@@ -1024,7 +1024,7 @@
         "terminal_receipt": {
           "receipt_schema": 1,
           "receipt_id": "worker-lc-eval-013",
-          "signature": "Launcher availability evaluated inside a sandbox differs from the host execution context.",
+          "signature": "Panel launcher discovery differs between sandbox and host contexts.",
           "dedupe_key": "launcher-discovery|sandbox-host-context-mismatch",
           "classification": "incident",
           "evidence": [
@@ -1057,7 +1057,7 @@
           "receipt_schema": 1,
           "receipt_id": "parent-lc-eval-013",
           "child_receipt_id": "worker-lc-eval-013",
-          "child_payload_sha256": "089ff9c45fe0ab3b0511f60999acb8e850d760f92747783d557a9fb370281383",
+          "child_payload_sha256": "058928d698181d448ebcc8af1acae651a7fd5e099a7a01404072363266c2e483",
           "ingested": true,
           "terminal_action": "proposed_artifact",
           "artifact_ref": null,
@@ -1076,7 +1076,7 @@
           "forwarded_receipt": {
             "receipt_schema": 1,
             "receipt_id": "worker-lc-eval-013",
-            "signature": "Launcher availability evaluated inside a sandbox differs from the host execution context.",
+            "signature": "Panel launcher discovery differs between sandbox and host contexts.",
             "dedupe_key": "launcher-discovery|sandbox-host-context-mismatch",
             "classification": "incident",
             "evidence": [
@@ -1119,7 +1119,7 @@
         "terminal_receipt_required": true,
         "parent_receipt_required": true,
         "terminal_receipt_semantics": {
-          "signature": "Launcher availability evaluated inside a sandbox differs from the host execution context.",
+          "signature": "Panel launcher discovery differs between sandbox and host contexts.",
           "dedupe_key": "launcher-discovery|sandbox-host-context-mismatch",
           "evidence": [
             "The sandbox search path omits a verified user-local launcher.",
@@ -1191,7 +1191,7 @@
         "terminal_receipt": {
           "receipt_schema": 1,
           "receipt_id": "worker-lc-eval-014",
-          "signature": "Generated-file validation fails while inspecting the current unverified edit.",
+          "signature": "Generated-file mismatch may come from the current unverified edit.",
           "dedupe_key": "generated-validation|unverified-edit|read-only-worker",
           "classification": "incident",
           "evidence": [
@@ -1223,7 +1223,7 @@
           "receipt_schema": 1,
           "receipt_id": "parent-lc-eval-014",
           "child_receipt_id": "worker-lc-eval-014",
-          "child_payload_sha256": "f8e0ee3521f97e0f1d0351207035b3c9eb6b0c6735f99c27dc9256f9ec874572",
+          "child_payload_sha256": "5ce010e988d393d5389845c3591b084093e94d770e5bab8c8a7dd72192398733",
           "ingested": true,
           "terminal_action": "no_artifact",
           "artifact_ref": null,
@@ -1245,7 +1245,7 @@
         "terminal_receipt_required": true,
         "parent_receipt_required": true,
         "terminal_receipt_semantics": {
-          "signature": "Generated-file validation fails while inspecting the current unverified edit.",
+          "signature": "Generated-file mismatch may come from the current unverified edit.",
           "dedupe_key": "generated-validation|unverified-edit|read-only-worker",
           "evidence": [
             "The worker cannot determine whether the mismatch predates the current edit."
@@ -1307,7 +1307,7 @@
         "terminal_receipt": {
           "receipt_schema": 1,
           "receipt_id": "worker-lc-eval-015",
-          "signature": "Build wrapper configuration fails deterministically and the read-only worker cannot persist the incident.",
+          "signature": "Build wrapper configuration fails deterministically.",
           "dedupe_key": "build-wrapper|configuration-failure|read-only-worker",
           "classification": "incident",
           "evidence": [
@@ -1349,7 +1349,7 @@
         "terminal_receipt_required": true,
         "parent_receipt_required": true,
         "terminal_receipt_semantics": {
-          "signature": "Build wrapper configuration fails deterministically and the read-only worker cannot persist the incident.",
+          "signature": "Build wrapper configuration fails deterministically.",
           "dedupe_key": "build-wrapper|configuration-failure|read-only-worker",
           "evidence": [
             "The documented build wrapper reproduces the same configuration failure."

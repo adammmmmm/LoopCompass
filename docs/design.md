@@ -111,8 +111,9 @@ When a matching artifact exists, update or supersede it rather than creating ano
 writes that still race should resolve around the deterministic artifact path, making the conflict
 visible instead of silently creating divergent knowledge.
 
-If the deterministic path contains a different signature, append the lowest available integer
-suffix beginning with `-2`. Agents must not invent alternate descriptive filenames.
+If the deterministic path contains a different signature, append the lowest available unpadded
+base-10 integer suffix beginning with `-2`. Values such as `-0`, `-1`, `-01`, and `-02` are not
+collision identities. Agents must not invent alternate descriptive filenames.
 
 ## Escalation ladder
 

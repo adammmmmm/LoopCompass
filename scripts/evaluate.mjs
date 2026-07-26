@@ -29,11 +29,15 @@ const candidateArtifactStatuses = new Set([
   "stale",
   "superseded",
 ]);
-const fixtureIdentifier = /^[a-z0-9][a-z0-9._:|-]*$/;
+const fixtureIdentifier = /^[a-z0-9][a-z0-9._:-]*$/;
 const repositoryIdentifier = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const fixtureLineBreakPattern = /[\r\n\u0085\u2028\u2029]/u;
 const unsafeMarkdownPattern = /[\\`|<>\[\]]/u;
-const maximumFixtureDescriptionLength = 512;
+const allowedFixtureTokenPattern =
+  /<(?:user-home|project-root|secret|id|hex|ts|path|email)>/gu;
+const maximumFixtureIdentifierLength = 128;
+const maximumFixtureProseLength = 512;
+const maximumRepositoryIdentifierLength = 200;
 const fixtureFields = new Set([
   "schema",
   "benchmark",
@@ -420,22 +424,28 @@ function requireString(obj, field, label) {
 function requireFixtureIdentifier(obj, field, label) {
   const value = requireString(obj, field, label);
   validateSanitizedProse(value, `${label}.${field}`);
-  if (!fixtureIdentifier.test(value)) {
-    throw new Error(`${label}.${field} must be a lowercase host-neutral identifier`);
+  if (
+    value.length > maximumFixtureIdentifierLength
+    || !fixtureIdentifier.test(value)
+  ) {
+    throw new Error(
+      `${label}.${field} must be a lowercase host-neutral identifier of at most ${maximumFixtureIdentifierLength} characters`,
+    );
   }
   return value;
 }
 
-function requireFixtureDescription(obj, field, label) {
+function requireFixtureProse(obj, field, label) {
   const value = requireString(obj, field, label);
   validateSanitizedProse(value, `${label}.${field}`);
+  const markdownProbe = value.replace(allowedFixtureTokenPattern, "");
   if (
-    value.length > maximumFixtureDescriptionLength
+    value.length > maximumFixtureProseLength
     || fixtureLineBreakPattern.test(value)
-    || unsafeMarkdownPattern.test(value)
+    || unsafeMarkdownPattern.test(markdownProbe)
   ) {
     throw new Error(
-      `${label}.${field} must be one non-Markdown line of at most ${maximumFixtureDescriptionLength} characters`,
+      `${label}.${field} must be one non-Markdown line of at most ${maximumFixtureProseLength} characters`,
     );
   }
   return value;
@@ -444,8 +454,13 @@ function requireFixtureDescription(obj, field, label) {
 function requireRepositoryIdentifier(obj, field, label) {
   const value = requireString(obj, field, label);
   validateSanitizedProse(value, `${label}.${field}`);
-  if (!repositoryIdentifier.test(value)) {
-    throw new Error(`${label}.${field} must be an owner/repository identifier`);
+  if (
+    value.length > maximumRepositoryIdentifierLength
+    || !repositoryIdentifier.test(value)
+  ) {
+    throw new Error(
+      `${label}.${field} must be an owner/repository identifier of at most ${maximumRepositoryIdentifierLength} characters`,
+    );
   }
   return value;
 }
@@ -561,7 +576,7 @@ function validateFixture(doc) {
   requireRepositoryIdentifier(doc.baseline, "repository", "fixture.baseline");
   requireCommitDigest(doc.baseline, "commit", "fixture.baseline");
   requireBoolean(doc, "live_integration_required", "fixture");
-  requireFixtureDescription(doc, "description", "fixture");
+  requireFixtureProse(doc, "description", "fixture");
   const metrics = requireField(doc, "metrics", "fixture");
   requireArray(metrics, "fixture.metrics");
   const expectedMetricIds = metricRegistry.map(([id]) => id);
@@ -581,8 +596,7 @@ function validateFixture(doc) {
     requireObject(c, label);
     requireExactFields(c, label, caseFields);
     requireFixtureIdentifier(c, "id", label);
-    requireString(c, "scenario", label);
-    validateSanitizedProse(c.scenario, `${label}.scenario`);
+    requireFixtureProse(c, "scenario", label);
 
     const scope = requireField(c, "scope", label);
     requireObject(scope, `${label}.scope`);
@@ -602,8 +616,7 @@ function validateFixture(doc) {
     }
     requireBoolean(receipt, "consulted", `${label}.receipt`);
     requireBoolean(receipt, "host_enforced", `${label}.receipt`);
-    requireString(receipt, "failure", `${label}.receipt`);
-    validateSanitizedProse(receipt.failure, `${label}.receipt.failure`);
+    requireFixtureProse(receipt, "failure", `${label}.receipt`);
     requireEnum(receipt, "classification", `${label}.receipt`, classifications);
     if (hasField(receipt, "applied_existing_artifact")) {
       requireNullableBoolean(

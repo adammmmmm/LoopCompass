@@ -60,6 +60,28 @@ export function slugFromSignature(normalized) {
 }
 
 /**
+ * Accept a mechanical slug or its documented unpadded -N collision form.
+ * @param {string} candidate
+ * @param {string} canonical
+ * @returns {boolean}
+ */
+export function isMechanicalSlugOrCollision(candidate, canonical) {
+  if (candidate === canonical) return true;
+  if (
+    typeof candidate !== "string"
+    || typeof canonical !== "string"
+    || !candidate.startsWith(`${canonical}-`)
+  ) {
+    return false;
+  }
+  const suffix = candidate.slice(canonical.length + 1);
+  const number = Number(suffix);
+  return /^[1-9][0-9]*$/.test(suffix)
+    && Number.isSafeInteger(number)
+    && number >= 2;
+}
+
+/**
  * Normalize an already-sanitized input, then slug it in one step.
  * @param {string} raw
  * @returns {{ normalized: string, slug: string }}

@@ -42,6 +42,17 @@ const allShippedTemplateMarkers = [
     ...templateMarkers(recoveryTemplate),
   ]),
 ];
+const structuralTemplateMarkers = new Set([
+  "slug-from-normalized-signature",
+  "normalized symptom or error",
+  "capability",
+  "incident-coordinator",
+  "YYYY-MM-DD",
+  "any-or-specific",
+  "tool-name",
+  "version-range-or-unknown",
+  "integer",
+]);
 const fixture = JSON.parse(
   readFileSync(path.join(root, "fixtures", "evaluation", "cases.json"), "utf8"),
 );
@@ -91,6 +102,7 @@ Applies only to the documented managed runtime.
 
 function recoveryProposalReceipt() {
   const receipt = structuredClone(propagatedCase.terminal_receipt);
+  receipt.signature = "Documented validator launcher works with managed runtime.";
   receipt.classification = "recovery";
   receipt.containment = {
     used: false,
@@ -102,6 +114,12 @@ function recoveryProposalReceipt() {
     content: filledRecoveryArtifact,
   };
   return receipt;
+}
+
+function padToUtf8Bytes(content, size) {
+  const current = Buffer.byteLength(content, "utf8");
+  assert.ok(current <= size);
+  return `${content}${"x".repeat(size - current)}`;
 }
 
 function captureError(fn) {
@@ -595,12 +613,13 @@ describe("terminal receipt contract", () => {
       "Open an incident for the launcher discovery failure.";
     assert.throws(
       () => validateTerminalReceipt(summaryOnly),
-      /content must be a complete filled sanitized incident artifact/,
+      /content\.frontmatter\.signature is required/,
     );
   });
 
   it("allows normalized functional tokens but rejects template placeholders", () => {
     const proposed = structuredClone(propagatedCase.terminal_receipt);
+    proposed.signature = "Launcher at <path> fails at <ts>.";
     proposed.proposed_artifact.content = proposed.proposed_artifact.content
       .replace(
         "id: panel-launcher-discovery-differs-between-sandbox-and-host-contexts",
@@ -612,7 +631,7 @@ describe("terminal receipt contract", () => {
       )
       .replace(
         "Evidence: sandbox discovery omitted a verified launcher and could not observe host-backed authentication.",
-        "Evidence: <https://example.test/docs>, HTML <code>status</code>, and type <T> are safe technical prose.",
+        "Evidence: <https://example.test/docs>, HTML <code>status</code>, type <T>, <integer>, and <capability> are safe technical prose.",
       );
     assert.doesNotThrow(() => validateTerminalReceipt(proposed));
 
@@ -632,8 +651,12 @@ describe("terminal receipt contract", () => {
 
     for (const marker of allShippedTemplateMarkers) {
       const proposed = structuredClone(propagatedCase.terminal_receipt);
-      proposed.proposed_artifact.content =
-        proposed.proposed_artifact.content.replace(
+      proposed.proposed_artifact.content = structuralTemplateMarkers.has(marker)
+        ? proposed.proposed_artifact.content.replace(
+          "owner: Incident Coordinator",
+          `owner: <<${marker}>>`,
+        )
+        : proposed.proposed_artifact.content.replace(
           "Normal path: resolve authenticated reviewer launchers from the host execution context.",
           `Normal path: <${marker}>`,
         );
@@ -657,6 +680,127 @@ describe("terminal receipt contract", () => {
     assert.throws(
       () => validateTerminalReceipt(proposed),
       /content must be a complete filled sanitized incident artifact/,
+    );
+  });
+
+  it("rejects nested, format-control, and whitespace-obscured template markers", () => {
+    const mutations = [
+      (content) => content.replace(
+        "owner: Incident Coordinator",
+        "owner: <<incident-coordinator>>",
+      ),
+      (content) => content.replace(
+        "owner: Incident Coordinator",
+        "owner: <incident\u200B-coordinator>",
+      ),
+      (content) => content.replace(
+        "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+        "Normal path: <Repair\u2060 the broken mechanism>",
+      ),
+      (content) => content.replace(
+        "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+        "Normal path: <Repair\n  the broken mechanism>",
+      ),
+    ];
+    for (const mutate of mutations) {
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.proposed_artifact.content = mutate(proposed.proposed_artifact.content);
+      assert.throws(
+        () => validateTerminalReceipt(proposed),
+        /content must be a complete filled sanitized incident artifact/,
+      );
+    }
+  });
+
+  it("normalizes CRLF proposed artifacts before structural validation", () => {
+    const proposed = structuredClone(propagatedCase.terminal_receipt);
+    proposed.proposed_artifact.content =
+      proposed.proposed_artifact.content.replace(/\n/g, "\r\n");
+    assert.doesNotThrow(() => validateTerminalReceipt(proposed));
+  });
+
+  it("requires a normalized proposed signature bound to the terminal signature", () => {
+    for (const rawSignature of [
+      "Panel launcher failed on 2026-07-26.",
+      "Panel launcher failed under /tmp/build.",
+      "Panel launcher failed\u2028in the host context.",
+    ]) {
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.proposed_artifact.content =
+        proposed.proposed_artifact.content.replace(
+          'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+          `signature: "${rawSignature}"`,
+        );
+      assert.throws(
+        () => validateTerminalReceipt(proposed),
+        /signature (?:is required|must be a normalized one-line signature)/,
+      );
+    }
+
+    const mismatch = structuredClone(propagatedCase.terminal_receipt);
+    mismatch.proposed_artifact.content = mismatch.proposed_artifact.content
+      .replace(
+        "id: panel-launcher-discovery-differs-between-sandbox-and-host-contexts",
+        "id: panel-launcher-is-missing-from-the-host-context",
+      )
+      .replace(
+        'signature: "Panel launcher discovery differs between sandbox and host contexts."',
+        'signature: "Panel launcher is missing from the host context."',
+      );
+    assert.throws(
+      () => validateTerminalReceipt(mismatch),
+      /proposed_artifact signature must match terminal receipt signature/,
+    );
+  });
+
+  it("bounds proposed artifact content by UTF-8 bytes", () => {
+    const exact = structuredClone(propagatedCase.terminal_receipt);
+    exact.proposed_artifact.content =
+      padToUtf8Bytes(exact.proposed_artifact.content, 32768);
+    assert.doesNotThrow(() => validateTerminalReceipt(exact));
+
+    const oversized = structuredClone(exact);
+    oversized.proposed_artifact.content += "x";
+    assert.throws(
+      () => validateTerminalReceipt(oversized),
+      /content must be at most 32768 UTF-8 bytes/,
+    );
+  });
+
+  it("bounds receipt identifiers, dedupe keys, and normalized signatures", () => {
+    const exactId = structuredClone(persisted);
+    exactId.receipt_id = "x".repeat(128);
+    assert.doesNotThrow(() => validateTerminalReceipt(exactId));
+    exactId.receipt_id += "x";
+    assert.throws(
+      () => validateTerminalReceipt(exactId),
+      /receipt_id must be a lowercase host-neutral identifier of at most 128 characters/,
+    );
+
+    const exactDedupe = structuredClone(persisted);
+    exactDedupe.dedupe_key = "x".repeat(256);
+    assert.doesNotThrow(() => validateTerminalReceipt(exactDedupe));
+    exactDedupe.dedupe_key += "x";
+    assert.throws(
+      () => validateTerminalReceipt(exactDedupe),
+      /dedupe_key must be a lowercase host-neutral dedupe key of at most 256 characters/,
+    );
+
+    const tableCellId = structuredClone(persisted);
+    tableCellId.receipt_id = "worker|injected";
+    assert.throws(
+      () => validateTerminalReceipt(tableCellId),
+      /receipt_id must be a lowercase host-neutral identifier/,
+    );
+
+    const exactSignature = structuredClone(persisted);
+    exactSignature.signature = "x".repeat(512);
+    exactSignature.artifact_ref = "x".repeat(96);
+    assert.doesNotThrow(() => validateTerminalReceipt(exactSignature));
+    exactSignature.signature += "x";
+    assert.throws(
+      () => validateTerminalReceipt(exactSignature),
+      /signature must be a normalized one-line signature of at most 512 characters/,
     );
   });
 

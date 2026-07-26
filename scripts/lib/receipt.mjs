@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { parseIsoDate, validateCapsuleText } from "./capsule.mjs";
 import { parseFrontmatter } from "./frontmatter.mjs";
-import { normalizeSignature, slugFromSignature } from "./signature.mjs";
+import {
+  isMechanicalSlugOrCollision,
+  normalizeSignature,
+  slugFromSignature,
+} from "./signature.mjs";
 
 const classifications = new Set(["recovery", "incident", "external", "none"]);
 const terminalOutcomes = new Set([
@@ -44,7 +48,8 @@ const parentReceiptFields = new Set([
 const containmentFields = new Set(["used", "summary", "verification_gate"]);
 const proposedArtifactFields = new Set(["kind", "content"]);
 const escalationFields = new Set(["requires", "target", "action"]);
-const safeIdentifier = /^[a-z0-9][a-z0-9._:|-]*$/;
+const safeIdentifier = /^[a-z0-9][a-z0-9._:-]*$/;
+const safeDedupeKey = /^[a-z0-9][a-z0-9._:|-]*$/;
 const highConfidenceSensitivePatterns = [
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
   /(?:file:\/\/)?\/(?:Users|home)\/[^/\s"'`<>()\[\]{},;]+(?:\/[^\s"'`<>()\[\]{},;]*)?/i,
@@ -81,22 +86,24 @@ const requiredArtifactSections = Object.freeze({
   recovery: ["Symptom", "Recovery", "Verification", "Limits"],
 });
 const recoveryScopeFields = new Set(["os", "shell", "tool", "versions"]);
-const shippedTemplatePlaceholders = new Set([
+const structuralTemplatePlaceholders = new Set([
   "slug-from-normalized-signature",
   "normalized symptom or error",
   "capability",
   "incident-coordinator",
   "YYYY-MM-DD",
+  "any-or-specific",
+  "tool-name",
+  "version-range-or-unknown",
+  "integer",
+]);
+const proseTemplatePlaceholders = new Set([
   "Repair the broken mechanism",
   "The intended operation that failed.",
   "Sanitized expected behavior, observed behavior, and minimal reproduction; no raw logs.",
   "The mechanism and source of authority that must change.",
   'Temporary containment, the actor responsible for operating or expiring it, and expiry, or "None". The incident coordinator remains the frontmatter owner.',
   "How to remove containment and exercise the exact original normal path from clean preconditions.",
-  "any-or-specific",
-  "tool-name",
-  "version-range-or-unknown",
-  "integer",
   "Correct path in one line",
   "What the agent observes.",
   "The shortest correct operating path.",
@@ -108,7 +115,12 @@ const maximumEvidenceItemLength = 512;
 const maximumCompactProseLength = 512;
 const maximumRequiresItems = 8;
 const maximumRequiresItemLength = 128;
+const maximumIdentifierLength = 128;
+const maximumDedupeKeyLength = 256;
+const maximumSignatureLength = 512;
+const maximumProposedContentBytes = 32768;
 const lineBreakPattern = /[\r\n\u0085\u2028\u2029]/u;
+const formatControlPattern = /\p{Cf}/gu;
 
 function hasField(value, field) {
   return Object.prototype.hasOwnProperty.call(value, field);
@@ -172,16 +184,40 @@ function requireSanitizedString(value, field, label) {
 
 function requireNormalizedSignature(value, field, label) {
   const result = requireSanitizedString(value, field, label);
-  if (normalizeSignature(result) !== result || lineBreakPattern.test(result)) {
-    fail(label, `.${field} must be a normalized one-line signature`);
+  if (
+    result.length > maximumSignatureLength
+    || normalizeSignature(result) !== result
+    || lineBreakPattern.test(result)
+  ) {
+    fail(
+      label,
+      `.${field} must be a normalized one-line signature of at most ${maximumSignatureLength} characters`,
+    );
   }
   return result;
 }
 
 function requireSafeIdentifier(value, field, label) {
   const result = requireSanitizedString(value, field, label);
-  if (!safeIdentifier.test(result)) {
-    fail(label, `.${field} must be a lowercase host-neutral identifier`);
+  if (result.length > maximumIdentifierLength || !safeIdentifier.test(result)) {
+    fail(
+      label,
+      `.${field} must be a lowercase host-neutral identifier of at most ${maximumIdentifierLength} characters`,
+    );
+  }
+  return result;
+}
+
+function requireDedupeKey(value, field, label) {
+  const result = requireSanitizedString(value, field, label);
+  if (
+    result.length > maximumDedupeKeyLength
+    || !safeDedupeKey.test(result)
+  ) {
+    fail(
+      label,
+      `.${field} must be a lowercase host-neutral dedupe key of at most ${maximumDedupeKeyLength} characters`,
+    );
   }
   return result;
 }
@@ -230,8 +266,14 @@ function requireNullableCompactProse(value, field, label) {
 
 function requireNullableSafeIdentifier(value, field, label) {
   const result = requireNullableSanitizedString(value, field, label);
-  if (result !== null && !safeIdentifier.test(result)) {
-    fail(label, `.${field} must be null or a lowercase host-neutral identifier`);
+  if (
+    result !== null
+    && (result.length > maximumIdentifierLength || !safeIdentifier.test(result))
+  ) {
+    fail(
+      label,
+      `.${field} must be null or a lowercase host-neutral identifier of at most ${maximumIdentifierLength} characters`,
+    );
   }
   return result;
 }
@@ -396,18 +438,22 @@ function parseNestedMap(source, key) {
   return result;
 }
 
-function sectionHasBody(body, section) {
+function getSectionBody(body, section) {
   const heading = new RegExp(`^##\\s+${section}\\b[^\\n]*\\n`, "m");
   const match = heading.exec(body);
   if (!match) {
-    return false;
+    return null;
   }
   const remainder = body.slice(match.index + match[0].length);
   const nextHeading = remainder.search(/^##\s+/m);
-  const sectionBody = (nextHeading === -1 ? remainder : remainder.slice(0, nextHeading))
+  return (nextHeading === -1 ? remainder : remainder.slice(0, nextHeading))
     .replace(/<!--[\s\S]*?-->/g, "")
     .trim();
-  return sectionBody.length > 0;
+}
+
+function sectionHasBody(body, section) {
+  const sectionBody = getSectionBody(body, section);
+  return sectionBody !== null && sectionBody.length > 0;
 }
 
 function hasNonemptyField(fields, field) {
@@ -416,13 +462,69 @@ function hasNonemptyField(fields, field) {
     && fields[field].trim().length > 0;
 }
 
-function containsShippedTemplatePlaceholder(content) {
+function normalizeTemplateMarker(value) {
+  return value
+    .replace(formatControlPattern, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function angleCandidatesFromEveryStart(value) {
+  const candidates = [];
+  for (
+    let start = value.indexOf("<");
+    start !== -1;
+    start = value.indexOf("<", start + 1)
+  ) {
+    const end = value.indexOf(">", start + 1);
+    if (end !== -1) {
+      candidates.push(normalizeTemplateMarker(value.slice(start + 1, end)));
+    }
+  }
+  return candidates;
+}
+
+function unwrapStructuralPlaceholder(value) {
+  let candidate = normalizeTemplateMarker(value);
+  if (
+    (candidate.startsWith('"') && candidate.endsWith('"'))
+    || (candidate.startsWith("'") && candidate.endsWith("'"))
+  ) {
+    candidate = candidate.slice(1, -1).trim();
+  }
+  if (candidate.startsWith("[") && candidate.endsWith("]")) {
+    candidate = candidate.slice(1, -1).trim();
+  }
+  while (candidate.startsWith("<") && candidate.endsWith(">")) {
+    candidate = candidate.slice(1, -1).trim();
+  }
+  return normalizeTemplateMarker(candidate);
+}
+
+function containsShippedTemplatePlaceholder(content, source, body, kind) {
   const prose = content.replace(/<!--[\s\S]*?-->/g, "");
-  const placeholders = [...prose.matchAll(/<([\s\S]*?)>/g)].map((match) =>
-    match[1].replace(/\s+/gu, " ").trim(),
-  );
-  return placeholders.some((placeholder) =>
-    shippedTemplatePlaceholders.has(placeholder),
+  if (
+    angleCandidatesFromEveryStart(prose).some((candidate) =>
+      proseTemplatePlaceholders.has(candidate),
+    )
+  ) {
+    return true;
+  }
+  const frontmatterValues = source.split("\n").flatMap((line) => {
+    const match = /^\s*[A-Za-z0-9_]+:\s*(.+)$/.exec(line);
+    return match ? [match[1]] : [];
+  });
+  if (
+    frontmatterValues.some((value) =>
+      structuralTemplatePlaceholders.has(unwrapStructuralPlaceholder(value)),
+    )
+  ) {
+    return true;
+  }
+  return requiredArtifactSections[kind].some((section) =>
+    structuralTemplatePlaceholders.has(
+      unwrapStructuralPlaceholder(getSectionBody(body, section) ?? ""),
+    ),
   );
 }
 
@@ -480,8 +582,17 @@ function validateProposedArtifact(artifact, label) {
   requireExactFields(artifact, label, proposedArtifactFields);
   const kind = requireEnum(artifact, "kind", label, new Set(["recovery", "incident"]));
   const content = requireSanitizedString(artifact, "content", label);
-  const { fields, body } = parseFrontmatter(content);
-  const source = frontmatterSource(content);
+  if (Buffer.byteLength(content, "utf8") > maximumProposedContentBytes) {
+    fail(label, `.content must be at most ${maximumProposedContentBytes} UTF-8 bytes`);
+  }
+  const normalizedContent = content.replace(/\r\n/g, "\n");
+  const { fields, body } = parseFrontmatter(normalizedContent);
+  const source = frontmatterSource(normalizedContent);
+  const proposedSignature = requireNormalizedSignature(
+    fields,
+    "signature",
+    `${label}.content.frontmatter`,
+  );
   const schemaValid = kind === "incident"
     ? validateIncidentArtifactSchema(fields, source)
     : validateRecoveryArtifactSchema(fields, source);
@@ -491,12 +602,11 @@ function validateProposedArtifact(artifact, label) {
   const filename = fields.id ? `${fields.id}.md` : "proposed-artifact.md";
   const mechanicalIdValid =
     typeof fields.id === "string"
-    && typeof fields.signature === "string"
-    && artifactRefMatchesCanonicalId(
+    && isMechanicalSlugOrCollision(
       fields.id,
-      slugFromSignature(fields.signature),
+      slugFromSignature(proposedSignature),
     );
-  const validation = validateCapsuleText(content, {
+  const validation = validateCapsuleText(normalizedContent, {
     kind,
     filename,
     // Receipt validation must be deterministic; lifecycle expiry is checked
@@ -504,8 +614,13 @@ function validateProposedArtifact(artifact, label) {
     today: new Date("1970-01-01T00:00:00.000Z"),
   });
   if (
-    !content.includes("\n")
-    || containsShippedTemplatePlaceholder(content)
+    !normalizedContent.includes("\n")
+    || containsShippedTemplatePlaceholder(
+      normalizedContent,
+      source,
+      body,
+      kind,
+    )
     || !mechanicalIdValid
     || !schemaValid
     || !completeSections
@@ -513,6 +628,10 @@ function validateProposedArtifact(artifact, label) {
   ) {
     fail(label, `.content must be a complete filled sanitized ${kind} artifact`);
   }
+  return {
+    id: fields.id,
+    signature: proposedSignature,
+  };
 }
 
 function validateTerminalActionFields(receipt, label, outcome, childReceipt = null) {
@@ -523,7 +642,10 @@ function validateTerminalActionFields(receipt, label, outcome, childReceipt = nu
     label,
   );
   const proposedArtifact = requireNullableObject(receipt, "proposed_artifact", label);
-  validateProposedArtifact(proposedArtifact, `${label}.proposed_artifact`);
+  const proposedArtifactIdentity = validateProposedArtifact(
+    proposedArtifact,
+    `${label}.proposed_artifact`,
+  );
   const escalation = requireNullableObject(receipt, "escalation", label);
   validateEscalation(escalation, `${label}.escalation`);
 
@@ -562,20 +684,11 @@ function validateTerminalActionFields(receipt, label, outcome, childReceipt = nu
       fail(label, ".forwarded_receipt must preserve the complete child receipt unchanged");
     }
   }
+  return proposedArtifactIdentity;
 }
 
 function artifactRefMatchesCanonicalId(artifactRef, canonicalId) {
-  if (artifactRef === canonicalId) {
-    return true;
-  }
-  if (!artifactRef.startsWith(`${canonicalId}-`)) {
-    return false;
-  }
-  const collisionSuffix = artifactRef.slice(canonicalId.length + 1);
-  const collisionNumber = Number(collisionSuffix);
-  return /^[1-9][0-9]*$/.test(collisionSuffix)
-    && Number.isSafeInteger(collisionNumber)
-    && collisionNumber >= 2;
+  return isMechanicalSlugOrCollision(artifactRef, canonicalId);
 }
 
 function canonicalJson(value) {
@@ -603,7 +716,7 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
   }
   requireSafeIdentifier(receipt, "receipt_id", label);
   requireNormalizedSignature(receipt, "signature", label);
-  requireSafeIdentifier(receipt, "dedupe_key", label);
+  requireDedupeKey(receipt, "dedupe_key", label);
   const classification = requireEnum(receipt, "classification", label, classifications);
   validateEvidence(receipt, label);
   requireEnum(receipt, "task_outcome", label, taskOutcomes);
@@ -613,7 +726,20 @@ export function validateTerminalReceipt(receipt, label = "terminal_receipt") {
     `${label}.containment`,
   );
   const outcome = requireEnum(receipt, "terminal_outcome", label, terminalOutcomes);
-  validateTerminalActionFields(receipt, label, outcome);
+  const proposedArtifactIdentity = validateTerminalActionFields(
+    receipt,
+    label,
+    outcome,
+  );
+  if (
+    proposedArtifactIdentity !== undefined
+    && proposedArtifactIdentity.signature !== receipt.signature
+  ) {
+    fail(
+      label,
+      ".proposed_artifact signature must match terminal receipt signature",
+    );
+  }
   if (classification === "none" && outcome !== "no_artifact") {
     fail(label, ".classification none requires terminal_outcome no_artifact");
   }
@@ -694,7 +820,9 @@ export function validateParentReceipt(parent, childReceipt, label = "parent_rece
     fail(label, ".proposed_artifact must preserve the complete child proposed artifact");
   }
   if (outcome === "persisted_artifact" && childReceipt.proposed_artifact !== null) {
-    const proposedId = parseFrontmatter(childReceipt.proposed_artifact.content).fields.id;
+    const proposedId = parseFrontmatter(
+      childReceipt.proposed_artifact.content.replace(/\r\n/g, "\n"),
+    ).fields.id;
     if (!artifactRefMatchesCanonicalId(parent.artifact_ref, proposedId)) {
       fail(
         label,
