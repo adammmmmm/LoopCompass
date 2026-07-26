@@ -119,8 +119,12 @@ const maximumIdentifierLength = 128;
 const maximumDedupeKeyLength = 256;
 const maximumSignatureLength = 512;
 const maximumProposedContentBytes = 32768;
+const maximumTemplateCandidateLength = 512;
 const lineBreakPattern = /[\r\n\u0085\u2028\u2029]/u;
-const formatControlPattern = /\p{Cf}/gu;
+const defaultIgnorablePattern = /\p{Default_Ignorable_Code_Point}/gu;
+const formatCharacterPattern = /\p{Cf}/u;
+const unsafeSeparatorPattern = /[\p{Zl}\p{Zp}]/u;
+const controlCharacterPattern = /\p{Cc}/u;
 
 function hasField(value, field) {
   return Object.prototype.hasOwnProperty.call(value, field);
@@ -164,9 +168,36 @@ function hasHighConfidenceSensitiveValue(value) {
   return highConfidenceSensitivePatterns.some((pattern) => pattern.test(value));
 }
 
-export function validateSanitizedProse(value, label = "prose") {
+function hasUnsafeTextControl(value, { allowLf = false } = {}) {
+  for (const character of value) {
+    if (allowLf && character === "\n") {
+      continue;
+    }
+    if (
+      controlCharacterPattern.test(character)
+      || formatCharacterPattern.test(character)
+      || unsafeSeparatorPattern.test(character)
+      || /\p{Default_Ignorable_Code_Point}/u.test(character)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function validateSanitizedProse(
+  value,
+  label = "prose",
+  options = {},
+) {
   if (typeof value !== "string" || value.trim().length === 0) {
     fail(label, " must be a non-empty string");
+  }
+  if (hasUnsafeTextControl(value, options)) {
+    fail(
+      label,
+      " contains an unsafe Unicode or control character; sanitize it before use",
+    );
   }
   if (hasHighConfidenceSensitiveValue(value)) {
     fail(
@@ -232,11 +263,8 @@ function requireNullableString(value, field, label) {
 
 function requireNullableSanitizedString(value, field, label) {
   const result = requireNullableString(value, field, label);
-  if (result !== null && hasHighConfidenceSensitiveValue(result)) {
-    fail(
-      label,
-      `.${field} contains a high-confidence sensitive value; sanitize it before receipt construction`,
-    );
+  if (result !== null) {
+    validateSanitizedProse(result, `${label}.${field}`);
   }
   return result;
 }
@@ -308,11 +336,8 @@ function requireStringArray(value, field, label) {
 
 function requireSanitizedStringArray(value, field, label) {
   const result = requireStringArray(value, field, label);
-  if (result.some(hasHighConfidenceSensitiveValue)) {
-    fail(
-      label,
-      `.${field} contains a high-confidence sensitive value; sanitize it before receipt construction`,
-    );
+  for (const item of result) {
+    validateSanitizedProse(item, `${label}.${field}`);
   }
   return result;
 }
@@ -394,8 +419,90 @@ function frontmatterSource(content) {
   if (!content.startsWith("---\n")) {
     return "";
   }
-  const end = content.indexOf("\n---", 4);
+  const end = content.indexOf("\n---\n", 4);
   return end === -1 ? "" : content.slice(4, end);
+}
+
+function scalarLooksUnresolved(raw) {
+  let value = raw.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"'))
+    || (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  const values = value.startsWith("[") && value.endsWith("]")
+    ? value.slice(1, -1).split(",").map((item) => item.trim())
+    : [value];
+  return values.some((item) => {
+    let candidate = item;
+    if (
+      (candidate.startsWith('"') && candidate.endsWith('"'))
+      || (candidate.startsWith("'") && candidate.endsWith("'"))
+    ) {
+      candidate = candidate.slice(1, -1).trim();
+    }
+    return /^<+[^<>]+>+$/u.test(candidate);
+  });
+}
+
+function proposedFrontmatterIsStrict(source, kind) {
+  if (source.length === 0) {
+    return false;
+  }
+  const allowedTopLevel = new Set(requiredArtifactFields[kind]);
+  const topLevel = new Set();
+  const nested = new Map();
+  let activeMap = null;
+
+  for (const line of source.split("\n")) {
+    if (!line.trim() || line.trimStart().startsWith("#")) {
+      continue;
+    }
+    if (/^\s/.test(line)) {
+      const match = /^  ([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
+      if (!match || activeMap !== "scope" || match[2].trim().length === 0) {
+        return false;
+      }
+      const keys = nested.get(activeMap) ?? new Set();
+      if (keys.has(match[1]) || scalarLooksUnresolved(match[2])) {
+        return false;
+      }
+      keys.add(match[1]);
+      nested.set(activeMap, keys);
+      continue;
+    }
+
+    const match = /^([A-Za-z0-9_]+):\s*(.*)$/.exec(line);
+    if (!match || topLevel.has(match[1]) || !allowedTopLevel.has(match[1])) {
+      return false;
+    }
+    topLevel.add(match[1]);
+    activeMap = match[2].trim().length === 0 ? match[1] : null;
+    if (scalarLooksUnresolved(match[2])) {
+      return false;
+    }
+    if (
+      (match[2].trim().startsWith('"') !== match[2].trim().endsWith('"'))
+      || (match[2].trim().startsWith("'") !== match[2].trim().endsWith("'"))
+    ) {
+      return false;
+    }
+  }
+
+  if (
+    topLevel.size !== allowedTopLevel.size
+    || [...allowedTopLevel].some((field) => !topLevel.has(field))
+  ) {
+    return false;
+  }
+  if (kind === "incident") {
+    return nested.size === 0;
+  }
+  const scope = nested.get("scope");
+  return nested.size === 1
+    && scope?.size === recoveryScopeFields.size
+    && [...recoveryScopeFields].every((field) => scope.has(field));
 }
 
 function parseInlineList(raw, { nonempty }) {
@@ -464,7 +571,7 @@ function hasNonemptyField(fields, field) {
 
 function normalizeTemplateMarker(value) {
   return value
-    .replace(formatControlPattern, "")
+    .replace(defaultIgnorablePattern, "")
     .replace(/\s+/gu, " ")
     .trim();
 }
@@ -476,9 +583,15 @@ function angleCandidatesFromEveryStart(value) {
     start !== -1;
     start = value.indexOf("<", start + 1)
   ) {
-    const end = value.indexOf(">", start + 1);
-    if (end !== -1) {
-      candidates.push(normalizeTemplateMarker(value.slice(start + 1, end)));
+    // Bound work per opening angle so nested-marker detection remains linear
+    // even for a near-limit artifact containing many unmatched "<" bytes.
+    const bounded = value.slice(
+      start + 1,
+      start + 2 + maximumTemplateCandidateLength,
+    );
+    const relativeEnd = bounded.indexOf(">");
+    if (relativeEnd !== -1) {
+      candidates.push(normalizeTemplateMarker(bounded.slice(0, relativeEnd)));
     }
   }
   return candidates;
@@ -516,13 +629,15 @@ function containsShippedTemplatePlaceholder(content, source, body, kind) {
   });
   if (
     frontmatterValues.some((value) =>
-      structuralTemplatePlaceholders.has(unwrapStructuralPlaceholder(value)),
+      scalarLooksUnresolved(value)
+      || structuralTemplatePlaceholders.has(unwrapStructuralPlaceholder(value)),
     )
   ) {
     return true;
   }
   return requiredArtifactSections[kind].some((section) =>
-    structuralTemplatePlaceholders.has(
+    scalarLooksUnresolved(getSectionBody(body, section) ?? "")
+    || structuralTemplatePlaceholders.has(
       unwrapStructuralPlaceholder(getSectionBody(body, section) ?? ""),
     ),
   );
@@ -581,13 +696,21 @@ function validateProposedArtifact(artifact, label) {
   }
   requireExactFields(artifact, label, proposedArtifactFields);
   const kind = requireEnum(artifact, "kind", label, new Set(["recovery", "incident"]));
-  const content = requireSanitizedString(artifact, "content", label);
+  const content = requireString(artifact, "content", label);
   if (Buffer.byteLength(content, "utf8") > maximumProposedContentBytes) {
     fail(label, `.content must be at most ${maximumProposedContentBytes} UTF-8 bytes`);
   }
   const normalizedContent = content.replace(/\r\n/g, "\n");
+  validateSanitizedProse(
+    normalizedContent,
+    `${label}.content`,
+    { allowLf: true },
+  );
   const { fields, body } = parseFrontmatter(normalizedContent);
   const source = frontmatterSource(normalizedContent);
+  if (!proposedFrontmatterIsStrict(source, kind)) {
+    fail(label, `.content must be a complete filled sanitized ${kind} artifact`);
+  }
   const proposedSignature = requireNormalizedSignature(
     fields,
     "signature",
@@ -819,17 +942,7 @@ export function validateParentReceipt(parent, childReceipt, label = "parent_rece
   ) {
     fail(label, ".proposed_artifact must preserve the complete child proposed artifact");
   }
-  if (outcome === "persisted_artifact" && childReceipt.proposed_artifact !== null) {
-    const proposedId = parseFrontmatter(
-      childReceipt.proposed_artifact.content.replace(/\r\n/g, "\n"),
-    ).fields.id;
-    if (!artifactRefMatchesCanonicalId(parent.artifact_ref, proposedId)) {
-      fail(
-        label,
-        ".artifact_ref must equal the proposed artifact id or its documented -N collision id",
-      );
-    }
-  } else if (
+  if (
     outcome === "persisted_artifact"
     && !artifactRefMatchesCanonicalId(
       parent.artifact_ref,

@@ -390,6 +390,7 @@ function requireObject(value, label) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
   }
+  return value;
 }
 
 function requireExactFields(value, label, allowed) {
@@ -404,6 +405,14 @@ function requireArray(value, label) {
   if (!Array.isArray(value)) {
     throw new Error(`${label} must be an array`);
   }
+}
+
+function requireObjectOrNull(obj, field, label) {
+  const value = requireField(obj, field, label);
+  if (value === null) {
+    return null;
+  }
+  return requireObject(value, `${label}.${field}`);
 }
 
 function requireField(obj, field, label) {
@@ -590,12 +599,17 @@ function validateFixture(doc) {
   }
   requireArray(requireField(doc, "cases", "fixture"), "fixture.cases");
   const receiptIds = new Map();
+  const caseIds = new Map();
 
   doc.cases.forEach((c, index) => {
     const label = `cases[${index}]`;
     requireObject(c, label);
     requireExactFields(c, label, caseFields);
-    requireFixtureIdentifier(c, "id", label);
+    const caseId = requireFixtureIdentifier(c, "id", label);
+    if (caseIds.has(caseId)) {
+      throw new Error(`${label}.id duplicates ${caseIds.get(caseId)}`);
+    }
+    caseIds.set(caseId, `${label}.id`);
     requireFixtureProse(c, "scenario", label);
 
     const scope = requireField(c, "scope", label);
@@ -639,43 +653,51 @@ function validateFixture(doc) {
     requireNonnegativeIntegerOrNull(receipt, "steps_to_verified_normal_path", `${label}.receipt`);
     requireBoolean(receipt, "blind_retry", `${label}.receipt`);
     requireEnum(receipt, "terminal_outcome", `${label}.receipt`, receiptTerminalOutcomes);
-    if (hasField(receipt, "terminal_receipt")) {
-      if (receipt.terminal_receipt !== null) {
-        validateTerminalReceipt(receipt.terminal_receipt, `${label}.receipt.terminal_receipt`);
-        if (receipt.terminal_receipt.classification !== receipt.classification) {
-          throw new Error(
-            `${label}.receipt.terminal_receipt.classification must match ${label}.receipt.classification`,
-          );
-        }
-        if (receipt.terminal_receipt.terminal_outcome !== receipt.terminal_outcome) {
-          throw new Error(
-            `${label}.receipt.terminal_receipt.terminal_outcome must match ${label}.receipt.terminal_outcome`,
-          );
-        }
-        const childId = receipt.terminal_receipt.receipt_id;
-        if (receiptIds.has(childId)) {
-          throw new Error(
-            `${label}.receipt.terminal_receipt.receipt_id duplicates ${receiptIds.get(childId)}`,
-          );
-        }
-        receiptIds.set(childId, `${label}.receipt.terminal_receipt.receipt_id`);
+    const terminalReceipt = requireObjectOrNull(
+      receipt,
+      "terminal_receipt",
+      `${label}.receipt`,
+    );
+    const parentReceipt = requireObjectOrNull(
+      receipt,
+      "parent_receipt",
+      `${label}.receipt`,
+    );
+    if (terminalReceipt !== null) {
+      validateTerminalReceipt(terminalReceipt, `${label}.receipt.terminal_receipt`);
+      if (terminalReceipt.classification !== receipt.classification) {
+        throw new Error(
+          `${label}.receipt.terminal_receipt.classification must match ${label}.receipt.classification`,
+        );
       }
+      if (terminalReceipt.terminal_outcome !== receipt.terminal_outcome) {
+        throw new Error(
+          `${label}.receipt.terminal_receipt.terminal_outcome must match ${label}.receipt.terminal_outcome`,
+        );
+      }
+      const childId = terminalReceipt.receipt_id;
+      if (receiptIds.has(childId)) {
+        throw new Error(
+          `${label}.receipt.terminal_receipt.receipt_id duplicates ${receiptIds.get(childId)}`,
+        );
+      }
+      receiptIds.set(childId, `${label}.receipt.terminal_receipt.receipt_id`);
     }
-    if (hasField(receipt, "parent_receipt") && receipt.parent_receipt !== null) {
-      if (!receipt.terminal_receipt) {
+    if (parentReceipt !== null) {
+      if (terminalReceipt === null) {
         throw new Error(`${label}.receipt.parent_receipt requires terminal_receipt`);
       }
-      if (receipt.terminal_receipt.terminal_outcome !== "proposed_artifact") {
+      if (terminalReceipt.terminal_outcome !== "proposed_artifact") {
         throw new Error(
           `${label}.receipt.parent_receipt requires a proposed_artifact terminal_receipt`,
         );
       }
       validateParentReceipt(
-        receipt.parent_receipt,
-        receipt.terminal_receipt,
+        parentReceipt,
+        terminalReceipt,
         `${label}.receipt.parent_receipt`,
       );
-      const parentId = receipt.parent_receipt.receipt_id;
+      const parentId = parentReceipt.receipt_id;
       if (receiptIds.has(parentId)) {
         throw new Error(
           `${label}.receipt.parent_receipt.receipt_id duplicates ${receiptIds.get(parentId)}`,

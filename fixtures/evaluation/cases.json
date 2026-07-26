@@ -219,7 +219,9 @@
         "repeated_failure_attempts_after": 0,
         "steps_to_verified_normal_path": 0,
         "blind_retry": false,
-        "terminal_outcome": "no_artifact"
+        "terminal_outcome": "no_artifact",
+        "terminal_receipt": null,
+        "parent_receipt": null
       },
       "expected": {
         "consulted": false,

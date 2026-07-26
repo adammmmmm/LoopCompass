@@ -63,7 +63,11 @@ name, case ids, and scope/receipt hosts are sanitized lowercase host-neutral ide
 scope, receipt, and expected-result objects are closed schemas; unknown fields fail validation
 rather than silently changing a metric denominator. Scenario text and recorded failure text follow
 the receipt sanitation boundary. Each is a non-Markdown single line of at most 512 characters and
-is rejected when it contains a high-confidence personal home path, email, or secret shape.
+is rejected when it contains unsafe Unicode/control characters or a high-confidence personal home
+path, email, or secret shape.
+Case ids are unique. Every observed receipt object includes explicit `terminal_receipt` and
+`parent_receipt` properties whose values are either complete objects or `null`; omission is not an
+alternate representation of a miss.
 
 `fixture.metrics` must exactly match the evaluator's single ordered metric registry. Missing,
 duplicate, unknown, or reordered entries fail validation. The same registry drives report
@@ -77,8 +81,8 @@ brackets and Markdown metacharacters are rejected. When present,
 `receipt.applied_existing_artifact` is boolean or null, and
 `receipt.candidate_artifact_status` is null or a recovery lifecycle status.
 
-Cases that exercise cross-actor coordination add `receipt.terminal_receipt` and optionally
-`receipt.parent_receipt`, following the shipped
+Cases that exercise cross-actor coordination populate `receipt.terminal_receipt` and, when
+observed, `receipt.parent_receipt`, following the shipped
 [terminal receipt contract](../skills/loop-compass/references/terminal-receipts.md). A deliberate
 `terminal_receipt: null` represents an observed missed receipt and scores as incomplete when
 `expected.terminal_receipt_required` is true. Every case whose expected classification is

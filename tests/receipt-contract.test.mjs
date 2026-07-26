@@ -8,7 +8,6 @@ import {
   validateParentReceipt,
   validateTerminalReceipt,
 } from "../scripts/lib/receipt.mjs";
-import { parseFrontmatter } from "../scripts/lib/frontmatter.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const receiptReference = readFileSync(
@@ -116,10 +115,11 @@ function recoveryProposalReceipt() {
   return receipt;
 }
 
-function padToUtf8Bytes(content, size) {
+function padToUtf8Bytes(content, size, fill = "x") {
   const current = Buffer.byteLength(content, "utf8");
   assert.ok(current <= size);
-  return `${content}${"x".repeat(size - current)}`;
+  assert.equal(Buffer.byteLength(fill, "utf8"), 1);
+  return `${content}${fill.repeat(size - current)}`;
 }
 
 function captureError(fn) {
@@ -212,7 +212,10 @@ describe("terminal receipt contract", () => {
       const multiline = structuredClone(persisted);
       multiline.evidence = [`First output line.${separator}PrivatePayload`];
       const error = captureError(() => validateTerminalReceipt(multiline));
-      assert.match(error.message, /evidence must contain at most 8 one-line items/);
+      assert.match(
+        error.message,
+        /evidence must contain at most 8 one-line items|unsafe Unicode or control character/,
+      );
       assert.equal(error.message.includes("PrivatePayload"), false);
     }
   });
@@ -271,7 +274,10 @@ describe("terminal receipt contract", () => {
         const receipt = structuredClone(persisted);
         mutate(receipt, value);
         const error = captureError(() => validateTerminalReceipt(receipt));
-        assert.match(error.message, /must be one line of at most 512 characters/);
+        assert.match(
+          error.message,
+          /must be one line of at most 512 characters|unsafe Unicode or control character/,
+        );
         assert.equal(error.message.includes("PrivatePayload"), false);
       }
     }
@@ -294,7 +300,10 @@ describe("terminal receipt contract", () => {
       receipt.no_artifact_reason = value;
       receipt.escalation = null;
       const error = captureError(() => validateTerminalReceipt(receipt));
-      assert.match(error.message, /must be one line of at most 512 characters/);
+      assert.match(
+        error.message,
+        /must be one line of at most 512 characters|unsafe Unicode or control character/,
+      );
       assert.equal(error.message.includes("PrivatePayload"), false);
     }
   });
@@ -312,7 +321,10 @@ describe("terminal receipt contract", () => {
       const terminal = structuredClone(persisted);
       terminal.escalation.requires = requires;
       let error = captureError(() => validateTerminalReceipt(terminal));
-      assert.match(error.message, /requires must contain at most 8 one-line items/);
+      assert.match(
+        error.message,
+        /requires must contain at most 8 one-line items|unsafe Unicode or control character/,
+      );
       assert.equal(error.message.includes("PrivatePayload"), false);
 
       const parent = structuredClone(propagatedCase.parent_receipt);
@@ -320,7 +332,10 @@ describe("terminal receipt contract", () => {
       error = captureError(() =>
         validateParentReceipt(parent, propagatedCase.terminal_receipt),
       );
-      assert.match(error.message, /requires must contain at most 8 one-line items/);
+      assert.match(
+        error.message,
+        /requires must contain at most 8 one-line items|unsafe Unicode or control character/,
+      );
       assert.equal(error.message.includes("PrivatePayload"), false);
     }
   });
@@ -416,33 +431,54 @@ describe("terminal receipt contract", () => {
     );
   });
 
-  it("binds authoritative persistence to the proposed mechanical artifact id", () => {
+  it("binds authoritative persistence directly to the child signature slug", () => {
     const authoritativeCase = fixture.cases.find(
       (c) => c.id === "lc-eval-008-subagent-readonly-handoff",
     ).receipt;
-    const proposedId = parseFrontmatter(
-      authoritativeCase.terminal_receipt.proposed_artifact.content,
-    ).fields.id;
-    assert.equal(authoritativeCase.parent_receipt.artifact_ref, proposedId);
+    const baseId =
+      "windows-path-normalization-fails-deterministically";
+    assert.equal(authoritativeCase.parent_receipt.artifact_ref, baseId);
 
     const wrong = structuredClone(authoritativeCase.parent_receipt);
     wrong.artifact_ref = "different-mechanical-id";
     assert.throws(
       () => validateParentReceipt(wrong, authoritativeCase.terminal_receipt),
-      /artifact_ref must equal the proposed artifact id/,
+      /artifact_ref must equal the mechanical child signature slug/,
     );
 
-    const collision = structuredClone(authoritativeCase.parent_receipt);
-    collision.artifact_ref = `${proposedId}-2`;
+    for (const artifactRef of [baseId, `${baseId}-2`, `${baseId}-10`]) {
+      const accepted = structuredClone(authoritativeCase.parent_receipt);
+      accepted.artifact_ref = artifactRef;
+      assert.doesNotThrow(() =>
+        validateParentReceipt(accepted, authoritativeCase.terminal_receipt),
+      );
+    }
+
+    for (const artifactRef of [`${baseId}-02`, `${baseId}-2-2`]) {
+      const rejected = structuredClone(authoritativeCase.parent_receipt);
+      rejected.artifact_ref = artifactRef;
+      assert.throws(
+        () => validateParentReceipt(rejected, authoritativeCase.terminal_receipt),
+        /artifact_ref must equal the mechanical child signature slug/,
+      );
+    }
+
+    const collisionProposal = structuredClone(authoritativeCase.terminal_receipt);
+    collisionProposal.proposed_artifact.content =
+      collisionProposal.proposed_artifact.content.replace(
+        `id: ${baseId}`,
+        `id: ${baseId}-2`,
+      );
+    const directParent = structuredClone(authoritativeCase.parent_receipt);
+    directParent.child_payload_sha256 = receiptPayloadDigest(collisionProposal);
+    directParent.artifact_ref = `${baseId}-10`;
     assert.doesNotThrow(() =>
-      validateParentReceipt(collision, authoritativeCase.terminal_receipt),
+      validateParentReceipt(directParent, collisionProposal),
     );
-
-    const paddedCollision = structuredClone(authoritativeCase.parent_receipt);
-    paddedCollision.artifact_ref = `${proposedId}-02`;
+    directParent.artifact_ref = `${baseId}-2-2`;
     assert.throws(
-      () => validateParentReceipt(paddedCollision, authoritativeCase.terminal_receipt),
-      /artifact_ref must equal the proposed artifact id/,
+      () => validateParentReceipt(directParent, collisionProposal),
+      /artifact_ref must equal the mechanical child signature slug/,
     );
   });
 
@@ -613,7 +649,7 @@ describe("terminal receipt contract", () => {
       "Open an incident for the launcher discovery failure.";
     assert.throws(
       () => validateTerminalReceipt(summaryOnly),
-      /content\.frontmatter\.signature is required/,
+      /content must be a complete filled sanitized incident artifact/,
     );
   });
 
@@ -683,7 +719,7 @@ describe("terminal receipt contract", () => {
     );
   });
 
-  it("rejects nested, format-control, and whitespace-obscured template markers", () => {
+  it("rejects nested, default-ignorable, and whitespace-obscured template markers", () => {
     const mutations = [
       (content) => content.replace(
         "owner: Incident Coordinator",
@@ -694,8 +730,16 @@ describe("terminal receipt contract", () => {
         "owner: <incident\u200B-coordinator>",
       ),
       (content) => content.replace(
+        "owner: Incident Coordinator",
+        "owner: <incident\u034F-coordinator>",
+      ),
+      (content) => content.replace(
         "Normal path: resolve authenticated reviewer launchers from the host execution context.",
         "Normal path: <Repair\u2060 the broken mechanism>",
+      ),
+      (content) => content.replace(
+        "Normal path: resolve authenticated reviewer launchers from the host execution context.",
+        "Normal path: <Repair\uFE0F the broken mechanism>",
       ),
       (content) => content.replace(
         "Normal path: resolve authenticated reviewer launchers from the host execution context.",
@@ -707,7 +751,7 @@ describe("terminal receipt contract", () => {
       proposed.proposed_artifact.content = mutate(proposed.proposed_artifact.content);
       assert.throws(
         () => validateTerminalReceipt(proposed),
-        /content must be a complete filled sanitized incident artifact/,
+        /unsafe Unicode or control character|complete filled sanitized incident artifact/,
       );
     }
   });
@@ -733,7 +777,7 @@ describe("terminal receipt contract", () => {
         );
       assert.throws(
         () => validateTerminalReceipt(proposed),
-        /signature (?:is required|must be a normalized one-line signature)/,
+        /signature (?:is required|must be a normalized one-line signature)|unsafe Unicode or control character/,
       );
     }
 
@@ -765,6 +809,13 @@ describe("terminal receipt contract", () => {
       () => validateTerminalReceipt(oversized),
       /content must be at most 32768 UTF-8 bytes/,
     );
+  });
+
+  it("handles a near-limit proposal with adversarial many-angle input", () => {
+    const proposed = structuredClone(propagatedCase.terminal_receipt);
+    proposed.proposed_artifact.content =
+      padToUtf8Bytes(proposed.proposed_artifact.content, 32000, "<");
+    assert.doesNotThrow(() => validateTerminalReceipt(proposed));
   });
 
   it("bounds receipt identifiers, dedupe keys, and normalized signatures", () => {
@@ -876,6 +927,36 @@ describe("terminal receipt contract", () => {
     }
   });
 
+  it("requires exact, closed, fully parsed proposal frontmatter", () => {
+    const base = propagatedCase.terminal_receipt.proposed_artifact.content;
+    const invalidBodies = [
+      base.replace(/^---\n/, "----\n"),
+      base.replace("\n---\n# Repair panel launcher discovery", "\n--- \n# Repair panel launcher discovery"),
+      base.replace("schema: 1", "schema: 1\nthis is not frontmatter"),
+      base.replace("status: detected", "status: detected\nstatus: repairing"),
+      base.replace("status: detected", "status: detected\nunexpected: value"),
+      base.replace("owner: Incident Coordinator", 'owner: "Incident Coordinator'),
+      base.replace("owner: Incident Coordinator", "owner: <unresolved-owner>"),
+      base.replace(
+        "requires: [repository_write]",
+        "requires: [repository_write, <capability>]",
+      ),
+      base.replace(
+        "Make launcher discovery and authentication preflight host-aware.",
+        "<unresolved-repair>",
+      ),
+    ];
+
+    for (const content of invalidBodies) {
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.proposed_artifact.content = content;
+      assert.throws(
+        () => validateTerminalReceipt(proposed),
+        /content must be a complete filled sanitized incident artifact/,
+      );
+    }
+  });
+
   it("rejects invalid recovery lifecycle, nested scope, dates, and empty sections", () => {
     const invalidBodies = [
       recoveryTemplate,
@@ -963,6 +1044,33 @@ describe("terminal receipt contract", () => {
         () => validateTerminalReceipt(receipt),
         /content contains a high-confidence sensitive value/,
       );
+    }
+  });
+
+  it("rejects unsafe Unicode and controls without echoing them", () => {
+    for (const character of ["\u202E", "\0", "\v", "\f"]) {
+      const signature = structuredClone(persisted);
+      signature.signature = `Validator ${character} fails deterministically.`;
+      let error = captureError(() => validateTerminalReceipt(signature));
+      assert.match(error.message, /unsafe Unicode or control character/);
+      assert.equal(error.message.includes(character), false);
+
+      const compact = structuredClone(persisted);
+      compact.containment.summary =
+        `Use bounded containment ${character} for this task.`;
+      error = captureError(() => validateTerminalReceipt(compact));
+      assert.match(error.message, /unsafe Unicode or control character/);
+      assert.equal(error.message.includes(character), false);
+
+      const proposed = structuredClone(propagatedCase.terminal_receipt);
+      proposed.proposed_artifact.content =
+        proposed.proposed_artifact.content.replace(
+          "Make launcher discovery and authentication preflight host-aware.",
+          `Make launcher discovery ${character} host-aware.`,
+        );
+      error = captureError(() => validateTerminalReceipt(proposed));
+      assert.match(error.message, /unsafe Unicode or control character/);
+      assert.equal(error.message.includes(character), false);
     }
   });
 

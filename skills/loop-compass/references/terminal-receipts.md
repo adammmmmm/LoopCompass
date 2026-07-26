@@ -51,6 +51,9 @@ classifications. Containment summary and gate, escalation target and action, and
 `no_artifact_reason` are each one line of at most 512 characters. One line excludes carriage
 return, line feed, next line (`U+0085`), line separator (`U+2028`), and paragraph separator
 (`U+2029`).
+All receipt text rejects unsafe control, bidi/format, and default-ignorable characters without
+echoing them in diagnostics. Proposed artifact content is the only multiline text surface: CRLF
+is normalized to LF, and LF is the only permitted control character there.
 
 The schema is closed: do not add raw-log, transcript, private-payload, or host-specific fields.
 Sanitize and summarize necessary evidence into the modeled fields. `signature` is a normalized
@@ -64,7 +67,11 @@ unique within the handoff chain.
 `proposed_artifact.content` is the complete filled recovery or incident Markdown artifact,
 including type-correct, non-empty required frontmatter and a non-empty body under every required
 template section. It is at most 32,768 UTF-8 bytes; CRLF is canonicalized to LF before parsing and
-validation. Incident dates must be real calendar dates. Recovery scope contains only the required
+validation. Frontmatter uses exact `---` delimiter lines, only the documented schema-1 keys, and
+fully parsed unique fields; malformed lines, duplicates, unknown keys, and unresolved values fail
+validation. Incident dates must be real calendar dates. Proposal validation checks containment
+expiry date shape deterministically but defers whether the expiry is current to authoritative
+persistence, when the actual persistence date is known. Recovery scope contains only the required
 non-empty OS, shell, tool, and versions values; its dates and positive expiry follow the recovery
 schema, and `expires_after_days` is a positive base-10 integer without alternate numeric notation.
 Its signature is itself normalized, one-line, at most 512 characters, and exactly matches the
@@ -72,12 +79,12 @@ terminal receipt signature. Its id is the mechanical signature slug or that slug
 `-N` collision suffix where `N` is at least 2.
 
 Long prose placeholders shipped in a template are invalid anywhere in the proposed artifact,
-including nested angle brackets, format-control insertion, or line splitting. Short structural
-tokens such as `<integer>` and `<capability>` are invalid when they are the complete value of a
-frontmatter field or required section, but remain valid in ordinary technical prose. Normalized
-signature tokens such as `<path>` and `<ts>`, safe Markdown autolinks, HTML, and other technical
-angle-bracket prose remain valid when otherwise sanitized. The content is not a one-line
-instruction, summary, patch fragment, or artifact id.
+including nested angle brackets, format-control or other default-ignorable insertion, or line
+splitting. Short structural tokens such as `<integer>` and `<capability>` are invalid when they are
+the complete value of a frontmatter field or required section, but remain valid in ordinary
+technical prose. Normalized signature tokens such as `<path>` and `<ts>`, safe Markdown autolinks,
+HTML, and other technical angle-bracket prose remain valid when otherwise sanitized. The content
+is not a one-line instruction, summary, patch fragment, or artifact id.
 
 Outcome-specific rules:
 
@@ -134,8 +141,9 @@ includes the complete unchanged child receipt. A parent that persists an inciden
 incident retains the exact repair escalation rather than dropping it after persistence. A parent
 that propagates also repeats the child's complete proposed artifact unchanged; changing the
 candidate requires a new child classification receipt. When an authoritative parent persists a
-proposed artifact, `artifact_ref` is the proposal's mechanical id, or that id plus the documented
-`-N` collision suffix where `N` is an integer of at least 2.
+proposed artifact, `artifact_ref` is derived directly from the child receipt's normalized signature:
+its mechanical slug or that slug plus one documented unpadded `-N` collision suffix where `N` is
+an integer of at least 2. Collision suffixes do not chain.
 
 ## Boundaries
 

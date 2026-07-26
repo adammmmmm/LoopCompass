@@ -184,6 +184,39 @@ describe("evaluation benchmark report", () => {
     }
   });
 
+  it("requires terminal and parent receipt properties as object or null", () => {
+    const mutations = [
+      [(doc) => {
+        delete doc.cases[0].receipt.terminal_receipt;
+      }, /terminal_receipt is required/],
+      [(doc) => {
+        doc.cases[0].receipt.terminal_receipt = [];
+      }, /terminal_receipt must be an object/],
+      [(doc) => {
+        delete doc.cases[0].receipt.parent_receipt;
+      }, /parent_receipt is required/],
+      [(doc) => {
+        doc.cases[0].receipt.parent_receipt = "missing";
+      }, /parent_receipt must be an object/],
+    ];
+
+    for (const [mutate, expectedError] of mutations) {
+      const doc = readFixture();
+      mutate(doc);
+      const result = runEvaluateWithDoc(doc);
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stderr, expectedError);
+    }
+  });
+
+  it("requires unique case ids", () => {
+    const doc = readFixture();
+    doc.cases[1].id = doc.cases[0].id;
+    const result = runEvaluateWithDoc(doc);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /cases\[1\]\.id duplicates cases\[0\]\.id/);
+  });
+
   it("rejects a receipt whose host does not match its declared scope", () => {
     const doc = readFixture();
     doc.cases[0].receipt.host = "different-host";
@@ -216,6 +249,27 @@ describe("evaluation benchmark report", () => {
       assert.equal(result.status, 1, result.stdout);
       assert.match(result.stderr, /contains a high-confidence sensitive value/);
       assert.equal(result.stderr.includes("PrivateUser"), false);
+    }
+  });
+
+  it("rejects unsafe Unicode and controls in fixture prose without echoing them", () => {
+    for (const character of ["\u202E", "\0", "\v", "\f"]) {
+      const mutations = [
+        (doc) => {
+          doc.cases[0].scenario = `Safe scenario ${character} injected.`;
+        },
+        (doc) => {
+          doc.cases[0].receipt.failure = `Safe failure ${character} injected.`;
+        },
+      ];
+      for (const mutate of mutations) {
+        const doc = readFixture();
+        mutate(doc);
+        const result = runEvaluateWithDoc(doc);
+        assert.equal(result.status, 1, result.stdout);
+        assert.match(result.stderr, /unsafe Unicode or control character/);
+        assert.equal(result.stderr.includes(character), false);
+      }
     }
   });
 
@@ -269,7 +323,7 @@ describe("evaluation benchmark report", () => {
       }, /description must be one non-Markdown line of at most 512 characters/],
       [(doc) => {
         doc.description = "Safe text\u2028Injected heading";
-      }, /description must be one non-Markdown line/],
+      }, /description contains an unsafe Unicode or control character/],
       [(doc) => {
         doc.description = "Safe text | injected table cell";
       }, /description must be one non-Markdown line/],
@@ -367,7 +421,7 @@ describe("evaluation benchmark report", () => {
       assert.equal(result.status, 1, result.stdout);
       assert.match(
         result.stderr,
-        /must be one non-Markdown line of at most 512 characters/,
+        /must be one non-Markdown line of at most 512 characters|unsafe Unicode or control character/,
       );
     }
   });
