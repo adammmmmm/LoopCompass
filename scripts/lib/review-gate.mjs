@@ -218,11 +218,7 @@ export function buildBotReviewDecision(result, headSha, runUrl) {
 
 export function latestBotReviewMatches(reviews, decision) {
   const latest = (Array.isArray(reviews) ? reviews : [])
-    .filter(
-      (review) =>
-        normalize(review?.user?.login) === "github-actions[bot]" ||
-        normalize(review?.performed_via_github_app?.slug) === "github-actions",
-    )
+    .filter(isGitHubActionsReview)
     .sort(newestFirst)[0];
   const expectedState =
     decision?.event === "APPROVE" ? "APPROVED" : "CHANGES_REQUESTED";
@@ -230,6 +226,13 @@ export function latestBotReviewMatches(reviews, decision) {
     latest?.commit_id === decision?.commit_id &&
     latest?.state === expectedState &&
     latest?.body === decision?.body
+  );
+}
+
+export function isGitHubActionsReview(review) {
+  return (
+    normalize(review?.user?.login) === "github-actions[bot]" ||
+    normalize(review?.performed_via_github_app?.slug) === "github-actions"
   );
 }
 
@@ -1044,10 +1047,7 @@ export function selectWorkflowHeadGeneration(runs, pullNumber) {
         Number.isSafeInteger(Number(run?.id)) &&
         Number(run.id) > 0 &&
         exactSha(encodedHead) &&
-        validTimestamp(run.run_started_at ?? run.created_at) &&
-        (!Array.isArray(run.pull_requests) ||
-          run.pull_requests.length === 0 ||
-          run.pull_requests.some((pull) => Number(pull?.number) === pullNumber)),
+        validTimestamp(run.run_started_at ?? run.created_at),
     )
     .sort((left, right) => {
       const id = Number(right.run.id) - Number(left.run.id);
@@ -1059,6 +1059,17 @@ export function selectWorkflowHeadGeneration(runs, pullNumber) {
       byRunId.set(Number(item.run.id), item);
     }
   }
+  const selected = [...byRunId.values()][0];
+  if (
+    selected &&
+    Array.isArray(selected.run.pull_requests) &&
+    selected.run.pull_requests.length > 0 &&
+    !selected.run.pull_requests.some(
+      (pull) => Number(pull?.number) === pullNumber,
+    )
+  ) {
+    return null;
+  }
   return [...byRunId.values()]
     .map(({ run, encodedHead }) => ({
       id: Number(run.id),
@@ -1066,6 +1077,31 @@ export function selectWorkflowHeadGeneration(runs, pullNumber) {
       headSha: encodedHead,
       createdAt: run.run_started_at ?? run.created_at,
     }))[0] ?? null;
+}
+
+export async function resolveWorkflowHeadGenerationHistory({
+  pullNumber,
+  loadPage,
+  currentCandidate = null,
+}) {
+  if (
+    !Number.isInteger(pullNumber) ||
+    pullNumber < 1 ||
+    typeof loadPage !== "function"
+  ) {
+    throw new Error("workflow generation history requires a pull request and pager");
+  }
+  const candidates = [];
+  for (let page = 1; ; page += 1) {
+    const runs = await loadPage(page);
+    if (!Array.isArray(runs)) {
+      throw new Error("workflow generation history page must be an array");
+    }
+    candidates.push(...runs);
+    if (runs.length < 100) break;
+  }
+  if (currentCandidate) candidates.push(currentCandidate);
+  return selectWorkflowHeadGeneration(candidates, pullNumber);
 }
 
 export function currentWorkflowHeadGenerationCandidate(run, event, pullNumber) {
@@ -1351,6 +1387,7 @@ export async function runPolicyEvaluation({
   loadAssociatedPullRequests,
   publish,
   publishReview,
+  dismissReview,
   listStatuses,
   config,
   repository,
@@ -1371,12 +1408,16 @@ export async function runPolicyEvaluation({
     }
     return publishReview(originalHead, result);
   };
+  const dismissStaleReview = async (receipt, higherRun) => {
+    if (!receipt?.id || typeof dismissReview !== "function") return;
+    await dismissReview(receipt, higherRun);
+  };
   const finishReviewSafely = async (result) => {
-    await recordReview(result);
+    const receipt = await recordReview(result);
     const afterReview = await listStatuses(originalHead);
     const higherAfterReview = newestHigherRun(afterReview, runUrl);
     if (higherAfterReview) {
-      await recordReview(policyFailure("Superseded by a newer policy run"));
+      await dismissStaleReview(receipt, higherAfterReview);
       await publish(originalHead, "reassert", higherAfterReview.statuses);
       return "superseded_after_review";
     }
@@ -1496,12 +1537,40 @@ export async function runPolicyEvaluation({
     if (!currentRunOwnsStatuses(statuses, runUrl)) {
       return failPolicy("current run lost ownership of both policy status contexts");
     }
+    let successReview = null;
+    if (result.ok) {
+      const immediatelyBeforeReview = await listStatuses(originalHead);
+      const higherBeforeReview = newestHigherRun(
+        immediatelyBeforeReview,
+        runUrl,
+      );
+      if (higherBeforeReview) {
+        await publish(originalHead, "reassert", higherBeforeReview.statuses);
+        return { outcome: "superseded_before_review", headSha: originalHead };
+      }
+      if (!currentRunOwnsStatuses(immediatelyBeforeReview, runUrl)) {
+        return failPolicy("current run lost ownership before review publication");
+      }
+      successReview = await recordReview(result);
+      const afterReviewStatuses = await listStatuses(originalHead);
+      const higherAfterReview = newestHigherRun(afterReviewStatuses, runUrl);
+      if (higherAfterReview) {
+        await dismissStaleReview(successReview, higherAfterReview);
+        await publish(originalHead, "reassert", higherAfterReview.statuses);
+        return { outcome: "superseded_after_review", headSha: originalHead };
+      }
+      if (!currentRunOwnsStatuses(afterReviewStatuses, runUrl)) {
+        await dismissStaleReview(successReview, null);
+        return failPolicy("current run lost ownership before terminal success");
+      }
+    }
     await publish(originalHead, "terminal", result, runUrl);
     const postTerminalAssociationFailure = await failUntrustedAssociation();
     if (postTerminalAssociationFailure) return postTerminalAssociationFailure;
     const postTerminalStatuses = await listStatuses(originalHead);
     const higherRun = newestHigherRun(postTerminalStatuses, runUrl);
     if (higherRun) {
+      await dismissStaleReview(successReview, higherRun);
       await publish(originalHead, "reassert", higherRun.statuses);
       return { outcome: "superseded_after_terminal", headSha: originalHead };
     }
@@ -1514,9 +1583,11 @@ export async function runPolicyEvaluation({
     if (overwrittenTerminal.length > 0) {
       await publish(originalHead, "reassert", overwrittenTerminal);
     }
-    const reviewOutcome = await finishReviewSafely(result);
-    if (reviewOutcome !== "reviewed") {
-      return { outcome: reviewOutcome, headSha: originalHead };
+    if (!result.ok) {
+      const reviewOutcome = await finishReviewSafely(result);
+      if (reviewOutcome !== "reviewed") {
+        return { outcome: reviewOutcome, headSha: originalHead };
+      }
     }
     return { outcome: result.ok ? "pass" : "fail", headSha: originalHead, result };
   } catch (error) {

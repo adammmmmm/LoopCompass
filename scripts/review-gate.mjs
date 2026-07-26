@@ -8,8 +8,10 @@ import {
   currentWorkflowHeadGenerationCandidate,
   evaluateRepositoryPolicy,
   latestBotReviewMatches,
+  isGitHubActionsReview,
   loadStatusHistory,
   resolvePullRequestNumber,
+  resolveWorkflowHeadGenerationHistory,
   runPolicyEvaluation,
   selectWorkflowHeadGeneration,
 } from "./lib/review-gate.mjs";
@@ -49,27 +51,28 @@ function repository() {
 }
 
 async function resolveHeadGeneration(event, repo, pullNumber) {
-  const candidates = [];
-  for (let page = 1; ; page += 1) {
-    const response = await api(
-      `/repos/${repo}/actions/workflows/review-gate.yml/runs?event=pull_request_target&per_page=100&page=${page}`,
-    );
-    const runs = Array.isArray(response?.workflow_runs) ? response.workflow_runs : [];
-    candidates.push(
-      ...runs.filter((run) =>
-        run.pull_requests?.some((pull) => Number(pull.number) === pullNumber)),
-    );
-    if (runs.length < 100) break;
-  }
+  let currentCandidate = null;
   if (
     event.pull_request &&
     ["opened", "synchronize"].includes(event.action)
   ) {
     const run = await api(`/repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`);
-    const current = currentWorkflowHeadGenerationCandidate(run, event, pullNumber);
-    if (current) candidates.push(current);
+    currentCandidate = currentWorkflowHeadGenerationCandidate(
+      run,
+      event,
+      pullNumber,
+    );
   }
-  return selectWorkflowHeadGeneration(candidates, pullNumber);
+  return resolveWorkflowHeadGenerationHistory({
+    pullNumber,
+    currentCandidate,
+    loadPage: async (page) => {
+      const response = await api(
+        `/repos/${repo}/actions/workflows/review-gate.yml/runs?event=pull_request_target&per_page=100&page=${page}`,
+      );
+      return Array.isArray(response?.workflow_runs) ? response.workflow_runs : [];
+    },
+  });
 }
 
 async function evaluatePullRequest() {
@@ -111,12 +114,28 @@ async function evaluatePullRequest() {
   const publishReview = async (sha, result) => {
     const decision = buildBotReviewDecision(result, sha, runUrl);
     const reviews = await pages(`/repos/${repo}/pulls/${number}/reviews`);
-    if (latestBotReviewMatches(reviews, decision)) return;
-    await api(`/repos/${repo}/pulls/${number}/reviews`, {
+    if (latestBotReviewMatches(reviews, decision)) {
+      return reviews.find(
+        (review) =>
+          isGitHubActionsReview(review) &&
+          review?.commit_id === decision.commit_id &&
+          review?.body === decision.body,
+      );
+    }
+    return api(`/repos/${repo}/pulls/${number}/reviews`, {
       method: "POST",
       body: JSON.stringify(decision),
     });
   };
+  const dismissReview = async (review, higherRun) =>
+    api(`/repos/${repo}/pulls/${number}/reviews/${review.id}/dismissals`, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: higherRun
+          ? `Superseded by policy run ${higherRun.runId}.`
+          : "Policy status ownership was lost before terminal success.",
+      }),
+    });
   const listStatuses = async (sha) =>
     loadStatusHistory({ repository: repo, sha, pages });
   const outcome = await runPolicyEvaluation({
@@ -125,6 +144,7 @@ async function evaluatePullRequest() {
     loadAssociatedPullRequests,
     publish,
     publishReview,
+    dismissReview,
     listStatuses,
     config,
     repository: repo,
