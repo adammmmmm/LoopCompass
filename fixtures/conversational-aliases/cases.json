@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "dual-display-introduction",
+      "alias": "LC-1",
+      "canonical_slug": "deploy-token-lacks-required-permission",
+      "context": "current_conversation",
+      "introduced_together": true,
+      "ambiguous": false,
+      "durable_target": false,
+      "expected": "accept"
+    },
+    {
+      "id": "current-conversation-established-alias",
+      "alias": "LC-1",
+      "canonical_slug": "deploy-token-lacks-required-permission",
+      "context": "current_conversation",
+      "introduced_together": false,
+      "mapping_established": true,
+      "ambiguous": false,
+      "durable_target": false,
+      "expected": "accept"
+    },
+    {
+      "id": "cross-session-alias-only",
+      "alias": "LC-1",
+      "context": "new_session",
+      "introduced_together": false,
+      "ambiguous": false,
+      "durable_target": false,
+      "expected": "reject"
+    },
+    {
+      "id": "durable-git-reference",
+      "alias": "LC-1",
+      "canonical_slug": "deploy-token-lacks-required-permission",
+      "context": "current_conversation",
+      "introduced_together": false,
+      "mapping_established": true,
+      "ambiguous": false,
+      "durable_target": true,
+      "expected": "reject"
+    },
+    {
+      "id": "ambiguous-local-alias",
+      "alias": "LC-1",
+      "context": "current_conversation",
+      "introduced_together": false,
+      "mapping_established": true,
+      "ambiguous": true,
+      "durable_target": false,
+      "expected": "clarify"
+    },
+    {
+      "id": "namespaced-dual-display",
+      "alias": "LC-B1",
+      "canonical_slug": "deploy-token-lacks-required-permission",
+      "context": "current_conversation",
+      "introduced_together": true,
+      "ambiguous": false,
+      "durable_target": false,
+      "expected": "accept"
+    },
+    {
+      "id": "post-compaction-alias-only",
+      "alias": "LC-1",
+      "context": "compacted_conversation",
+      "introduced_together": false,
+      "mapping_established": true,
+      "ambiguous": false,
+      "durable_target": false,
+      "expected": "reject"
+    }
+  ]
+}

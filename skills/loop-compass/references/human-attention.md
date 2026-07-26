@@ -76,6 +76,8 @@ While the profile is enabled:
 The projection is visibility and resume state. The `.loopcompass/incidents/<slug>.md` incident is
 canonical. Every projection carries the canonical incident slug as its durable join key. A title,
 conversation alias, person name, or list position is never the join key.
+See [conversational-aliases.md](conversational-aliases.md) for optional conversation-local
+shorthand and its canonical-slug display rules.
 
 Formatting is consumer-defined. At minimum, the entry must convey:
 
