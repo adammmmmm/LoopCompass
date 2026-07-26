@@ -27,6 +27,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -351,6 +352,8 @@ function copyTree(src, dest, { canonicalizeText = false } = {}) {
 
 function cmdPackage() {
   cmdValidate();
+  const sourceManifestRaw = readStableRegularFile(MANIFEST_PATH).raw;
+  const sourceDigests = collectDigests();
   const version = readVersion();
   const head = gitCommit();
   const distDir = path.join(ROOT, "dist");
@@ -407,6 +410,10 @@ function cmdPackage() {
   const stagedMan = parseManifest(
     readStableRegularFile(stagedManifest).raw.toString("utf8"),
   );
+  const stagedManifestRaw = readStableRegularFile(stagedManifest).raw;
+  if (!installedPayloadMatchesManifest(stagedSkill, stagedMan, stagedManifestRaw)) {
+    die("package staging inventory does not exactly match its manifest");
+  }
   for (const [rel, expected] of Object.entries(stagedMan.files)) {
     const actual = sha256Buffer(
       readStableRegularFile(path.join(stagedSkill, rel)).raw,
@@ -417,6 +424,13 @@ function cmdPackage() {
           "skill files must be LF-canonical in the archive (see copyTree canonicalizeText)",
       );
     }
+  }
+  const finalSourceDigests = collectDigests();
+  if (
+    !readStableRegularFile(MANIFEST_PATH).raw.equals(sourceManifestRaw) ||
+    JSON.stringify(finalSourceDigests) !== JSON.stringify(sourceDigests)
+  ) {
+    die("source changed during package staging");
   }
 
   rmSync(archivePath, { force: true });
@@ -653,6 +667,11 @@ function cmdStageInstall(args) {
   if (!existsSync(project)) {
     die(`project not found: ${project}`);
   }
+  const projectStat = lstatSync(project);
+  if (!projectStat.isDirectory() || projectStat.isSymbolicLink()) {
+    die("project root must be a non-symlink directory");
+  }
+  const projectReal = realpathSync(project);
   const hostsRaw = hostsIdx === -1 ? "agents,claude" : args[hostsIdx + 1] || "";
   const hosts = hostsRaw.split(",").map((s) => s.trim()).filter(Boolean);
   const map = {
@@ -662,6 +681,26 @@ function cmdStageInstall(args) {
   };
   for (const h of hosts) {
     if (!map[h]) die(`unknown host token: ${h} (use agents, claude, skills)`);
+  }
+  for (const host of hosts) {
+    let candidate = project;
+    for (const segment of map[host].split(path.sep)) {
+      candidate = path.join(candidate, segment);
+      if (!existsSync(candidate)) break;
+      const stat = lstatSync(candidate);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) {
+        die("install destination ancestors must be non-symlink directories");
+      }
+      const resolved = realpathSync(candidate);
+      const relative = path.relative(projectReal, resolved);
+      if (
+        path.isAbsolute(relative) ||
+        relative === ".." ||
+        relative.startsWith(`..${path.sep}`)
+      ) {
+        die("install destination escapes the project root");
+      }
+    }
   }
 
   // Validate and stage a complete immutable-enough source snapshot before any

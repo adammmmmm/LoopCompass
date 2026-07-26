@@ -450,6 +450,8 @@ function cleanGitEnvironment() {
   for (const [key, value] of Object.entries(process.env)) {
     if (!key.startsWith("GIT_")) environment[key] = value;
   }
+  environment.GIT_CONFIG_NOSYSTEM = "1";
+  environment.GIT_CONFIG_GLOBAL = process.platform === "win32" ? "NUL" : "/dev/null";
   environment.GIT_NO_LAZY_FETCH = "1";
   environment.GIT_OPTIONAL_LOCKS = "0";
   environment.LC_ALL = "C";
@@ -457,10 +459,18 @@ function cleanGitEnvironment() {
 }
 
 function runRawGit(projectRoot, args, maxBuffer = 32 * 1024 * 1024) {
-  const result = spawnSync("git", ["--no-replace-objects", ...args], {
+  const result = spawnSync("git", [
+    "--no-replace-objects",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    `core.hooksPath=${process.platform === "win32" ? "NUL" : "/dev/null"}`,
+    ...args,
+  ], {
     cwd: path.parse(projectRoot).root,
     encoding: null,
     maxBuffer,
+    timeout: 10_000,
     windowsHide: true,
     env: cleanGitEnvironment(),
   });

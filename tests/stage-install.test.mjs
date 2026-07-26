@@ -7,6 +7,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
   mkdirSync,
 } from "node:fs";
@@ -173,5 +174,28 @@ describe("stage-install dual host", () => {
         );
       }
     }
+  });
+
+  it("rejects a symlinked host ancestor without touching its target", () => {
+    const project = path.join(tmp, "project-symlink-parent");
+    const outside = path.join(tmp, "outside-symlink-parent");
+    mkdirSync(project);
+    mkdirSync(outside);
+    writeFileSync(path.join(outside, "sentinel.txt"), "unchanged\n");
+    symlinkSync(outside, path.join(project, ".agents"));
+
+    const result = runRelease([
+      "stage-install",
+      "--project",
+      project,
+      "--hosts",
+      "agents",
+    ]);
+    assert.notEqual(result.status, 0);
+    assert.equal(
+      readFileSync(path.join(outside, "sentinel.txt"), "utf8"),
+      "unchanged\n",
+    );
+    assert.deepEqual(readdirSync(outside), ["sentinel.txt"]);
   });
 });

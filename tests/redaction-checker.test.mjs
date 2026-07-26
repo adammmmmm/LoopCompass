@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -100,6 +101,22 @@ describe("shipped redaction checker", () => {
     git(project, "config", "user.email", "worker@example.com");
   });
   after(() => rmSync(tmp, { recursive: true, force: true }));
+
+  it("does not invoke ambient fsmonitor helpers", () => {
+    git(project, "commit", "--allow-empty", "-m", "empty state");
+    const sentinel = path.join(tmp, `fsmonitor-${Date.now()}.sentinel`);
+    const helper = path.join(tmp, `fsmonitor-${Date.now()}.sh`);
+    writeFileSync(
+      helper,
+      `#!/bin/sh\nprintf invoked > ${JSON.stringify(sentinel)}\nsleep 30\n`,
+    );
+    chmodSync(helper, 0o755);
+    git(project, "config", "core.fsmonitor", helper);
+
+    const result = runHead(project, "audit");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(existsSync(sentinel), false);
+  });
 
   it("blocks high-confidence findings across incidents, recoveries, and receipts", () => {
     writeState(

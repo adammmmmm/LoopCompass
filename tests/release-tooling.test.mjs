@@ -504,6 +504,58 @@ describe("release tooling", () => {
     }
   });
 
+  it("does not replace an archive when source inventory changes during staging", async () => {
+    const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-package-race-"));
+    try {
+      for (const name of ["scripts", "skills", "docs"]) {
+        cpSync(path.join(root, name), path.join(fixtureRoot, name), { recursive: true });
+      }
+      for (const name of ["VERSION", "LICENSE", "CHANGELOG.md", "README.md"]) {
+        copyFileSync(path.join(root, name), path.join(fixtureRoot, name));
+      }
+      writeFileSync(
+        path.join(fixtureRoot, "skills", "loop-compass", "references", "slow-copy.md"),
+        "x".repeat(16 * 1024 * 1024),
+      );
+      assert.equal(runReleaseAt(fixtureRoot, "generate").status, 0);
+      const archive = path.join(
+        fixtureRoot,
+        "dist",
+        `loopcompass-v${readFileSync(path.join(fixtureRoot, "VERSION"), "utf8").trim()}.tar.gz`,
+      );
+      mkdirSync(path.dirname(archive), { recursive: true });
+      writeFileSync(archive, "existing archive\n");
+
+      const child = spawn(
+        process.execPath,
+        [path.join(fixtureRoot, "scripts", "release.mjs"), "package"],
+        { cwd: fixtureRoot, encoding: "utf8" },
+      );
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+      const staging = path.join(fixtureRoot, "dist", "staging");
+      const deadline = Date.now() + 10_000;
+      while (!existsSync(staging) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      assert.ok(existsSync(staging), "package staging did not begin");
+      writeFileSync(
+        path.join(fixtureRoot, "skills", "loop-compass", "references", "late.md"),
+        "late addition\n",
+      );
+      const status = await new Promise((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", resolve);
+      });
+      assert.notEqual(status, 0, stderr);
+      assert.equal(readFileSync(archive, "utf8"), "existing archive\n");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("never accepts substituted installed bytes during an interleaved integrity walk", async () => {
     const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "lc-check-race-"));
     try {
