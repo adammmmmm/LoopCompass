@@ -2,8 +2,10 @@
 import { readFile } from "node:fs/promises";
 import {
   auditBranches,
+  buildObservedStatusPayloads,
   buildStatusPayloads,
   evaluateRepositoryPolicy,
+  loadStatusHistory,
   resolvePullRequestNumber,
   runPolicyEvaluation,
 } from "./lib/review-gate.mjs";
@@ -48,8 +50,12 @@ async function evaluatePullRequest() {
   const repo = repository();
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
   const publish = async (sha, state, result, targetUrl = runUrl) => {
+    const payloads =
+      state === "reassert"
+        ? buildObservedStatusPayloads(result)
+        : buildStatusPayloads({ state, result, targetUrl });
     await Promise.all(
-      buildStatusPayloads({ state, result, targetUrl }).map((payload) =>
+      payloads.map((payload) =>
         api(`/repos/${repo}/statuses/${sha}`, {
           method: "POST",
           body: JSON.stringify(payload),
@@ -68,7 +74,7 @@ async function evaluatePullRequest() {
   };
   const loadHead = async () => (await api(`/repos/${repo}/pulls/${number}`)).head.sha;
   const listStatuses = async (sha) =>
-    (await api(`/repos/${repo}/commits/${sha}/status`)).statuses;
+    loadStatusHistory({ repository: repo, sha, pages });
   const outcome = await runPolicyEvaluation({
     loadHead,
     loadSnapshot,

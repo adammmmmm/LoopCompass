@@ -134,19 +134,27 @@ export function parseHumanAuthorization(body) {
   if (!nonEmpty(body) || !body.includes(AUTHORIZATION_MARKER)) return null;
   const open = `<!-- ${AUTHORIZATION_MARKER}\n`;
   const start = body.indexOf(open);
+  if (start < 0 || body.indexOf(open, start + open.length) >= 0) {
+    return {
+      error: "operator authorization must contain exactly one canonical metadata marker",
+    };
+  }
   const end = body.indexOf(REVIEW_CLOSE, start + open.length);
-  if (start < 0 || end < 0 || body.slice(end + REVIEW_CLOSE.length).trim()) {
+  if (end < 0) {
     return { error: "operator authorization marker is malformed" };
   }
   try {
     const metadata = JSON.parse(body.slice(start + open.length, end));
+    const canonical = renderHumanAuthorization(metadata?.head_sha);
+    const canonicalWithLineFeed = `${canonical}\n`;
+    const canonicalWithCrlf = `${canonical}\r\n`;
     if (
       !isRecord(metadata) ||
       Object.keys(metadata).sort().join(",") !== "head_sha,schema,verdict" ||
       metadata.schema !== 1 ||
       !exactSha(metadata.head_sha) ||
       metadata.verdict !== "approved" ||
-      body !== renderHumanAuthorization(metadata.head_sha)
+      ![canonical, canonicalWithLineFeed, canonicalWithCrlf].includes(body)
     ) {
       return { error: "operator authorization record is invalid" };
     }
@@ -292,6 +300,9 @@ function validHumanAttestation({
     reasons.length === 0 &&
     commenterIsHuman &&
     commenterIsMaintainer &&
+    validTimestamp(comment?.created_at) &&
+    validTimestamp(comment?.updated_at) &&
+    comment.created_at === comment.updated_at &&
     normalize(attestation.reviewer) === normalize(comment.author) &&
     attestation.head_sha === headSha &&
     attestation.verdict === "approved" &&
@@ -450,8 +461,11 @@ export function validateReviewRecord({
       }
 
       const reviews = Array.isArray(metadata.reviews) ? metadata.reviews : [];
-      if (reviews.length !== config.required_model_reviews) {
-        modelReasons.push(`exactly ${config.required_model_reviews} model reviews are required`);
+      if (config.required_model_reviews !== 3) {
+        modelReasons.push("delivery policy must require exactly three model reviews");
+      }
+      if (reviews.length !== 3) {
+        modelReasons.push("exactly 3 model reviews are required");
       }
       const seats = new Set();
       const models = new Set();
@@ -467,7 +481,9 @@ export function validateReviewRecord({
         modelReasons,
       );
         if (!reviewValid) continue;
-        if (!nonEmpty(review.seat)) modelReasons.push("every review requires a seat");
+        if (!/^R[1-9]\d*$/.test(review.seat ?? "")) {
+          modelReasons.push("every review seat must use the public R<n> form");
+        }
         if (!nonEmpty(review.model)) modelReasons.push("every review requires a model identity");
         if (!nonEmpty(review.execution_id)) modelReasons.push("every review requires an execution ID");
         if (!/^[0-9a-f]{64}$/.test(review.evidence_digest ?? "")) {
@@ -745,28 +761,15 @@ export function evaluateSnapshot(snapshot, config, repository) {
 }
 
 export function currentRunOwnsStatuses(statuses, runUrl) {
-  const contexts = ["model-review-gate", "delivery-policy"];
   const list = Array.isArray(statuses) ? statuses : [];
   const currentRunId = actionsRunId(runUrl);
   if (currentRunId === null) return false;
-  const higherRun = list.some((status) => {
-    if (!contexts.includes(status?.context)) return false;
-    const id = actionsRunId(status?.target_url);
-    return id !== null && id > currentRunId;
-  });
-  if (higherRun) return false;
-  return contexts.every((context) => {
-    const latest = list
-      .filter((status) => status?.context === context)
-      .sort((left, right) => {
-        const time = new Date(right.created_at ?? 0) - new Date(left.created_at ?? 0);
-        return time || Number(right.id ?? 0) - Number(left.id ?? 0);
-      })[0];
-    return (
-      latest?.state === "pending" &&
-      latest?.target_url === runUrl
-    );
-  });
+  if (statusHistoryTrustError(list, runUrl)) return false;
+  if (newestHigherRun(list, runUrl)) return false;
+  const current = latestRunStatuses(list, runUrl, currentRunId);
+  return STATUS_CONTEXTS.every(
+    (context) => current.find((status) => status.context === context)?.state === "pending",
+  );
 }
 
 export function actionsRunId(targetUrl) {
@@ -778,17 +781,137 @@ export function actionsRunId(targetUrl) {
   return Number.isSafeInteger(value) ? value : null;
 }
 
+const STATUS_CONTEXTS = ["model-review-gate", "delivery-policy"];
+
+function sameRunRepository(left, right) {
+  const repository = (value) =>
+    String(value ?? "").match(
+      /^https:\/\/github\.com\/([^/\s]+\/[^/\s]+)\/actions\/runs\/\d+(?:\/.*)?$/,
+    )?.[1]?.toLowerCase() ?? null;
+  const leftRepository = repository(left);
+  return leftRepository !== null && leftRepository === repository(right);
+}
+
+function newestFirst(left, right) {
+  const leftTime = new Date(left?.created_at ?? "").getTime();
+  const rightTime = new Date(right?.created_at ?? "").getTime();
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+    return rightTime - leftTime;
+  }
+  const leftId = Number(left?.id);
+  const rightId = Number(right?.id);
+  if (Number.isFinite(leftId) && Number.isFinite(rightId) && leftId !== rightId) {
+    return rightId - leftId;
+  }
+  return 0;
+}
+
+function latestRunStatuses(statuses, runUrl, runId = actionsRunId(runUrl)) {
+  if (runId === null) return [];
+  const candidates = (Array.isArray(statuses) ? statuses : [])
+    .filter((status) => STATUS_CONTEXTS.includes(status?.context))
+    .filter((status) => sameRunRepository(status?.target_url, runUrl))
+    .filter((status) => actionsRunId(status?.target_url) === runId)
+    .sort(newestFirst);
+  return STATUS_CONTEXTS.flatMap((context) => {
+    const latest = candidates.find((status) => status.context === context);
+    return latest ? [latest] : [];
+  });
+}
+
+function latestPolicyStatuses(statuses) {
+  const candidates = (Array.isArray(statuses) ? statuses : [])
+    .filter((status) => STATUS_CONTEXTS.includes(status?.context))
+    .sort(newestFirst);
+  return STATUS_CONTEXTS.flatMap((context) => {
+    const latest = candidates.find((status) => status.context === context);
+    return latest ? [latest] : [];
+  });
+}
+
+export function statusHistoryTrustError(statuses, runUrl) {
+  if (actionsRunId(runUrl) === null) return "current Actions run URL is invalid";
+  for (const status of Array.isArray(statuses) ? statuses : []) {
+    if (!STATUS_CONTEXTS.includes(status?.context)) continue;
+    if (
+      actionsRunId(status?.target_url) === null ||
+      !sameRunRepository(status?.target_url, runUrl)
+    ) {
+      return `${status.context} has a foreign or unparseable run URL`;
+    }
+  }
+  return null;
+}
+
+export function lowerRunOverwriteStatuses(statuses, runUrl) {
+  const currentRunId = actionsRunId(runUrl);
+  if (
+    currentRunId === null ||
+    statusHistoryTrustError(statuses, runUrl) ||
+    newestHigherRun(statuses, runUrl)
+  ) {
+    return [];
+  }
+  const currentStatuses = latestRunStatuses(statuses, runUrl, currentRunId);
+  const latestByContext = latestPolicyStatuses(statuses);
+  return currentStatuses.filter((current) => {
+    const latest = latestByContext.find(
+      (status) => status.context === current.context,
+    );
+    const latestRunId = actionsRunId(latest?.target_url);
+    return latestRunId !== null && latestRunId < currentRunId;
+  });
+}
+
 export function newestHigherRun(statuses, runUrl) {
   const current = actionsRunId(runUrl);
   if (current === null) return null;
   const candidates = (Array.isArray(statuses) ? statuses : [])
-    .filter((status) =>
-      ["model-review-gate", "delivery-policy"].includes(status?.context),
-    )
+    .filter((status) => STATUS_CONTEXTS.includes(status?.context))
+    .filter((status) => sameRunRepository(status?.target_url, runUrl))
     .map((status) => ({ status, runId: actionsRunId(status.target_url) }))
-    .filter((item) => item.runId !== null && item.runId > current)
-    .sort((left, right) => right.runId - left.runId);
-  return candidates[0]?.status ?? null;
+    .filter((item) => item.runId !== null && item.runId > current);
+  if (candidates.length === 0) return null;
+  const runId = Math.max(...candidates.map((item) => item.runId));
+  const runStatuses = latestRunStatuses(statuses, runUrl, runId);
+  return {
+    runId,
+    statuses: runStatuses,
+  };
+}
+
+export function buildObservedStatusPayloads(statuses) {
+  const latest = STATUS_CONTEXTS.flatMap((context) => {
+    const match = (Array.isArray(statuses) ? statuses : [])
+      .filter((status) => status?.context === context)
+      .sort(newestFirst)[0];
+    return match ? [match] : [];
+  });
+  return latest.map((status) => {
+    if (!["error", "failure", "pending", "success"].includes(status.state)) {
+      throw new Error(`cannot reassert unsupported ${status.context} state`);
+    }
+    const payload = {
+      state: status.state,
+      context: status.context,
+      target_url: status.target_url,
+    };
+    if (nonEmpty(status.description)) {
+      payload.description = status.description.slice(0, 140);
+    }
+    return payload;
+  });
+}
+
+export async function loadStatusHistory({ repository, sha, pages }) {
+  if (!nonEmpty(repository) || !exactSha(sha) || typeof pages !== "function") {
+    throw new Error("status history loader requires repository, exact SHA, and pager");
+  }
+  const statuses = await pages(`/repos/${repository}/commits/${sha}/statuses`);
+  if (!Array.isArray(statuses)) {
+    throw new Error("commit status history response must be an array");
+  }
+  return statuses;
 }
 
 export async function runPolicyEvaluation({
@@ -801,6 +924,20 @@ export async function runPolicyEvaluation({
   runUrl,
 }) {
   let originalHead = null;
+  const policyFailure = (reason) => ({
+    ok: false,
+    modelOk: false,
+    deliveryOk: false,
+    modelReasons: [reason],
+    deliveryReasons: [reason],
+  });
+  const failUntrustedHistory = async (statuses) => {
+    const reason = statusHistoryTrustError(statuses, runUrl);
+    if (!reason) return null;
+    const result = policyFailure(reason);
+    await publish(originalHead, "terminal", result, runUrl);
+    return { outcome: "fail", headSha: originalHead, result };
+  };
   try {
     originalHead = await loadHead();
     if (!exactSha(originalHead)) {
@@ -810,20 +947,26 @@ export async function runPolicyEvaluation({
     if (newestHigherRun(preflightStatuses, runUrl)) {
       return { outcome: "superseded", headSha: originalHead };
     }
+    const preflightFailure = await failUntrustedHistory(preflightStatuses);
+    if (preflightFailure) return preflightFailure;
     await publish(originalHead, "pending", undefined, runUrl);
     const postPendingStatuses = await listStatuses(originalHead);
     const higherAfterPending = newestHigherRun(postPendingStatuses, runUrl);
     if (higherAfterPending) {
-      await publish(
-        originalHead,
-        "pending",
-        undefined,
-        higherAfterPending.target_url,
-      );
+      await publish(originalHead, "reassert", higherAfterPending.statuses);
       return { outcome: "superseded_after_pending", headSha: originalHead };
     }
+    const postPendingFailure = await failUntrustedHistory(postPendingStatuses);
+    if (postPendingFailure) return postPendingFailure;
     if (!currentRunOwnsStatuses(postPendingStatuses, runUrl)) {
       return { outcome: "superseded", headSha: originalHead };
+    }
+    const overwrittenPending = lowerRunOverwriteStatuses(
+      postPendingStatuses,
+      runUrl,
+    );
+    if (overwrittenPending.length > 0) {
+      await publish(originalHead, "reassert", overwrittenPending);
     }
 
     const finalSnapshot = normalizeGitHubSnapshot(await loadSnapshot());
@@ -832,6 +975,13 @@ export async function runPolicyEvaluation({
     }
     const result = evaluateSnapshot(finalSnapshot, config, repository);
     const statuses = await listStatuses(originalHead);
+    const higherBeforeTerminal = newestHigherRun(statuses, runUrl);
+    if (higherBeforeTerminal) {
+      await publish(originalHead, "reassert", higherBeforeTerminal.statuses);
+      return { outcome: "superseded", headSha: originalHead };
+    }
+    const preTerminalFailure = await failUntrustedHistory(statuses);
+    if (preTerminalFailure) return preTerminalFailure;
     if (!currentRunOwnsStatuses(statuses, runUrl)) {
       return { outcome: "superseded", headSha: originalHead };
     }
@@ -839,21 +989,38 @@ export async function runPolicyEvaluation({
     const postTerminalStatuses = await listStatuses(originalHead);
     const higherRun = newestHigherRun(postTerminalStatuses, runUrl);
     if (higherRun) {
-      await publish(originalHead, "pending", undefined, higherRun.target_url);
+      await publish(originalHead, "reassert", higherRun.statuses);
       return { outcome: "superseded_after_terminal", headSha: originalHead };
+    }
+    const postTerminalFailure = await failUntrustedHistory(postTerminalStatuses);
+    if (postTerminalFailure) return postTerminalFailure;
+    const overwrittenTerminal = lowerRunOverwriteStatuses(
+      postTerminalStatuses,
+      runUrl,
+    );
+    if (overwrittenTerminal.length > 0) {
+      await publish(originalHead, "reassert", overwrittenTerminal);
     }
     return { outcome: result.ok ? "pass" : "fail", headSha: originalHead, result };
   } catch (error) {
     if (originalHead) {
       try {
         const statuses = await listStatuses(originalHead);
-        if (currentRunOwnsStatuses(statuses, runUrl)) {
-          await publish(originalHead, "terminal", {
-            modelOk: false,
-            deliveryOk: false,
-            modelReasons: ["Policy evaluation did not complete"],
-            deliveryReasons: ["Policy evaluation did not complete"],
-          });
+        const higherRun = newestHigherRun(statuses, runUrl);
+        if (higherRun) {
+          await publish(originalHead, "reassert", higherRun.statuses);
+        } else {
+          const historyError = statusHistoryTrustError(statuses, runUrl);
+          if (historyError) {
+            await publish(originalHead, "terminal", policyFailure(historyError), runUrl);
+          } else if (currentRunOwnsStatuses(statuses, runUrl)) {
+            await publish(
+              originalHead,
+              "terminal",
+              policyFailure("Policy evaluation did not complete"),
+              runUrl,
+            );
+          }
         }
       } catch {
         // The workflow failure remains visible when status publication is unavailable.
@@ -919,9 +1086,27 @@ export function evaluateRepositoryPolicy({ ruleset, settings, desired }) {
   for (const key of ["name", "source_type", "source", "target"]) {
     if (ruleset?.[key] !== desired[key]) drifts.push(`ruleset ${key} differs`);
   }
+  const normalizeRefName = (value) => {
+    if (
+      !isRecord(value) ||
+      Object.keys(value).sort().join(",") !== "exclude,include" ||
+      !Array.isArray(value.include) ||
+      !Array.isArray(value.exclude) ||
+      ![...value.include, ...value.exclude].every(nonEmpty)
+    ) {
+      return null;
+    }
+    return {
+      exclude: [...value.exclude].sort(),
+      include: [...value.include].sort(),
+    };
+  };
+  const actualRefName = normalizeRefName(ruleset?.conditions?.ref_name);
+  const desiredRefName = normalizeRefName(desired.conditions.ref_name);
   if (
-    JSON.stringify(ruleset?.conditions?.ref_name ?? null) !==
-    JSON.stringify(desired.conditions.ref_name)
+    actualRefName === null ||
+    desiredRefName === null ||
+    JSON.stringify(actualRefName) !== JSON.stringify(desiredRefName)
   ) {
     drifts.push("ruleset branch target conditions differ");
   }

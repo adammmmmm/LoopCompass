@@ -4,12 +4,15 @@ import test from "node:test";
 import {
   analyzeReviewHistory,
   auditBranches,
+  buildObservedStatusPayloads,
   buildStatusPayloads,
   classifyDelivery,
   evaluateRepositoryPolicy,
   evaluateSnapshot,
   matchesSensitivePath,
+  loadStatusHistory,
   normalizeGitHubSnapshot,
+  parseHumanAuthorization,
   renderHumanAuthorization,
   renderVisibleReview,
   resolvePullRequestNumber,
@@ -170,13 +173,14 @@ function evaluate({
   reviewComment,
   nativeApprovals = [],
   authorizationComments = [],
+  policy = config,
 } = {}) {
   return validateReviewRecord({
     comment: reviewComment ?? comment(data, commentAuthor),
     headSha: sha,
     author,
     changedFiles,
-    config,
+    config: policy,
     repository,
     pullNumber: 1,
     authorizationComments,
@@ -196,6 +200,15 @@ test("missing, duplicate, and non-independent reviews fail", () => {
   const duplicateModel = metadata();
   duplicateModel.reviews[2].model = duplicateModel.reviews[0].model;
   assert.match(evaluate({ data: duplicateModel }).reasons.join(" "), /model identities/);
+  const invalidSeat = metadata();
+  invalidSeat.reviews[2].seat = "review-three";
+  assert.match(evaluate({ data: invalidSeat }).reasons.join(" "), /R<n>/);
+  assert.match(
+    evaluate({ data: metadata(), policy: { ...config, required_model_reviews: 2 } }).reasons.join(
+      " ",
+    ),
+    /exactly three/,
+  );
 });
 
 test("per-seat changes-requested verdict remains truthful and non-green", () => {
@@ -429,6 +442,53 @@ test("operator authorization resolves to an immutable same-PR human comment", ()
     });
     assert.equal(result.deliveryOk, false);
   }
+});
+
+test("operator authorization allows one terminal line ending and rejects suffixes", () => {
+  const canonical = renderHumanAuthorization(sha);
+  for (const body of [canonical, `${canonical}\n`, `${canonical}\r\n`]) {
+    assert.equal(parseHumanAuthorization(body)?.metadata?.head_sha, sha);
+  }
+  for (const body of [`${canonical}\n\n`, `${canonical} suffix`]) {
+    assert.match(parseHumanAuthorization(body)?.error ?? "", /invalid/);
+  }
+  const malformed = canonical.replace(
+    "<!-- loopcompass-human-authorization:v1\n",
+    "<!-- loopcompass-human-authorization:v1 ",
+  );
+  assert.match(parseHumanAuthorization(malformed)?.error ?? "", /exactly one canonical/);
+});
+
+test("edited carrying review comments cannot satisfy human approval", () => {
+  const data = metadata({
+    human_approval: {
+      reviewer: "maintainer",
+      head_sha: sha,
+      verdict: "approved",
+      kind: "maintainer_review",
+      authorization_reference: "https://github.com/example/project/pull/1",
+    },
+  });
+  const current = comment(data);
+  assert.equal(
+    evaluate({
+      data,
+      author: "external",
+      changedFiles: ["README.md"],
+      reviewComment: current,
+    }).deliveryOk,
+    true,
+  );
+  const edited = { ...current, updated_at: "2026-01-01T00:01:00Z" };
+  assert.equal(
+    evaluate({
+      data,
+      author: "external",
+      changedFiles: ["README.md"],
+      reviewComment: edited,
+    }).deliveryOk,
+    false,
+  );
 });
 
 test("human_approval is structurally validated even when delivery review is not required", () => {
@@ -1115,7 +1175,10 @@ test("driver fence yields to newer runs and never writes terminal status after H
 test("older runs restore higher-run pending contexts after interleaved terminal writes", async () => {
   const runA = "https://github.com/example/project/actions/runs/100";
   const runB = "https://github.com/example/project/actions/runs/101";
-  for (const newerState of ["pending", "failure"]) {
+  for (const newerStates of [
+    ["pending", "pending"],
+    ["success", "failure"],
+  ]) {
     const published = [];
     let reads = 0;
     const result = await runPolicyEvaluation({
@@ -1129,7 +1192,11 @@ test("older runs restore higher-run pending contexts after interleaved terminal 
         if (reads <= 3) return ownedStatuses(runA);
         return [
           ...ownedStatuses(runA).map((status) => ({ ...status, state: "success" })),
-          ...ownedStatuses(runB).map((status) => ({ ...status, state: newerState })),
+          ...ownedStatuses(runB).map((status, index) => ({
+            ...status,
+            state: newerStates[index],
+            description: `newer ${status.context} ${newerStates[index]}`,
+          })),
         ];
       },
       config,
@@ -1140,9 +1207,12 @@ test("older runs restore higher-run pending contexts after interleaved terminal 
     assert.deepEqual(published.map((item) => item.state), [
       "pending",
       "terminal",
-      "pending",
+      "reassert",
     ]);
-    assert.equal(published.at(-1).targetUrl, runB);
+    assert.deepEqual(
+      buildObservedStatusPayloads(published.at(-1).value).map((status) => status.state),
+      newerStates,
+    );
   }
 });
 
@@ -1182,15 +1252,100 @@ test("older runs do not publish over a higher run discovered before or after pen
     after.map((item) => [item.state, item.targetUrl]),
     [
       ["pending", runA],
-      ["pending", runB],
+      ["reassert", undefined],
     ],
+  );
+  assert.deepEqual(
+    buildObservedStatusPayloads(after.at(-1).result).map((status) => status.target_url),
+    [runB, runB],
   );
 });
 
-test("lower-run and foreign terminal statuses cannot supersede the current run", async () => {
+test("run 101 reclaims both contexts from later terminal writes by run 100", async () => {
+  const lower = "https://github.com/example/project/actions/runs/100";
+  const higher = "https://github.com/example/project/actions/runs/101";
+  const lowerTerminal = ownedStatuses(lower).map((status, index) => ({
+    ...status,
+    id: 20 + index,
+    created_at: "2026-01-01T00:01:00Z",
+    state: index === 0 ? "success" : "failure",
+  }));
+  const higherPending = ownedStatuses(higher).map((status, index) => ({
+    ...status,
+    id: 10 + index,
+    created_at: "2026-01-01T00:00:00Z",
+  }));
+  const higherReasserted = higherPending.map((status, index) => ({
+    ...status,
+    id: 30 + index,
+    created_at: "2026-01-01T00:02:00Z",
+  }));
+  const higherTerminal = higherPending.map((status, index) => ({
+    ...status,
+    id: 40 + index,
+    created_at: "2026-01-01T00:03:00Z",
+    state: "success",
+  }));
+  const histories = [
+    lowerTerminal,
+    [...lowerTerminal, ...higherPending],
+    [...lowerTerminal, ...higherReasserted],
+    [...lowerTerminal, ...higherReasserted, ...higherTerminal],
+  ];
+  let reads = 0;
+  const published = [];
+  const result = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    publish: async (head, state, value, targetUrl) =>
+      published.push({ head, state, value, targetUrl }),
+    listStatuses: async () =>
+      histories[Math.min(reads++, histories.length - 1)],
+    config,
+    repository,
+    runUrl: higher,
+  });
+  assert.equal(result.outcome, "pass");
+  assert.deepEqual(
+    published.map((item) => item.state),
+    ["pending", "reassert", "terminal"],
+  );
+  assert.deepEqual(
+    buildObservedStatusPayloads(published[1].value).map((status) => status.state),
+    ["pending", "pending"],
+  );
+  assert.equal(published[2].targetUrl, higher);
+});
+
+test("foreign or unparseable policy status URLs fail closed", async () => {
   const current = "https://github.com/example/project/actions/runs/100";
-  const statuses = [
-    ...ownedStatuses(current),
+  for (const target_url of [
+    "https://checks.example.test/run/500",
+    "https://github.com/other/project/actions/runs/101",
+  ]) {
+    const statuses = [
+      ...ownedStatuses(current),
+      {
+        context: "delivery-policy",
+        state: "failure",
+        target_url,
+      },
+    ];
+    const result = await runDriver([rawSnapshot(), rawSnapshot()], {
+      statuses,
+      runUrl: current,
+    });
+    assert.equal(result.outcome.outcome, "fail");
+    assert.equal(result.published.at(-1).state, "terminal");
+    assert.match(
+      result.published.at(-1).result.deliveryReasons.join(" "),
+      /foreign or unparseable/,
+    );
+  }
+});
+
+test("paginated status-history adapter uses the full commit statuses endpoint", async () => {
+  const history = [
     {
       context: "model-review-gate",
       state: "success",
@@ -1199,15 +1354,20 @@ test("lower-run and foreign terminal statuses cannot supersede the current run",
     {
       context: "delivery-policy",
       state: "failure",
-      target_url: "https://checks.example.test/run/500",
+      target_url: "https://github.com/example/project/actions/runs/99",
     },
   ];
-  const result = await runDriver([rawSnapshot(), rawSnapshot()], {
-    statuses,
-    runUrl: current,
+  const paths = [];
+  const result = await loadStatusHistory({
+    repository,
+    sha,
+    pages: async (path) => {
+      paths.push(path);
+      return history;
+    },
   });
-  assert.equal(result.outcome.outcome, "pass");
-  assert.equal(result.published.at(-1).state, "terminal");
+  assert.deepEqual(paths, [`/repos/${repository}/commits/${sha}/statuses`]);
+  assert.deepEqual(result, history);
 });
 
 test("driver exception path fails only the original owned status contexts", async () => {
@@ -1282,6 +1442,24 @@ test("repository policy drift fixtures cover every required live control", () =>
   };
   const settings = { ...repositoryConfig.desired_repository_settings };
   assert.deepEqual(evaluateRepositoryPolicy({ ruleset, settings, desired }), []);
+  const reorderedRuleset = structuredClone(ruleset);
+  const reorderedDesired = structuredClone(desired);
+  reorderedRuleset.conditions.ref_name = {
+    exclude: ["refs/heads/archive/*", "refs/heads/legacy/*"],
+    include: ["refs/heads/release/*", "refs/heads/main"],
+  };
+  reorderedDesired.conditions.ref_name = {
+    include: ["refs/heads/main", "refs/heads/release/*"],
+    exclude: ["refs/heads/legacy/*", "refs/heads/archive/*"],
+  };
+  assert.deepEqual(
+    evaluateRepositoryPolicy({
+      ruleset: reorderedRuleset,
+      settings,
+      desired: reorderedDesired,
+    }),
+    [],
+  );
   const mutations = [
     (value) => delete value.ruleset.bypass_actors,
     (value) => value.ruleset.bypass_actors.push({ actor_id: 1 }),

@@ -8,9 +8,14 @@ relationship, not a status.
 Entry to Review requires a complete implementation, focused and full required tests, an open pull
 request with green `verify`, and assembled closure evidence. Exit to Done requires three independent
 model reviews of the current pull request HEAD. Every review has a verdict and a distinct seat and
-model identity. Every material finding has an evidence-backed disposition, blocker fixes are
-re-verified, and review conversations are resolved. A push changes the HEAD and invalidates all
-earlier evidence.
+model identity; public seat identifiers use `R<n>`. Every material finding has an evidence-backed
+disposition, blocker fixes are re-verified, and review conversations are resolved. A push changes
+the HEAD and invalidates all earlier evidence.
+
+Concurrent gate runs are ordered by their numeric Actions run identifiers. The gate reads the full
+paginated commit-status history, lets a higher run reclaim later writes from a lower run, and
+reasserts each status state actually observed from a higher run. A foreign or unparseable run URL
+in either policy context fails closed.
 
 One compact, attribution-neutral pull request comment is the canonical evidence. The comment must
 be posted by a configured maintainer and use this shape:
