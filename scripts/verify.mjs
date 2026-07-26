@@ -41,6 +41,7 @@ const testFiles = [
   "tests/stage-install.test.mjs",
   "tests/release-tooling.test.mjs",
   "tests/redact-examples.test.mjs",
+  "tests/redaction-checker.test.mjs",
   "tests/verify-consumer.test.mjs",
 ];
 

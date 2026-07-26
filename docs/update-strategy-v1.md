@@ -293,7 +293,9 @@ ordinary LoopCompass failure consultation.
 
 > Without modifying any files, report whether the installed LoopCompass skill is behind the latest
 > stable GitHub release at https://github.com/adammmmmm/LoopCompass. Compare the installed
-> `manifest.yaml` version, commit, and `policy_version` to the release manifest. If behind, print
+> `manifest.yaml` version, policy/schema fields, and complete file-digest inventory to the release
+> manifest. Treat a differing provenance commit as compatible when that authoritative payload is
+> byte-for-byte equivalent. If behind, print
 > old and new versions plus the matching update one-liner for the installation scope I am using.
 > Do not install the skill or rewrite project policy.
 

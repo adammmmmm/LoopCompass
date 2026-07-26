@@ -82,3 +82,7 @@ Automated checks are defense in depth, not proof that state contains no PII or s
 reviewers remain responsible for minimizing and sanitizing content before its first durable write.
 This contract does not require Git-history rewriting, a scanner daemon or hook, a comprehensive
 privacy certification, or storage of restricted identity evidence in LoopCompass.
+
+The shipped, explicitly invoked [redaction audit](redaction-audit.md) can flag conservative
+categories in committed state. It is non-mutating and cannot repair a missed pre-persistence
+sanitation obligation.

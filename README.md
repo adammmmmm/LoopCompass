@@ -2,12 +2,13 @@
 
 **Agents remember the right path and repair the broken one.**
 
-A portable skill for agent workflows. No daemon, no CLI, no database, no model API, no hosted
-service. Small Markdown files. Full fleet memory.
+A portable skill for agent workflows. No daemon, no global CLI, no database, no model API, no
+hosted service. Ordinary consultation needs no runtime; an optional local Node audit ships inside
+the skill. Small reviewable files. Full fleet memory.
 
 ![0.3.0](https://img.shields.io/badge/version-0.3.0-1f2328?style=flat-square&labelColor=21262d&color=58a6ff)
 ![MIT](https://img.shields.io/badge/license-MIT-1f2328?style=flat-square&labelColor=21262d&color=3fb950)
-![No runtime](https://img.shields.io/badge/runtime-none-1f2328?style=flat-square&labelColor=21262d&color=8b949e)
+![No required runtime](https://img.shields.io/badge/runtime-none%20required-1f2328?style=flat-square&labelColor=21262d&color=8b949e)
 ![Provider neutral](https://img.shields.io/badge/host-provider--neutral-1f2328?style=flat-square&labelColor=21262d&color=a371f7)
 
 [How it works](#how-it-works) · [What it stores](#what-it-stores) · [Install](#install) · [Update](#update) · [Evaluation](#evaluation) · [Design](#design)
@@ -133,6 +134,11 @@ skill tree (`manifest.yaml` included), docs, and a separate `SHA256SUMS` asset.
 4. Optional consumer CI:
    `node scripts/verify-consumer.mjs --project <repo>` (see
    [docs/consumer-verification.md](docs/consumer-verification.md)).
+5. Optional committed-state redaction check, directly from the installed skill:
+   `node <installed-skill>/scripts/redact-check.mjs --project <repo> --mode enforce`.
+   The checker requires Git and requires scanned state to be clean and byte-identical to `HEAD`.
+   Use `--mode audit` for a non-failing historical assessment. Passing is defense in depth, not
+   proof that no PII remains.
 
 Ordinary consultation is offline. It does not check for software updates.
 
