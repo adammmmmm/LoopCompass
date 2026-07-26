@@ -859,8 +859,9 @@ function ownedStatuses(runUrl) {
 async function runDriver(snapshots, { statuses, failureAt } = {}) {
   const runUrl = "https://github.com/example/project/actions/runs/7";
   const published = [];
-  let index = 0;
+  let index = 1;
   const outcomePromise = runPolicyEvaluation({
+    loadHead: async () => snapshots[0].pull.head.sha,
     loadSnapshot: async () => {
       if (failureAt === index) throw new Error("synthetic driver failure");
       return snapshots[Math.min(index++, snapshots.length - 1)];
@@ -944,11 +945,10 @@ test("driver fence yields to newer runs and never writes terminal status after H
 test("driver exception path fails only the original owned status contexts", async () => {
   const runUrl = "https://github.com/example/project/actions/runs/7";
   const published = [];
-  let calls = 0;
   await assert.rejects(
     runPolicyEvaluation({
+      loadHead: async () => sha,
       loadSnapshot: async () => {
-        if (calls++ === 0) return rawSnapshot();
         throw new Error("synthetic driver failure");
       },
       publish: async (head, state, result) => published.push({ head, state, result }),

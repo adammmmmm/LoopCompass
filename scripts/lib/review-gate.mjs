@@ -628,6 +628,7 @@ export function currentRunOwnsStatuses(statuses, runUrl) {
 }
 
 export async function runPolicyEvaluation({
+  loadHead,
   loadSnapshot,
   publish,
   listStatuses,
@@ -637,8 +638,10 @@ export async function runPolicyEvaluation({
 }) {
   let originalHead = null;
   try {
-    const initial = normalizeGitHubSnapshot(await loadSnapshot());
-    originalHead = initial.headSha;
+    originalHead = await loadHead();
+    if (!exactSha(originalHead)) {
+      throw new Error("initial pull request HEAD is not an exact SHA");
+    }
     await publish(originalHead, "pending");
 
     const finalSnapshot = normalizeGitHubSnapshot(await loadSnapshot());
