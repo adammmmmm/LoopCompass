@@ -1,0 +1,2554 @@
+{
+  "schema": 1,
+  "profile": "loopcompass-human-attention-v1",
+  "description": "Host-neutral conformance cases for the optional human-attention projection contract.",
+  "adapter_observations": {
+    "handoff": {
+      "kind": "repository_file",
+      "locator": "HANDOFF.md",
+      "root_confined": true,
+      "symlink_checked": true,
+      "authority_identity": "incident-coordinator"
+    },
+    "operator_queue": {
+      "kind": "repository_file",
+      "locator": "OPERATOR_QUEUE.md",
+      "root_confined": true,
+      "symlink_checked": true,
+      "authority_identity": "incident-coordinator"
+    }
+  },
+  "profiles": {
+    "disabled": {
+      "enabled": false
+    },
+    "capability": {
+      "enabled": true,
+      "surface": {
+        "kind": "repository_file",
+        "locator": "HANDOFF.md"
+      },
+      "authority": "incident-coordinator",
+      "history_retention": "project-audit-policy",
+      "human_only_capabilities": ["production-console"],
+      "human_only_decisions": []
+    },
+    "decision": {
+      "enabled": true,
+      "surface": {
+        "kind": "repository_file",
+        "locator": "OPERATOR_QUEUE.md"
+      },
+      "authority": "incident-coordinator",
+      "history_retention": "project-audit-policy",
+      "human_only_capabilities": [],
+      "human_only_decisions": ["production-release"]
+    },
+    "schema1_underscore": {
+      "enabled": true,
+      "surface": {
+        "kind": "repository_file",
+        "locator": "HANDOFF.md"
+      },
+      "authority": "incident-coordinator",
+      "history_retention": "project-audit-policy",
+      "human_only_capabilities": ["repository_write"],
+      "human_only_decisions": []
+    },
+    "invalid": {
+      "enabled": true,
+      "surface": {
+        "kind": "repository_file",
+        "locator": ""
+      },
+      "authority": "",
+      "history_retention": "",
+      "human_only_capabilities": ["production-console"],
+      "human_only_decisions": []
+    }
+  },
+  "cases": [
+    {
+      "id": "disabled-imposes-no-projection",
+      "profile_config": "disabled",
+      "incidents": [
+        {
+          "slug": "release-approval-required",
+          "open": true,
+          "requires": ["decision:production-release"]
+        }
+      ],
+      "known_obligations": [],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "enabled-exactly-one-human-capability",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "schema1-underscore-capability-is-conformant",
+      "profile_config": "schema1_underscore",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "repository-write-required",
+          "open": true,
+          "requires": ["repository_write"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "repository-write-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "repository-write-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "repository_write",
+          "requested_action": "Perform the repository write."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "repository-write-required",
+          "requested_action": "Perform the repository write.",
+          "incident_path": ".loopcompass/incidents/repository-write-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "mixed-capability-list-creates-human-obligation",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "mixed-action-required",
+          "open": true,
+          "requires": ["ci-runner", "production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "mixed-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "mixed-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "mixed-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/mixed-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "enabled-needs-persisted-obligation",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "first-marker-write-crash-is-recoverable",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_first_marker_gap:console-action-required"]
+      }
+    },
+    {
+      "id": "total-deletion-remains-detectable",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_obligation_history:console-action-required"]
+      }
+    },
+    {
+      "id": "enabled-missing-human-projection",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1,
+          "retention_note": "preserve"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_projection:console-action-required"]
+      }
+    },
+    {
+      "id": "enabled-divergent-duplicates-recompute",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        },
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["duplicate_projection:console-action-required"],
+        "reconciled_projection": {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      }
+    },
+    {
+      "id": "duplicate-across-surfaces-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        },
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "SECOND_QUEUE.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["duplicate_projection_across_surfaces:console-action-required"]
+      }
+    },
+    {
+      "id": "human-decision-awaits-verification",
+      "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": {"kind": "repository_file", "locator": "OPERATOR_QUEUE.md"},
+      "incidents": [
+        {
+          "slug": "release-approval-required",
+          "open": true,
+          "requires": ["decision:production-release"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "decision:production-release",
+          "requested_action": "Approve the production release."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "release-approval-required",
+          "requested_action": "Approve the production release.",
+          "incident_path": ".loopcompass/incidents/release-approval-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "OPERATOR_QUEUE.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "human-token-removed-after-action-retains-projection",
+      "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": {"kind": "repository_file", "locator": "OPERATOR_QUEUE.md"},
+      "incidents": [
+        {
+          "slug": "release-approval-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "decision:production-release",
+          "requested_action": "Approve the production release."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "release-approval-required",
+          "requested_action": "Approve the production release.",
+          "incident_path": ".loopcompass/incidents/release-approval-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "OPERATOR_QUEUE.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "true-non-human-reassignment-releases-projection",
+      "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": {"kind": "repository_file", "locator": "OPERATOR_QUEUE.md"},
+      "incidents": [
+        {
+          "slug": "release-approval-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "state": "reassigned_nonhuman",
+          "revision": 3,
+          "requested_action": "CI verifies the release."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "reassignment-with-stale-projection-fails",
+      "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": {"kind": "repository_file", "locator": "OPERATOR_QUEUE.md"},
+      "incidents": [
+        {
+          "slug": "release-approval-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "state": "reassigned_nonhuman",
+          "revision": 3,
+          "requested_action": "CI verifies the release."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "release-approval-required",
+          "requested_action": "Approve the production release.",
+          "incident_path": ".loopcompass/incidents/release-approval-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "OPERATOR_QUEUE.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["unexpected_projection:release-approval-required"]
+      }
+    },
+    {
+      "id": "verified-closure-permits-cleanup",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verified_closed",
+          "revision": 3,
+          "closure_evidence_ref": "closure-console-v1"
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [
+        {
+          "id": "closure-console-v1",
+          "incident_slug": "console-action-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "cleanup-without-closure-evidence-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verified_closed",
+          "revision": 3,
+          "closure_evidence_ref": "closure-console-v1"
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_closure_evidence:console-action-required"]
+      }
+    },
+    {
+      "id": "verified-closed-stale-projection-must-be-cleaned",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verified_closed",
+          "revision": 3,
+          "closure_evidence_ref": "closure-console-v1"
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [
+        {
+          "id": "closure-console-v1",
+          "incident_slug": "console-action-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
+      "expected": {
+        "conformant": false,
+        "errors": ["unexpected_projection:console-action-required"]
+      }
+    },
+    {
+      "id": "invalid-marker-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "waiting",
+          "revision": 1,
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["invalid_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "same-max-revision-conflict-forward",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["conflicting_obligation_revision:console-action-required"]
+      }
+    },
+    {
+      "id": "same-max-revision-conflict-reverse",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["conflicting_obligation_revision:console-action-required"]
+      }
+    },
+    {
+      "id": "unregistered-marker-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["unregistered_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "release-marker-conflicts-with-current-human-requires",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "reassigned_nonhuman",
+          "revision": 3,
+          "requested_action": "CI performs the action."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "obligation_conflicts_current_requires:console-action-required",
+          "reassigned_nonhuman_requires_nonhuman_match:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "projection-state-mismatch-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["projection_state_mismatch:console-action-required"]
+      }
+    },
+    {
+      "id": "projection-revision-mismatch-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["projection_obligation_revision_mismatch:console-action-required"]
+      }
+    },
+    {
+      "id": "active-obligation-missing-canonical-incident",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["active_obligation_missing_incident:console-action-required"]
+      }
+    },
+    {
+      "id": "true-orphan-with-verified-closure-is-cleaned",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [],
+      "obligations": [],
+      "projections": [
+        {
+          "incident_slug": "old-console-action",
+          "requested_action": "Perform the old console action.",
+          "incident_path": ".loopcompass/incidents/old-console-action.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [
+        {
+          "id": "closure-old-console-v1",
+          "incident_slug": "old-console-action",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
+      "expected": {
+        "conformant": false,
+        "errors": ["orphan_projection:unknown-closure:old-console-action"]
+      }
+    },
+    {
+      "id": "verified-closed-while-incident-open-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verified_closed",
+          "revision": 3,
+          "closure_evidence_ref": "closure-console-v1"
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [
+        {
+          "id": "closure-console-v1",
+          "incident_slug": "console-action-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
+      "expected": {
+        "conformant": false,
+        "errors": ["verified_closed_incident_still_open:console-action-required"]
+      }
+    },
+    {
+      "id": "stale-human-action-after-token-removal-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["human_action_pending_requires_human_match:console-action-required"]
+      }
+    },
+    {
+      "id": "off-surface-projection-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "SECOND_QUEUE.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["projection_surface_mismatch:console-action-required"]
+      }
+    },
+    {
+      "id": "projection-missing-required-fields-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "projection_field_missing:incident_path:console-action-required",
+          "projection_field_missing:obligation_revision:console-action-required",
+          "projection_field_missing:requested_action:console-action-required",
+          "projection_field_missing:state:console-action-required",
+          "projection_field_missing:surface:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "failed-verification-renews-human-action",
+      "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": {"kind": "repository_file", "locator": "OPERATOR_QUEUE.md"},
+      "incidents": [
+        {
+          "slug": "release-approval-required",
+          "open": true,
+          "requires": ["decision:production-release"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "decision:production-release",
+          "requested_action": "Approve the production release."
+        },
+        {
+          "incident_slug": "release-approval-required",
+          "state": "human_action_pending",
+          "revision": 3,
+          "human_requirement": "decision:production-release",
+          "requested_action": "Correct the release approval."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "release-approval-required",
+          "requested_action": "Correct the release approval.",
+          "incident_path": ".loopcompass/incidents/release-approval-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 3,
+          "surface": "OPERATOR_QUEUE.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": [],
+        "reconciled_projection": {
+          "incident_slug": "release-approval-required",
+          "requested_action": "Correct the release approval.",
+          "incident_path": ".loopcompass/incidents/release-approval-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 3,
+          "surface": "OPERATOR_QUEUE.md"
+        }
+      }
+    },
+    {
+      "id": "failed-verification-renewal-without-human-token-fails",
+      "profile_config": "decision",
+      "adapter_observation": "operator_queue",
+      "registry_surface": {"kind": "repository_file", "locator": "OPERATOR_QUEUE.md"},
+      "incidents": [
+        {
+          "slug": "release-approval-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "release-approval-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "decision:production-release",
+          "requested_action": "Approve the production release."
+        },
+        {
+          "incident_slug": "release-approval-required",
+          "state": "human_action_pending",
+          "revision": 3,
+          "human_requirement": "decision:production-release",
+          "requested_action": "Correct the release approval."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "release-approval-required",
+          "requested_action": "Correct the release approval.",
+          "incident_path": ".loopcompass/incidents/release-approval-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 3,
+          "surface": "OPERATOR_QUEUE.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "human_action_pending_requires_human_match:release-approval-required"
+        ]
+      }
+    },
+    {
+      "id": "registry-lag-repairable",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1,
+          "retention_note": "preserve"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_registry_lag:console-action-required"]
+      }
+    },
+    {
+      "id": "human-action-missing-canonical-incident",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["active_obligation_missing_incident:console-action-required"]
+      }
+    },
+    {
+      "id": "reassignment-missing-canonical-incident",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "reassigned_nonhuman",
+          "revision": 3,
+          "requested_action": "CI performs the action."
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["reassigned_nonhuman_missing_incident:console-action-required"]
+      }
+    },
+    {
+      "id": "projection-requested-action-mismatch-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform a different action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["projection_requested_action_mismatch:console-action-required"]
+      }
+    },
+    {
+      "id": "projection-incident-path-mismatch-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/friendly-alias.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["projection_incident_path_mismatch:console-action-required"]
+      }
+    },
+    {
+      "id": "non-human-action-has-no-human-projection",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "ci-verification-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": true,
+        "errors": []
+      }
+    },
+    {
+      "id": "wrong-canonical-slug-is-missing-plus-orphan",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "friendly-alias",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "invalid_orphan_projection:friendly-alias",
+          "missing_projection:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "enabled-profile-needs-one-authority-surface",
+      "profile_config": "invalid",
+      "adapter_observation": "handoff",
+      "incidents": [],
+      "known_obligations": [],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "invalid_profile:authority",
+          "invalid_profile:history_retention",
+          "invalid_profile:surface"
+        ]
+      }
+    },
+    {
+      "id": "first-marker-registry-lag-is-recoverable",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console",
+          "retention_note": "preserve"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_registry_lag:console-action-required"]
+      }
+    },
+    {
+      "id": "invalid-first-write-metadata-does-not-reconstruct",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "mixed-action-required",
+          "open": true,
+          "requires": ["ci-runner", "production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "mixed-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Run the console operation.",
+          "pending_human_requirement": "ci-runner"
+        }
+      ],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["invalid_first_write_metadata:mixed-action-required"]
+      }
+    },
+    {
+      "id": "registry-ahead-of-marker-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 3
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["registry_ahead_of_marker:console-action-required"]
+      }
+    },
+    {
+      "id": "mixed-valid-invalid-markers-fail-closed",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": ""
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["invalid_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "same-revision-unknown-field-conflict-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 2
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action.",
+          "extension": "one"
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action.",
+          "extension": "two"
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["conflicting_obligation_revision:console-action-required"]
+      }
+    },
+    {
+      "id": "revision-zero-to-two-verification-lag-is-recoverable",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_registry_lag:console-action-required"]
+      }
+    },
+    {
+      "id": "revision-zero-to-three-verification-lag-is-recoverable",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console",
+          "retention_note": "preserve"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 3,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the completed console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the completed console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 3,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_registry_lag:console-action-required"]
+      }
+    },
+    {
+      "id": "revision-zero-mismatched-initial-history-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform a different console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform a different console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform a different console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["invalid_first_write_metadata:console-action-required"]
+      }
+    },
+    {
+      "id": "unrepairable-canonical-state-registry-lag",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "human_action_pending_requires_human_match:console-action-required",
+          "unrepairable_registry_lag:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "later-marker-missing-revision-one-live-match-is-repairable",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console",
+          "retention_note": "preserve"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action.",
+          "extension": "preserve"
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_registry_lag:console-action-required"]
+      }
+    },
+    {
+      "id": "later-marker-missing-revision-one-without-live-match-fails",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["ci-runner"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_obligation_history:console-action-required"]
+      }
+    },
+    {
+      "id": "revision-zero-deleted-incident-is-missing-history",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_obligation_history:console-action-required"]
+      }
+    },
+    {
+      "id": "first-marker-gap-with-existing-projection-is-repairable",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_first_marker_gap:console-action-required"]
+      }
+    },
+    {
+      "id": "stale-closure-cannot-clean-open-incident-projection",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [],
+      "obligations": [],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [
+        {
+          "id": "stale-closure-console-v1",
+          "incident_slug": "console-action-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
+      "expected": {
+        "conformant": false,
+        "errors": ["missing_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "invalid-historical-marker-blocks-repair",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "ci-runner",
+          "requested_action": "Run the automated job."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["invalid_obligation:console-action-required"]
+      }
+    },
+    {
+      "id": "multi-slug-repair-is-isolated",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        },
+        {
+          "slug": "second-console-action",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        },
+        {
+          "incident_slug": "second-console-action",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action."
+        },
+        {
+          "incident_slug": "second-console-action",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "ci-runner",
+          "requested_action": "Run the automated job."
+        },
+        {
+          "incident_slug": "second-console-action",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the second console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Verify the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        },
+        {
+          "incident_slug": "second-console-action",
+          "requested_action": "Verify the second console action.",
+          "incident_path": ".loopcompass/incidents/second-console-action.md",
+          "state": "verification_pending",
+          "obligation_revision": 2,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "invalid_obligation:second-console-action",
+          "recoverable_registry_lag:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-revision-one-is-atomic-with-invalid-closed-marker",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "verified_closed",
+          "revision": 2,
+          "closure_evidence_ref": "stale-closure-console-v1"
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [
+        {
+          "id": "stale-closure-console-v1",
+          "incident_slug": "console-action-required",
+          "normal_path_verified": true,
+          "containment_removed": true,
+          "incident_closure_recorded": true
+        }
+      ],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "obligation_conflicts_current_requires:console-action-required",
+          "unrepairable_registry_lag:console-action-required",
+          "verified_closed_incident_still_open:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-revision-one-is-atomic-with-invalid-reassignment",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "reassigned_nonhuman",
+          "revision": 2
+        }
+      ],
+      "projections": [],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "obligation_conflicts_current_requires:console-action-required",
+          "reassigned_nonhuman_requires_nonhuman_match:console-action-required",
+          "unrepairable_registry_lag:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "stale-projection-does-not-block-registry-lag-repair",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 1
+        }
+      ],
+      "obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "state": "human_action_pending",
+          "revision": 1,
+          "human_requirement": "production-console",
+          "requested_action": "Perform the production console action."
+        },
+        {
+          "incident_slug": "console-action-required",
+          "state": "verification_pending",
+          "revision": 2,
+          "human_requirement": "production-console",
+          "requested_action": "Verify the production console action."
+        }
+      ],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Perform the production console action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": [
+          "projection_obligation_revision_mismatch:console-action-required",
+          "projection_requested_action_mismatch:console-action-required",
+          "projection_state_mismatch:console-action-required",
+          "recoverable_registry_lag:console-action-required"
+        ]
+      }
+    },
+    {
+      "id": "divergent-projections-do-not-block-first-marker-gap-repair",
+      "profile_config": "capability",
+      "adapter_observation": "handoff",
+      "registry_surface": {"kind": "repository_file", "locator": "HANDOFF.md"},
+      "incidents": [
+        {
+          "slug": "console-action-required",
+          "open": true,
+          "requires": ["production-console"]
+        }
+      ],
+      "known_obligations": [
+        {
+          "incident_slug": "console-action-required",
+          "last_known_revision": 0,
+          "pending_requested_action": "Perform the production console action.",
+          "pending_human_requirement": "production-console"
+        }
+      ],
+      "obligations": [],
+      "projections": [
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Stale action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "verification_pending",
+          "obligation_revision": 4,
+          "surface": "HANDOFF.md"
+        },
+        {
+          "incident_slug": "console-action-required",
+          "requested_action": "Different stale action.",
+          "incident_path": ".loopcompass/incidents/console-action-required.md",
+          "state": "human_action_pending",
+          "obligation_revision": 1,
+          "surface": "HANDOFF.md"
+        }
+      ],
+      "closure_evidence": [],
+      "expected": {
+        "conformant": false,
+        "errors": ["recoverable_first_marker_gap:console-action-required"]
+      }
+    }
+  ]
+}

@@ -13,6 +13,9 @@ uses [Semantic Versioning](https://semver.org/).
 - Automated GitHub Actions dependency updates.
 - A manifested, dependency-free committed-state redaction checker that consumers can invoke
   locally in non-mutating audit or enforce mode.
+- Optional, disabled-by-default human-attention integration profile with durable obligation
+  markers, typed authority-bound surfaces, fail-closed compare-and-swap reconciliation, and
+  deterministic lifecycle fixtures.
 - A current-HEAD delivery gate for three independent model reviews, finding dispositions, and
   conditional human review, plus a scheduled remote-branch lifecycle audit.
 

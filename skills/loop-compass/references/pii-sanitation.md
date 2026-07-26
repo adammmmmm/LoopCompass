@@ -11,7 +11,10 @@ Sanitation is a mandatory pre-persistence transform, not a cleanup pass:
 1. Reduce the source material in memory to the minimum evidence needed for classification.
 2. Replace unnecessary identities with functional roles and remove or generalize sensitive data.
 3. Review every value that could become durable, including prose, commands, evidence, frontmatter,
-   filenames, terminal receipts, human-attention projections, and diagnostics.
+   filenames, terminal receipts, human-attention projections, obligation markers,
+   known-obligation registries, and diagnostics. Sanitize `requested_action` prose before it enters
+   either a projection or marker; the registry keeps only the already-sanitized canonical slug and
+   the minimum pending-action metadata required for first-write crash recovery.
 4. Only then normalize the failure signature and derive its dedupe key, artifact ID, or filename.
 5. Search for an exact sanitized signature in both LoopCompass directories immediately before
    writing. Update the matching artifact instead of creating a duplicate.

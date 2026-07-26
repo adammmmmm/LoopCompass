@@ -208,4 +208,15 @@ describe("verify-consumer", () => {
     assert.match(result.stderr, /regular-tree validation/);
     assert.doesNotMatch(result.stderr, /consumer-state-fifo|candidate\.md/);
   });
+
+  it("requires the shipped human-attention profile", () => {
+    const project = path.join(tmp, "missing-human-profile");
+    const skill = stageOne(project);
+    rmSync(path.join(skill, "references", "human-attention.md"));
+
+    const result = verify(project);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /skill install inventory does not match manifest/);
+    assert.doesNotMatch(result.stderr, /human-attention\.md|missing-human-profile/);
+  });
 });
