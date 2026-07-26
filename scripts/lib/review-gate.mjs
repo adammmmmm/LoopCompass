@@ -1401,6 +1401,7 @@ export async function runPolicyEvaluation({
   runUrl,
 }) {
   let originalHead = null;
+  let activeReviewReceipt = null;
   const policyFailure = (reason) => ({
     ok: false,
     modelOk: false,
@@ -1423,6 +1424,13 @@ export async function runPolicyEvaluation({
       throw error;
     }
   };
+  const blockWithoutRemoteRead = async (higherRun = null) => {
+    await publish(originalHead, "pending", undefined, runUrl);
+    if (activeReviewReceipt) {
+      await dismissStaleReview(activeReviewReceipt, higherRun);
+      activeReviewReceipt = null;
+    }
+  };
   const publishTerminalSafely = async (result) => {
     const before = await listStatuses(originalHead);
     const higherBefore = newestHigherRun(before, runUrl);
@@ -1430,19 +1438,31 @@ export async function runPolicyEvaluation({
       await publish(originalHead, "reassert", higherBefore.statuses);
       return "superseded";
     }
-    const receipt = await recordReview(result);
+    const beforeTrustError = statusHistoryTrustError(before, runUrl);
+    if (beforeTrustError || !currentRunOwnsStatuses(before, runUrl)) {
+      await blockWithoutRemoteRead();
+      return "blocked_before_review";
+    }
+    activeReviewReceipt = await recordReview(result);
     const afterReview = await listStatuses(originalHead);
     const higherAfterReview = newestHigherRun(afterReview, runUrl);
     if (higherAfterReview) {
-      await dismissStaleReview(receipt, higherAfterReview);
+      await dismissStaleReview(activeReviewReceipt, higherAfterReview);
+      activeReviewReceipt = null;
       await publish(originalHead, "reassert", higherAfterReview.statuses);
       return "superseded_after_review";
+    }
+    const afterReviewTrustError = statusHistoryTrustError(afterReview, runUrl);
+    if (afterReviewTrustError || !currentRunOwnsStatuses(afterReview, runUrl)) {
+      await blockWithoutRemoteRead();
+      return "blocked_after_review";
     }
     await publish(originalHead, "terminal", result, runUrl);
     const afterTerminal = await listStatuses(originalHead);
     const higherAfterTerminal = newestHigherRun(afterTerminal, runUrl);
     if (higherAfterTerminal) {
-      await dismissStaleReview(receipt, higherAfterTerminal);
+      await dismissStaleReview(activeReviewReceipt, higherAfterTerminal);
+      activeReviewReceipt = null;
       await publish(originalHead, "reassert", higherAfterTerminal.statuses);
       return "superseded_after_terminal";
     }
@@ -1465,7 +1485,7 @@ export async function runPolicyEvaluation({
     if (!reason) return null;
     return failPolicy(reason);
   };
-  const failUntrustedAssociation = async () => {
+  const failUntrustedAssociation = async (afterTerminal = false) => {
     let reason;
     try {
       reason = exclusivePullAssociationError({
@@ -1477,6 +1497,13 @@ export async function runPolicyEvaluation({
       reason = "pull request association is unverifiable";
     }
     if (!reason) return null;
+    if (afterTerminal) {
+      await blockWithoutRemoteRead();
+      return {
+        outcome: "blocked_post_terminal_association",
+        headSha: originalHead,
+      };
+    }
     return failPolicy(reason);
   };
   try {
@@ -1544,11 +1571,17 @@ export async function runPolicyEvaluation({
     if (terminalOutcome !== "terminal") {
       return { outcome: terminalOutcome, headSha: originalHead };
     }
-    const postTerminalAssociationFailure = await failUntrustedAssociation();
+    const postTerminalAssociationFailure = await failUntrustedAssociation(true);
     if (postTerminalAssociationFailure) return postTerminalAssociationFailure;
     return { outcome: result.ok ? "pass" : "fail", headSha: originalHead, result };
   } catch (error) {
     if (error?.reviewDismissalFailure) throw error;
+    if (activeReviewReceipt) {
+      try {
+        await blockWithoutRemoteRead();
+      } catch {}
+      throw error;
+    }
     if (originalHead) {
       const result = policyFailure("Policy evaluation did not complete");
       try {

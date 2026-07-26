@@ -2185,6 +2185,115 @@ test("stale review dismissal failure propagates while statuses remain blocking",
   assert.deepEqual(published.map((item) => item.state), ["pending"]);
 });
 
+test("post-review untrusted status dismisses the exact receipt and never publishes terminal", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  const owned = ownedStatuses(runUrl);
+  const calls = [];
+  let reviewPosted = false;
+  const result = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    loadAssociatedPullRequests: async () => associatedPullRequests(),
+    publish: async (head, state) => calls.push(state),
+    publishReview: async () => {
+      calls.push("review");
+      reviewPosted = true;
+      return { id: 501 };
+    },
+    dismissReview: async (review) => calls.push(`dismiss-${review.id}`),
+    listStatuses: async () =>
+      reviewPosted
+        ? [
+            ...owned,
+            {
+              context: "delivery-policy",
+              state: "success",
+              target_url: "https://invalid.example/run/1",
+            },
+          ]
+        : owned,
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl,
+  });
+  assert.equal(result.outcome, "blocked_after_review");
+  assert.deepEqual(calls, ["pending", "review", "pending", "dismiss-501"]);
+});
+
+test("post-terminal status read failure unconditionally restores blocking state and dismisses receipt", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  const owned = ownedStatuses(runUrl);
+  const calls = [];
+  let terminalPosted = false;
+  await assert.rejects(
+    runPolicyEvaluation({
+      loadHead: async () => sha,
+      loadSnapshot: async () => rawSnapshot(),
+      loadAssociatedPullRequests: async () => associatedPullRequests(),
+      publish: async (head, state) => {
+        calls.push(state);
+        if (state === "terminal") terminalPosted = true;
+      },
+      publishReview: async () => {
+        calls.push("review");
+        return { id: 502 };
+      },
+      dismissReview: async (review) => calls.push(`dismiss-${review.id}`),
+      listStatuses: async () => {
+        if (terminalPosted) throw new Error("status pager unavailable");
+        return owned;
+      },
+      config,
+      repository,
+      pullNumber: 1,
+      runUrl,
+    }),
+    /status pager unavailable/,
+  );
+  assert.deepEqual(calls, [
+    "pending",
+    "review",
+    "terminal",
+    "pending",
+    "dismiss-502",
+  ]);
+});
+
+test("post-terminal association failure blocks and dismisses the active receipt", async () => {
+  const runUrl = "https://github.com/example/project/actions/runs/100";
+  const calls = [];
+  let associations = 0;
+  const result = await runPolicyEvaluation({
+    loadHead: async () => sha,
+    loadSnapshot: async () => rawSnapshot(),
+    loadAssociatedPullRequests: async () => {
+      associations += 1;
+      if (associations >= 4) throw new Error("association unavailable");
+      return associatedPullRequests();
+    },
+    publish: async (head, state) => calls.push(state),
+    publishReview: async () => {
+      calls.push("review");
+      return { id: 503 };
+    },
+    dismissReview: async (review) => calls.push(`dismiss-${review.id}`),
+    listStatuses: async () => ownedStatuses(runUrl),
+    config,
+    repository,
+    pullNumber: 1,
+    runUrl,
+  });
+  assert.equal(result.outcome, "blocked_post_terminal_association");
+  assert.deepEqual(calls, [
+    "pending",
+    "review",
+    "terminal",
+    "pending",
+    "dismiss-503",
+  ]);
+});
+
 test("snapshot pager failure occurs only after pending and fails closed in review-first order", async () => {
   const runUrl = "https://github.com/example/project/actions/runs/100";
   const calls = [];
@@ -2258,13 +2367,9 @@ test("status ownership misses and pending publication failures overwrite old gre
     statuses: oldGreen,
     runUrl,
   });
-  assert.equal(ownershipMiss.outcome.outcome, "fail");
-  assert.equal(ownershipMiss.published.at(-1).state, "terminal");
-  assert.match(
-    ownershipMiss.published.at(-1).result.deliveryReasons.join(" "),
-    /did not acquire/,
-  );
-  assert.equal(ownershipMiss.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
+  assert.equal(ownershipMiss.outcome.outcome, "blocked_before_review");
+  assert.equal(ownershipMiss.published.at(-1).state, "pending");
+  assert.equal(ownershipMiss.reviewDecisions.length, 0);
 
   let ownershipReads = 0;
   const preTerminalPublished = [];
@@ -2286,12 +2391,9 @@ test("status ownership misses and pending publication failures overwrite old gre
     pullNumber: 1,
     runUrl,
   });
-  assert.equal(preTerminalMiss.outcome, "fail");
-  assert.match(
-    preTerminalPublished.at(-1).result.deliveryReasons.join(" "),
-    /lost ownership/,
-  );
-  assert.equal(preTerminalReviews.at(-1).event, "REQUEST_CHANGES");
+  assert.equal(preTerminalMiss.outcome, "blocked_before_review");
+  assert.equal(preTerminalPublished.at(-1).state, "pending");
+  assert.equal(preTerminalReviews.length, 0);
 
   const published = [];
   const reviewDecisions = [];
@@ -2313,9 +2415,8 @@ test("status ownership misses and pending publication failures overwrite old gre
       runUrl,
     }),
   );
-  assert.equal(published.at(-1).state, "terminal");
-  assert.equal(published.at(-1).result.ok, false);
-  assert.equal(reviewDecisions.at(-1).event, "REQUEST_CHANGES");
+  assert.equal(published.at(-1).state, "pending");
+  assert.equal(reviewDecisions.length, 0);
 });
 
 test("run 101 reclaims both contexts from later terminal writes by run 100", async () => {
@@ -2405,12 +2506,9 @@ test("foreign or unparseable policy status URLs fail closed", async () => {
       statuses,
       runUrl: current,
     });
-    assert.equal(result.outcome.outcome, "fail");
-    assert.equal(result.published.at(-1).state, "terminal");
-    assert.match(
-      result.published.at(-1).result.deliveryReasons.join(" "),
-      /foreign or unparseable/,
-    );
+    assert.equal(result.outcome.outcome, "blocked_before_review");
+    assert.equal(result.published.at(-1).state, "pending");
+    assert.equal(result.reviewDecisions.length, 0);
   }
 });
 
