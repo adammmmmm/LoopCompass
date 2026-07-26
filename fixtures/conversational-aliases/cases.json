@@ -71,6 +71,43 @@
       "ambiguous": false,
       "durable_target": false,
       "expected": "reject"
+    },
+    {
+      "id": "post-compaction-canonical-reintroduction",
+      "alias": "LC-1",
+      "canonical_slug": "deploy-token-lacks-required-permission",
+      "context": "compacted_conversation",
+      "introduced_together": false,
+      "mapping_established": true,
+      "canonical_reintroduced": true,
+      "ambiguous": false,
+      "durable_target": false,
+      "expected": "accept"
+    },
+    {
+      "id": "ambiguity-resolved-by-canonical-slug",
+      "alias": "LC-1",
+      "canonical_slug": "deploy-token-lacks-required-permission",
+      "context": "current_conversation",
+      "introduced_together": false,
+      "mapping_established": true,
+      "canonical_reintroduced": true,
+      "ambiguous": true,
+      "durable_target": false,
+      "expected": "accept"
+    },
+    {
+      "id": "durable-canonical-reference-with-presentation-alias",
+      "alias": "LC-1",
+      "canonical_slug": "deploy-token-lacks-required-permission",
+      "context": "current_conversation",
+      "introduced_together": false,
+      "mapping_established": true,
+      "canonical_reintroduced": true,
+      "ambiguous": false,
+      "durable_target": true,
+      "alias_used_as_join_key": false,
+      "expected": "accept"
     }
   ]
 }

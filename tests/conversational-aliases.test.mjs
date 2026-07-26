@@ -23,20 +23,37 @@ const cases = JSON.parse(
 ).cases;
 
 function evaluateAlias(candidate) {
-  if (candidate.ambiguous) return "clarify";
-  if (candidate.durable_target) return "reject";
+  const hasCanonicalSlug =
+    typeof candidate.canonical_slug === "string" &&
+    candidate.canonical_slug.length > 0;
+  if (candidate.durable_target) {
+    return hasCanonicalSlug &&
+      candidate.canonical_reintroduced === true &&
+      candidate.alias_used_as_join_key === false
+      ? "accept"
+      : "reject";
+  }
+  if (candidate.ambiguous && candidate.canonical_reintroduced !== true) {
+    return "clarify";
+  }
+  if (
+    candidate.context !== "current_conversation" &&
+    candidate.canonical_reintroduced === true
+  ) {
+    return hasCanonicalSlug ? "accept" : "reject";
+  }
   if (
     candidate.context !== "current_conversation" ||
     (!candidate.introduced_together && !candidate.mapping_established)
   ) {
     return "reject";
   }
-  return candidate.canonical_slug ? "accept" : "reject";
+  return hasCanonicalSlug ? "accept" : "reject";
 }
 
 describe("conversational incident aliases", () => {
   it("evaluates dual display, ambiguity, compaction, durable, and namespaced cases", () => {
-    assert.ok(cases.length >= 7);
+    assert.ok(cases.length >= 10);
     for (const candidate of cases) {
       assert.equal(evaluateAlias(candidate), candidate.expected, candidate.id);
     }
@@ -75,5 +92,10 @@ describe("conversational incident aliases", () => {
     ]) {
       assert.match(reference, new RegExp(phrase, "i"));
     }
+  });
+
+  it("is included in the top-level verification gate", () => {
+    const verify = readFileSync(path.join(root, "scripts", "verify.mjs"), "utf8");
+    assert.match(verify, /tests\/conversational-aliases\.test\.mjs/);
   });
 });
