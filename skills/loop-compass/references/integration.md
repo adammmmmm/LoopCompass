@@ -77,7 +77,8 @@ When a project enables the profile, follow
 decisions, one durable attention surface, and the authority responsible for that surface. The
 incident remains canonical; each human-attention entry is only a resumable projection keyed by the
 canonical incident slug. Install and update flows must not create, rewrite, or reconcile that
-consumer-owned surface.
+consumer-owned surface, including its projection block, obligation markers, and known-obligation
+registry.
 
 ## Version and updates
 
