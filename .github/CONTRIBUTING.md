@@ -40,9 +40,9 @@ dependency relationship, not a workflow status.
 5. Confirm `git diff --check` passes.
 6. Open a pull request using the repository template and enter Review when the implementation,
    required tests, green `verify` check, and closure evidence are complete.
-7. Exit Review only after three independent model reviews approve the current pull request HEAD,
-   every material finding has an evidence-backed disposition, blocker fixes are re-verified, and
-   all review conversations are resolved. Any later push invalidates that sign-off.
+7. Exit Review only after `review-policy` finds either the configured owner's exact-current-HEAD
+   three-model panel record or exact-current-HEAD approval comment, blocker fixes are re-verified,
+   and all review conversations are resolved. Any later push invalidates that sign-off.
 
 CI uses Node.js 24. Installing project dependencies is not required.
 
@@ -64,18 +64,12 @@ Pull requests should explain the problem, the chosen solution, user-visible impa
 evidence. Keep unrelated changes separate. A maintainer may ask for changes when a contribution
 adds speculative scope, duplicates coverage, weakens portability, or lacks a reproducible contract.
 
-Trusted first-party, non-sensitive pull requests require independently green `verify` and
-`model-review-gate` and `delivery-policy` checks. External contributions additionally require
-current human maintainer review.
-Sensitive changes always require current human maintainer review, including Actions and workflows,
-authentication or permissions, migrations, release credentials, security boundaries, and the
-review gate itself; all `scripts/`, `tests/`, and `fixtures/` changes are sensitive. The trusted
-delivery workflow records a pull-request-scoped approval only after every applicable requirement is
-green and records changes requested otherwise. That automation review is a delivery attestation,
-not one of the three independent model reviews. Review and human evidence bind to the current HEAD
-and its trusted workflow-run generation; a push invalidates both even if the branch later returns
-to an earlier SHA. Auto-merge may be armed only after the applicable checks and review are green.
-Pull requests merge by squash; merged remote branches are deleted automatically.
+All pull requests require independently green `verify` and `review-policy` checks. The latter
+accepts either an exact-current-HEAD three-model panel record or an exact-current-HEAD approval
+comment, authored directly by the configured repository owner. Native reviews and automation
+reviews are not evidence. A push changes the HEAD and invalidates earlier evidence. Auto-merge may
+be armed only after both checks are green. Pull requests merge by squash; merged remote branches
+are deleted automatically.
 
 The compact public evidence format and maintainer procedure are in
 [the delivery policy](../docs/maintainer-delivery-policy.md).

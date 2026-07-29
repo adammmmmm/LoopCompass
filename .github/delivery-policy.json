@@ -1,40 +1,7 @@
 {
-  "schema": 1,
-  "trusted_contributors": [
-    "adammmmmm"
-  ],
-  "human_maintainers": [
-    "adammmmmm"
-  ],
-  "required_model_reviews": 3,
+  "schema": 2,
+  "repository_owner": "adammmmmm",
   "branch_audit_exemptions": [],
-  "sensitive_paths": [
-    ".github/workflows/**",
-    ".github/actions/**",
-    ".github/delivery-policy.json",
-    ".github/CONTRIBUTING.md",
-    ".github/PULL_REQUEST_TEMPLATE.md",
-    "docs/maintainer-delivery-policy.md",
-    "scripts/**",
-    "tests/**",
-    "fixtures/**",
-    "**/auth/**",
-    "**/*auth*/**",
-    "**/*auth*",
-    "**/permissions/**",
-    "**/*permission*/**",
-    "**/*permission*",
-    "**/migrations/**",
-    "**/*migration*/**",
-    "**/*migration*",
-    "**/security/**",
-    "**/*security*/**",
-    "**/*security*",
-    "**/*credential*/**",
-    "**/*credential*",
-    "**/*secret*/**",
-    "**/*secret*"
-  ],
   "desired_ruleset": {
     "name": "Protect main",
     "source_type": "Repository",
@@ -56,11 +23,7 @@
         "integration_id": 15368
       },
       {
-        "context": "model-review-gate",
-        "integration_id": 15368
-      },
-      {
-        "context": "delivery-policy",
+        "context": "review-policy",
         "integration_id": 15368
       }
     ],
@@ -69,14 +32,10 @@
     ],
     "dismiss_stale_reviews_on_push": true,
     "require_code_owner_review": false,
-    "require_last_push_approval": true,
-    "required_approving_review_count": 1,
+    "require_last_push_approval": false,
+    "required_approving_review_count": 0,
     "required_review_thread_resolution": true,
     "required_reviewers": [],
-    "dismissal_restriction": {
-      "enabled": false,
-      "allowed_actors": []
-    },
     "bypass_actors": []
   },
   "desired_repository_settings": {
@@ -85,9 +44,5 @@
     "allow_merge_commit": false,
     "allow_rebase_merge": false,
     "delete_branch_on_merge": true
-  },
-  "desired_actions_workflow_permissions": {
-    "default_workflow_permissions": "read",
-    "can_approve_pull_request_reviews": true
   }
 }

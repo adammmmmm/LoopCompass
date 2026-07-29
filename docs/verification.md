@@ -32,7 +32,7 @@ Runs:
 | Example redaction denylist | `scripts/redact-check.mjs`, `examples/capsules/` |
 | Manifest digests and policy marker integrity | `scripts/release.mjs`, `tests/release-tooling.test.mjs` |
 | Persist, no-artifact, or exact-escalation policy contract | `tests/release-tooling.test.mjs` |
-| Repository delivery, review evidence, PR-scoped approval, status fencing, and branch/ruleset/settings audit | `scripts/lib/review-gate.mjs`, `tests/review-gate.test.mjs`, `tests/repository-health.test.mjs` |
+| Repository owner review evidence and ruleset/settings audit | `scripts/lib/review-gate.mjs`, `tests/review-gate.test.mjs`, `tests/repository-health.test.mjs` |
 
 Release 0.4.0 cross-feature, live-host, package, and byte-preserving consumer evidence is recorded
 in [release-conformance-0.4.0.md](release-conformance-0.4.0.md).

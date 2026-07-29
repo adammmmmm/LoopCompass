@@ -18,15 +18,12 @@
 
 <!--
 Enter Review only after implementation, tests, green verify, and closure evidence are complete.
-Before Done, attach one compact summary of three independent model reviews for the current HEAD and
-head generation using docs/maintainer-delivery-policy.md. A later push invalidates that evidence,
-including when the branch later returns to an earlier SHA.
+Before Done, attach either the repository-owner three-model panel record or the repository-owner
+approval comment for the exact current HEAD using docs/maintainer-delivery-policy.md.
 -->
 
-Trusted first-party, non-sensitive changes require green `verify`, `model-review-gate`, and
-`delivery-policy`. External changes also require current human maintainer review; sensitive paths
-always require it. The delivery automation approval is separate from the three independent model
-reviews and becomes stale after a push.
+All changes require green `verify` and `review-policy`. A push changes the HEAD and invalidates
+earlier review evidence.
 Squash is the only merge method, and merged remote branches are deleted.
 
 ## Checklist
@@ -37,6 +34,6 @@ Squash is the only merge method, and merged remote branches are deleted.
 - [ ] `git diff --check` passes.
 - [ ] Documentation and `CHANGELOG.md` are updated when behavior changes.
 - [ ] Examples and logs contain no secrets, private paths, or personal data.
-- [ ] Three independent model reviews approve the current HEAD.
+- [ ] The exact-current-HEAD owner panel or owner approval satisfies `review-policy`.
 - [ ] Every material finding is dispositioned with evidence and blocker fixes are re-verified.
 - [ ] Review conversations are resolved.
