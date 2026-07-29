@@ -2,29 +2,21 @@
 import { readFile } from "node:fs/promises";
 import {
   auditBranches,
-  buildBotReviewDecision,
-  buildObservedStatusPayloads,
-  buildStatusPayloads,
-  currentWorkflowHeadGenerationCandidate,
+  buildStatusPayload,
   evaluateRepositoryPolicy,
-  latestBotReviewMatches,
-  latestMatchingBotReview,
-  loadStatusHistory,
+  evaluateReviewPolicy,
   resolvePullRequestNumber,
-  resolveWorkflowHeadGenerationHistory,
-  runPolicyEvaluation,
 } from "./lib/review-gate.mjs";
 
 const root = new URL("../", import.meta.url);
 const config = JSON.parse(await readFile(new URL(".github/delivery-policy.json", root), "utf8"));
 
 async function api(path, options = {}) {
-  const token = process.env.GITHUB_TOKEN;
   const response = await fetch(`https://api.github.com${path}`, {
     ...options,
     headers: {
       Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
       "X-GitHub-Api-Version": "2022-11-28",
       ...options.headers,
     },
@@ -38,6 +30,7 @@ async function pages(path) {
   for (let page = 1; ; page += 1) {
     const separator = path.includes("?") ? "&" : "?";
     const values = await api(`${path}${separator}per_page=100&page=${page}`);
+    if (!Array.isArray(values)) throw new Error(`GitHub API returned a non-list: ${path}`);
     output.push(...values);
     if (values.length < 100) return output;
   }
@@ -49,28 +42,10 @@ function repository() {
   return value;
 }
 
-async function resolveHeadGeneration(event, repo, pullNumber) {
-  let currentCandidate = null;
-  if (
-    event.pull_request &&
-    ["opened", "synchronize"].includes(event.action)
-  ) {
-    const run = await api(`/repos/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`);
-    currentCandidate = currentWorkflowHeadGenerationCandidate(
-      run,
-      event,
-      pullNumber,
-    );
-  }
-  return resolveWorkflowHeadGenerationHistory({
-    pullNumber,
-    currentCandidate,
-    loadPage: async (page) => {
-      const response = await api(
-        `/repos/${repo}/actions/workflows/review-gate.yml/runs?event=pull_request_target&per_page=100&page=${page}`,
-      );
-      return Array.isArray(response?.workflow_runs) ? response.workflow_runs : [];
-    },
+async function publishStatus(repo, sha, payload) {
+  await api(`/repos/${repo}/statuses/${sha}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -79,111 +54,62 @@ async function evaluatePullRequest() {
   const number = resolvePullRequestNumber(event);
   const repo = repository();
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-  const publish = async (sha, state, result, targetUrl = runUrl) => {
-    const payloads =
-      state === "reassert"
-        ? buildObservedStatusPayloads(result)
-        : buildStatusPayloads({ state, result, targetUrl });
-    await Promise.all(
-      payloads.map((payload) =>
-        api(`/repos/${repo}/statuses/${sha}`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        }),
-      ),
-    );
-  };
-  const loadSnapshot = async () => {
-    const generation = await resolveHeadGeneration(event, repo, number);
-    const pull = await api(`/repos/${repo}/pulls/${number}`);
-    const [files, comments, reviews] = await Promise.all([
-      pages(`/repos/${repo}/pulls/${number}/files`),
-      pages(`/repos/${repo}/issues/${number}/comments`),
-      pages(`/repos/${repo}/pulls/${number}/reviews`),
-    ]);
-    return { pull, files, comments, reviews, generation };
-  };
-  const loadHead = async () => (await api(`/repos/${repo}/pulls/${number}`)).head.sha;
-  const loadAssociatedPullRequests = async (sha) =>
-    pages(`/repos/${repo}/commits/${sha}/pulls`);
-  const publishReview = async (sha, result) => {
-    const decision = buildBotReviewDecision(result, sha, runUrl);
-    const reviews = await pages(`/repos/${repo}/pulls/${number}/reviews`);
-    if (latestBotReviewMatches(reviews, decision)) {
-      return latestMatchingBotReview(reviews, decision);
-    }
-    return api(`/repos/${repo}/pulls/${number}/reviews`, {
-      method: "POST",
-      body: JSON.stringify(decision),
-    });
-  };
-  const dismissReview = async (review, higherRun) =>
-    api(`/repos/${repo}/pulls/${number}/reviews/${review.id}/dismissals`, {
-      method: "PUT",
-      body: JSON.stringify({
-        message: higherRun
-          ? `Superseded by policy run ${higherRun.runId}.`
-          : "Policy status ownership was lost before terminal success.",
-      }),
-    });
-  const listStatuses = async (sha) =>
-    loadStatusHistory({ repository: repo, sha, pages });
-  const outcome = await runPolicyEvaluation({
-    loadHead,
-    loadSnapshot,
-    loadAssociatedPullRequests,
-    publish,
-    publishReview,
-    dismissReview,
-    listStatuses,
-    config,
-    repository: repo,
-    pullNumber: number,
-    runUrl,
+  const pull = await api(`/repos/${repo}/pulls/${number}`);
+  const headSha = pull?.head?.sha;
+  if (typeof headSha !== "string" || !/^[0-9a-f]{40}$/.test(headSha)) {
+    throw new Error("pull request HEAD is unavailable");
+  }
+  await publishStatus(
+    repo,
+    headSha,
+    buildStatusPayload({ state: "pending", targetUrl: runUrl }),
+  );
+  const comments = await pages(`/repos/${repo}/issues/${number}/comments`);
+  const result = evaluateReviewPolicy({
+    headSha,
+    comments,
+    owner: config.repository_owner,
   });
-  console.log(JSON.stringify({ pull_request: number, ...outcome }, null, 2));
-  // A policy denial is a successfully evaluated, fail-closed result: the two
-  // required commit statuses and bot review carry that decision. Keep the
-  // workflow job green so an earlier expected denial cannot remain as a stale
-  // failed CheckRun after current-HEAD evidence later satisfies both contexts.
-  // API, driver, and other operational failures still reject this top-level
-  // await and therefore fail the workflow job.
+  const currentHead = (await api(`/repos/${repo}/pulls/${number}`))?.head?.sha;
+  if (currentHead !== headSha) {
+    console.log(JSON.stringify({ pull_request: number, outcome: "head_changed" }, null, 2));
+    return;
+  }
+  await publishStatus(
+    repo,
+    headSha,
+    buildStatusPayload({
+      state: result.ok ? "success" : "failure",
+      result,
+      targetUrl: runUrl,
+    }),
+  );
+  console.log(
+    JSON.stringify(
+      { pull_request: number, head_sha: headSha, outcome: result.ok ? "pass" : "fail", ...result },
+      null,
+      2,
+    ),
+  );
+  // A policy denial is a completed evaluation represented by the required
+  // review-policy status. API and driver failures still fail this workflow job.
 }
 
 async function auditRepositoryPolicy() {
   const repo = repository();
-  let ruleset;
-  let settings;
-  let workflowPermissions;
-  try {
-    const summaries = await api(`/repos/${repo}/rulesets`);
-    const named = summaries.filter(
-      (item) => item.name === config.desired_ruleset.name,
-    );
-    const summary =
-      named.find(
-        (item) =>
-          item.target === config.desired_ruleset.target &&
-          item.source_type === config.desired_ruleset.source_type &&
-          item.source === config.desired_ruleset.source,
-      ) ?? named[0];
-    if (!summary) throw new Error("configured ruleset is not visible");
-    [ruleset, settings, workflowPermissions] = await Promise.all([
-      api(`/repos/${repo}/rulesets/${summary.id}`),
-      api(`/repos/${repo}`),
-      api(`/repos/${repo}/actions/permissions/workflow`),
-    ]);
-  } catch (error) {
-    throw new Error(`repository delivery policy is unverifiable: ${error.message}`);
-  }
+  const summaries = await api(`/repos/${repo}/rulesets`);
+  const summary = summaries.find((item) => item.name === config.desired_ruleset.name);
+  if (!summary) throw new Error("configured ruleset is not visible");
+  const [ruleset, settings] = await Promise.all([
+    api(`/repos/${repo}/rulesets/${summary.id}`),
+    api(`/repos/${repo}`),
+  ]);
   const drifts = evaluateRepositoryPolicy({
     ruleset,
     settings,
-    workflowPermissions,
     desired: {
       ...config.desired_ruleset,
       repository_settings: config.desired_repository_settings,
-      actions_workflow_permissions: config.desired_actions_workflow_permissions,
     },
   });
   console.log(JSON.stringify({ repository: repo, policy_drift: drifts }, null, 2));

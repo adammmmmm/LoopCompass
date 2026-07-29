@@ -1,38 +1,31 @@
-name: delivery-policy
-run-name: delivery-policy-${{ github.event.action || 'manual' }}-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull_request_number }}-head-${{ github.event.pull_request.head.sha || 'none' }}
+name: review-policy
+run-name: review-policy-${{ github.event.action || 'manual' }}-pr-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull_request_number }}
 
 on:
   workflow_dispatch:
     inputs:
       pull_request_number:
-        description: Pull request number to re-evaluate after resolving a shared-HEAD conflict
+        description: Pull request number to re-evaluate
         required: true
         type: number
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, edited]
   issue_comment:
     types: [created, edited, deleted]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
 
 permissions:
-  actions: read
   contents: read
   issues: read
-  pull-requests: write
+  pull-requests: read
   statuses: write
 
 concurrency:
-  group: delivery-policy-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull_request_number }}
+  group: review-policy-${{ github.event.pull_request.number || github.event.issue.number || inputs.pull_request_number }}
   cancel-in-progress: true
 
 jobs:
   evaluate:
-    if: >-
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request) &&
-      (github.event_name != 'pull_request_review' ||
-      github.event.action == 'dismissed' ||
-      github.event.review.user.login != 'github-actions[bot]')
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,7 +37,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-      - name: Evaluate delivery review evidence
+      - name: Evaluate review policy
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/review-gate.mjs github
