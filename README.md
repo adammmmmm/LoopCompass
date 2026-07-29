@@ -250,7 +250,7 @@ for metrics and the fixture contract.
 | Updates are explicit | Never during ordinary consultation |
 
 <details>
-<summary><b>Planned optional hooks</b></summary>
+<summary><b>Hooks evidence gate (deferred)</b></summary>
 
 Hooks are a future lever for hosts that need stronger enforcement or measurement. Not required for
 core behavior. Deferred unless cross-host tests show material missed consultations or blind retries.
@@ -281,10 +281,12 @@ Runs unit/fixture/dry-run tests and `scripts/release.mjs validate`.
 
 ## Status
 
-Skill + Markdown core with executable mechanical verification (signatures, fixtures, install/update
-dry-runs, release digests). Near-term product goal: dogfood recoveries in real multi-agent repos and
-complete the host matrix. V1 updates are release-based and explicit. Silent update checks during
-ordinary use remain deferred.
+v0.4.0 is being dogfooded in real multi-agent work. The sole focused backlog item is
+[#1 — Evaluate recovery freshness from existing metadata](https://github.com/adammmmmm/LoopCompass/issues/1).
+Formal live-host evidence is provider-specific: Codex has one bounded release-conformance pass;
+Claude Code and Grok CLI are explicitly unassessed. Hooks remain deferred behind measured
+persistent consultation or blind-retry failures. V1 updates are release-based and explicit. Silent
+update checks during ordinary use remain deferred.
 
 ## Community
 
