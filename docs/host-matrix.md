@@ -44,7 +44,8 @@ When completing a matrix pass, copy [host-results/TEMPLATE.md](host-results/TEMP
 - Pass/Fail per scenario;
 - any miss (skipped consultation) with short evidence.
 
-Scaffold note: [host-results/2026-07-12-scaffold.md](host-results/2026-07-12-scaffold.md) documents
-that behavioral host passes are still pending while mechanical CI is green.
+[Release conformance for v0.4.0](release-conformance-0.4.0.md) documents the current live-host
+status: Codex CLI has one bounded release-conformance pass; Claude Code and Grok CLI are explicitly
+unassessed. This is not cross-host enforcement evidence.
 
 Do not claim cross-host enforcement. Project instructions are best-effort automatic behavior.
