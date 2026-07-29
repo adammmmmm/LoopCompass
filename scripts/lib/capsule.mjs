@@ -42,6 +42,76 @@ export function parseIsoDate(raw) {
 }
 
 /**
+ * Classify recovery verification freshness without mutating stored state.
+ * @param {Record<string, string | string[] | null>} fields
+ * @param {Date} [asOf]
+ * @returns {{
+ *   freshness: "current" | "stale" | "unknown",
+ *   expiryDate: string | null,
+ *   errors: string[],
+ * }}
+ */
+export function classifyRecoveryFreshness(fields, asOf = new Date()) {
+  const hasLastVerified = Object.hasOwn(fields, "last_verified");
+  const hasExpiresAfterDays = Object.hasOwn(fields, "expires_after_days");
+  const lastVerified = fields.last_verified;
+  const expiresAfterDays = fields.expires_after_days;
+  const lastVerifiedMissing =
+    !hasLastVerified ||
+    lastVerified === null ||
+    lastVerified === "null";
+  const expiryMissing = !hasExpiresAfterDays;
+
+  const errors = [];
+  const verifiedDate =
+    lastVerifiedMissing || typeof lastVerified !== "string"
+      ? null
+      : parseIsoDate(lastVerified);
+  if (!lastVerifiedMissing && !verifiedDate) {
+    errors.push("last_verified must be YYYY-MM-DD or null");
+  }
+
+  const expiryText =
+    typeof expiresAfterDays === "string" ? expiresAfterDays : "";
+  const expiryDays = Number(expiryText);
+  if (
+    !expiryMissing &&
+    (!/^[1-9]\d*$/.test(expiryText) ||
+      !Number.isSafeInteger(expiryDays))
+  ) {
+    errors.push("expires_after_days must be a positive integer");
+  }
+
+  if (errors.length) {
+    return { freshness: "unknown", expiryDate: null, errors };
+  }
+
+  if (lastVerifiedMissing || expiryMissing) {
+    return { freshness: "unknown", expiryDate: null, errors: [] };
+  }
+
+  const expiry = new Date(verifiedDate);
+  expiry.setUTCDate(expiry.getUTCDate() + expiryDays);
+  if (Number.isNaN(expiry.getTime())) {
+    return {
+      freshness: "unknown",
+      expiryDate: null,
+      errors: ["expires_after_days produces an unsupported expiry date"],
+    };
+  }
+
+  const asOfDate = new Date(
+    Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()),
+  );
+  const expiryDate = expiry.toISOString().slice(0, 10);
+  return {
+    freshness: asOfDate > expiry ? "stale" : "current",
+    expiryDate,
+    errors: [],
+  };
+}
+
+/**
  * @param {string} text
  * @param {{ kind: "recovery" | "incident", filename: string, today?: Date }} opts
  * @returns {{ errors: string[], warnings: string[] }}
@@ -129,6 +199,20 @@ export function validateCapsuleText(text, opts) {
   }
 
   if (kind === "recovery") {
+    const freshness = classifyRecoveryFreshness(fields, today);
+    errors.push(
+      ...freshness.errors.map((error) => `${filename}: ${error}`),
+    );
+    if (freshness.freshness === "unknown" && freshness.errors.length === 0) {
+      warnings.push(
+        `${filename}: recovery freshness is unknown; keep searchable but do not use as verified guidance`,
+      );
+    } else if (freshness.freshness === "stale") {
+      warnings.push(
+        `${filename}: recovery freshness is stale as of ${today.toISOString().slice(0, 10)} (expired after ${freshness.expiryDate}); keep searchable but do not use as verified guidance`,
+      );
+    }
+
     if (fields.status === "verified" && /Pending/i.test(body) && /##\s+Verification/.test(body)) {
       const ver = body.split(/##\s+Verification/)[1] || "";
       if (/^\s*Pending\b/im.test(ver.trim())) {

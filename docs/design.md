@@ -10,14 +10,21 @@ distinguish those outcomes before it preserves anything.
 ### Recovery lane
 
 Use a recovery when the verified resolution is correct operating behavior or a legitimate external
-constraint. Store one concise, scoped Markdown file. Stop retrieving it when its scope expires or
-contradictory evidence appears.
+constraint. Store one concise, scoped Markdown file. Keep every recovery searchable as evidence,
+but present it as verified guidance only when its stored status is `verified` and its computed
+verification freshness is `current`.
 
-Lifecycle:
+Stored lifecycle:
 
 ```text
 candidate -> verified -> stale -> deleted or superseded
 ```
+
+Freshness is computed without mutation from `last_verified` and `expires_after_days` using UTC
+calendar dates. The expiry date is inclusive; freshness becomes stale on the following day.
+Missing freshness is unknown, and stale or unknown recoveries are ineligible as verified guidance.
+Expiry alone never changes stored status, deletes, or supersedes. Those lifecycle decisions require
+evidence, while re-verification may refresh `last_verified` and restore `status: verified`.
 
 ### Incident lane
 

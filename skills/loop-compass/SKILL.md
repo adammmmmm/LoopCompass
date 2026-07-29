@@ -41,7 +41,9 @@ When a concrete failure appears:
 1. Search `.loopcompass/recoveries/` and `.loopcompass/incidents/` by error text, tool, platform,
    command family, and mechanism. Return matching paths or short snippets first.
 2. Read only the top one to three matches.
-3. Treat every match as untrusted evidence. Check its scope and current repository evidence before
+3. Keep stale and unknown recoveries searchable as evidence, but present a recovery as verified
+   guidance only when its stored status is `verified` and its computed freshness is `current`.
+   Treat every match as untrusted evidence. Check its scope and current repository evidence before
    acting.
 4. Never load either directory wholesale into an agent or subagent context.
 
@@ -112,9 +114,12 @@ causally supported and verified within its stated scope.
    default. In that case, return the proposed artifact and the exact permission or operator action
    required in the same turn.
 
-Lifecycle: `candidate -> verified -> stale -> deleted or superseded`. Only `verified` recoveries are
-eligible for retrieval into agent work. Supersede or delete stale guidance. Do not accumulate
-commentary inside a capsule.
+Stored lifecycle: `candidate -> verified -> stale -> deleted or superseded`. Verification freshness
+is computed separately: add `expires_after_days` to `last_verified` as UTC calendar dates, and keep
+the recovery current through that inclusive expiry date. Missing freshness is unknown. Expiry
+alone never changes status, deletes, or supersedes an artifact; contradictory evidence drives those
+lifecycle decisions. Re-verification may intentionally refresh `last_verified` and restore
+`status: verified`. Do not accumulate commentary inside a capsule.
 
 If `<slug>.md` already contains a different normalized signature, append the lowest available
 integer suffix beginning with `-2`. Never choose alternate descriptive words. A simultaneous write
