@@ -7,6 +7,11 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Recovery verification freshness is computed non-destructively with an inclusive UTC expiry date;
+  only stored `verified` recoveries with current freshness are eligible as verified guidance.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added

@@ -6,6 +6,7 @@ import { describe, it, after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
+  classifyRecoveryFreshness,
   parseIsoDate,
   validateCapsuleText,
   validateStateDir,
@@ -20,6 +21,105 @@ describe("capsule validator", () => {
     assert.ok(parseIsoDate("2026-02-28") instanceof Date);
     assert.equal(parseIsoDate("2026-02-30"), null);
     assert.equal(parseIsoDate("2026-13-01"), null);
+  });
+
+  it("keeps recovery freshness current through the exact expiry date", () => {
+    const fields = {
+      last_verified: "2026-07-01",
+      expires_after_days: "30",
+    };
+    assert.deepEqual(
+      classifyRecoveryFreshness(fields, new Date("2026-07-31T23:59:59Z")),
+      { freshness: "current", expiryDate: "2026-07-31", errors: [] },
+    );
+    assert.deepEqual(
+      classifyRecoveryFreshness(fields, new Date("2026-08-01T00:00:00Z")),
+      { freshness: "stale", expiryDate: "2026-07-31", errors: [] },
+    );
+  });
+
+  it("uses UTC calendar arithmetic across leap-day and year rollover", () => {
+    assert.deepEqual(
+      classifyRecoveryFreshness(
+        { last_verified: "2024-02-28", expires_after_days: "1" },
+        new Date("2024-02-29T12:00:00-08:00"),
+      ),
+      { freshness: "current", expiryDate: "2024-02-29", errors: [] },
+    );
+    assert.deepEqual(
+      classifyRecoveryFreshness(
+        { last_verified: "2025-12-31", expires_after_days: "1" },
+        new Date("2026-01-02T00:00:00Z"),
+      ),
+      { freshness: "stale", expiryDate: "2026-01-01", errors: [] },
+    );
+  });
+
+  it("classifies null or missing freshness fields as unknown", () => {
+    for (const fields of [
+      { last_verified: "null", expires_after_days: "30" },
+      { last_verified: null, expires_after_days: "30" },
+      { expires_after_days: "30" },
+      { last_verified: "2026-07-01" },
+    ]) {
+      assert.deepEqual(
+        classifyRecoveryFreshness(fields, new Date("2026-07-01T00:00:00Z")),
+        { freshness: "unknown", expiryDate: null, errors: [] },
+      );
+    }
+  });
+
+  it("reports malformed populated freshness values as validation errors", () => {
+    const badDate = classifyRecoveryFreshness(
+      { last_verified: "2026-02-30", expires_after_days: "30" },
+      new Date("2026-07-01T00:00:00Z"),
+    );
+    assert.match(badDate.errors.join("\n"), /last_verified/);
+
+    for (const expiresAfterDays of ["null", "-1", "1.5", "thirty"]) {
+      const result = classifyRecoveryFreshness(
+        {
+          last_verified: "2026-07-01",
+          expires_after_days: expiresAfterDays,
+        },
+        new Date("2026-07-01T00:00:00Z"),
+      );
+      assert.match(result.errors.join("\n"), /expires_after_days/);
+    }
+
+    const text = readFileSync(path.join(fixtures, "good-recovery.md"), "utf8")
+      .replace("last_verified: 2026-07-02", "last_verified: 2026-02-30")
+      .replace("expires_after_days: 180", "expires_after_days: thirty");
+    const validation = validateCapsuleText(text, {
+      kind: "recovery",
+      filename: "sandbox-package-cache-outside-writable-root.md",
+      today: new Date("2026-07-01T00:00:00Z"),
+    });
+    assert.match(validation.errors.join("\n"), /last_verified/);
+    assert.match(validation.errors.join("\n"), /expires_after_days/);
+  });
+
+  it("reports freshness diagnostics without changing stored status", () => {
+    const text = readFileSync(path.join(fixtures, "good-recovery.md"), "utf8");
+    const stale = validateCapsuleText(text, {
+      kind: "recovery",
+      filename: "sandbox-package-cache-outside-writable-root.md",
+      today: new Date("2027-01-01T00:00:00Z"),
+    });
+    assert.deepEqual(stale.errors, []);
+    assert.match(stale.warnings.join("\n"), /freshness is stale/);
+    assert.match(text, /status: verified/);
+
+    const unknown = validateCapsuleText(
+      text.replace("last_verified: 2026-07-02", "last_verified: null"),
+      {
+        kind: "recovery",
+        filename: "sandbox-package-cache-outside-writable-root.md",
+        today: new Date("2027-01-01T00:00:00Z"),
+      },
+    );
+    assert.deepEqual(unknown.errors, []);
+    assert.match(unknown.warnings.join("\n"), /freshness is unknown/);
   });
 
   it("accepts good recovery fixture", () => {
