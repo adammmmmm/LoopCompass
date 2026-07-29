@@ -586,8 +586,10 @@ function deliveryEvaluation({
   repository,
   pullNumber,
   authorizationComments,
+  panelEvidenceValid = false,
 }) {
   if (!delivery.humanReviewRequired) return [];
+  if (panelEvidenceValid) return [];
   const nativeApproval = latestEffectiveHumanApproval(
     nativeApprovals,
     config.human_maintainers,
@@ -639,20 +641,6 @@ export function validateReviewRecord({
   historyErrors = Array.isArray(historyErrors) ? historyErrors : ["review history is malformed"];
   const delivery = classifyDelivery({ author, changedFiles, filesComplete, config });
   const parsed = parseReviewComment(comment?.body);
-  const deliveryReasons = deliveryEvaluation({
-    parsed,
-    comment,
-    author,
-    headSha,
-    headGeneration,
-    generationCreatedAt,
-    delivery,
-    config,
-    nativeApprovals,
-    repository,
-    pullNumber,
-    authorizationComments,
-  });
   const modelReasons = [];
   if (!parsed) {
     modelReasons.push("missing structured review summary");
@@ -897,8 +885,23 @@ export function validateReviewRecord({
   modelReasons.push(...historyErrors);
 
   const uniqueModelReasons = [...new Set(modelReasons)];
-  const uniqueDeliveryReasons = [...new Set(deliveryReasons)];
   const modelOk = uniqueModelReasons.length === 0;
+  const deliveryReasons = deliveryEvaluation({
+    parsed,
+    comment,
+    author,
+    headSha,
+    headGeneration,
+    generationCreatedAt,
+    delivery,
+    config,
+    nativeApprovals,
+    repository,
+    pullNumber,
+    authorizationComments,
+    panelEvidenceValid: modelOk,
+  });
+  const uniqueDeliveryReasons = [...new Set(deliveryReasons)];
   const deliveryOk = uniqueDeliveryReasons.length === 0;
   return {
     ok: modelOk && deliveryOk,

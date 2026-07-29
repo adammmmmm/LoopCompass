@@ -100,11 +100,12 @@ repository audit logs are the external evidence for destructive administrative c
   workflow posts a pull-request-scoped GitHub Actions approval for the exact HEAD. If either fails,
   it posts changes requested instead. The latest automation review is a delivery attestation and
   never counts as one of the three independent model reviews.
-- External pull requests additionally need current human maintainer review.
-- Sensitive paths always need current human maintainer review, regardless of author. This includes
-  Actions and workflows, authentication or permissions, migrations, release credentials, security
-  boundaries, policy configuration, this policy, and every file under `scripts/`, `tests/`, or
-  `fixtures/`.
+- External pull requests additionally need delivery approval from either current canonical owner
+  panel evidence or current human maintainer review.
+- Sensitive paths always need delivery approval, regardless of author, from either current canonical
+  owner panel evidence or current human maintainer review. This includes Actions and workflows,
+  authentication or permissions, migrations, release credentials, security boundaries, policy
+  configuration, this policy, and every file under `scripts/`, `tests/`, or `fixtures/`.
 - Human review can be a native approval targeting the current HEAD or a `human_approval` object in
   the canonical maintainer comment. The object contains `reviewer`, `head_sha`, `head_generation`,
   `verdict: "approved"`, `kind`, and `authorization_reference`; its reviewer must be the configured
@@ -137,7 +138,9 @@ repository audit logs are the external evidence for destructive administrative c
   -->
   ```
 - Native approval clicks do not count as independent model records and cannot replace the structured
-  three-review evidence.
+  three-review evidence required by `model-review-gate`. Automation-generated approvals also cannot
+  satisfy delivery approval for external or sensitive changes; only the configured maintainer's
+  canonical owner panel evidence or current human approval can do that.
 - The main-branch ruleset requires one approval, dismisses stale reviews on push, and requires an
   approval after the latest push. This PR-scoped approval is a backstop for commit-scoped status
   checks and preserves autonomous delivery for trusted, non-sensitive changes.

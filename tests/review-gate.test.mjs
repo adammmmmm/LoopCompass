@@ -106,6 +106,12 @@ function freshReviewProvenance(data, offset) {
   return data;
 }
 
+function nonPassingPanel(data) {
+  const value = structuredClone(data);
+  value.reviews[2].execution_id = value.reviews[0].execution_id;
+  return value;
+}
+
 function comment(data = metadata(), author = "maintainer") {
   return {
     id: 100,
@@ -198,7 +204,7 @@ function evaluate({
   author = "maintainer",
   changedFiles = ["README.md"],
   commentAuthor = "maintainer",
-  reviewComment,
+  reviewComment = undefined,
   nativeApprovals = [],
   authorizationComments = [],
   policy = config,
@@ -206,7 +212,7 @@ function evaluate({
   generationCreatedAt,
 } = {}) {
   return validateReviewRecord({
-    comment: reviewComment ?? comment(data, commentAuthor),
+    comment: reviewComment === undefined ? comment(data, commentAuthor) : reviewComment,
     headSha: sha,
     headGeneration,
     generationCreatedAt,
@@ -287,10 +293,12 @@ test("unresolved material findings fail and evidence-backed dispositions pass", 
   assert.equal(evaluate({ data: resolved }).ok, true);
 });
 
-test("external and sensitive changes require current human maintainer review", () => {
+test("external and sensitive changes accept current owner panel evidence or human approval", () => {
+  assert.equal(evaluate({ author: "external" }).ok, true);
+  assert.equal(evaluate({ changedFiles: [".github/workflows/verify.yml"] }).ok, true);
   for (const input of [
-    { author: "external" },
-    { changedFiles: [".github/workflows/verify.yml"] },
+    { author: "external", reviewComment: null },
+    { changedFiles: [".github/workflows/verify.yml"], reviewComment: null },
   ]) {
     assert.match(evaluate(input).reasons.join(" "), /human maintainer review/);
   }
@@ -360,6 +368,19 @@ test("delivery policy is independent of missing or malformed model evidence", ()
   });
   assert.equal(sensitive.modelOk, false);
   assert.equal(sensitive.deliveryOk, true);
+});
+
+test("sensitive path delivery passes with valid owner panel evidence alone and fails with neither", () => {
+  const changedFiles = [".github/workflows/verify.yml"];
+  const panelOnly = evaluate({ changedFiles });
+  assert.equal(panelOnly.modelOk, true);
+  assert.equal(panelOnly.deliveryOk, true);
+  assert.equal(panelOnly.ok, true);
+
+  const neither = evaluate({ changedFiles, reviewComment: null });
+  assert.equal(neither.modelOk, false);
+  assert.equal(neither.deliveryOk, false);
+  assert.match(neither.reasons.join(" "), /human maintainer review/);
 });
 
 test("deep malformed model payloads fail closed without throwing", () => {
@@ -457,10 +478,12 @@ test("operator authorization resolves to an immutable same-PR human comment", ()
     [authorizationComment({ createdAt: "2026-01-01T00:01:00Z" })],
   ];
   for (const authorizationComments of invalid) {
+    const invalidPanelData = nonPassingPanel(data);
     assert.equal(
       evaluate({
-        data,
+        data: invalidPanelData,
         changedFiles: [".github/workflows/verify.yml"],
+        reviewComment: comment(invalidPanelData),
         authorizationComments,
       }).deliveryOk,
       false,
@@ -473,11 +496,12 @@ test("operator authorization resolves to an immutable same-PR human comment", ()
     const authorization = authorizationComment({
       createdAt: authorizationCreated,
     });
-    const review = comment(data);
+    const invalidPanelData = nonPassingPanel(data);
+    const review = comment(invalidPanelData);
     review.created_at = reviewCreated;
     review.updated_at = reviewCreated;
     const result = evaluate({
-      data,
+      data: invalidPanelData,
       changedFiles: [".github/workflows/verify.yml"],
       reviewComment: review,
       authorizationComments: [authorization],
@@ -503,10 +527,12 @@ test("operator authorization resolves to an immutable same-PR human comment", ()
   const laterIdData = structuredClone(data);
   laterIdData.human_approval.authorization_reference =
     "https://github.com/example/project/pull/1#issuecomment-150";
+  const invalidLaterIdPanel = nonPassingPanel(laterIdData);
   assert.equal(
     evaluate({
-      data: laterIdData,
+      data: invalidLaterIdPanel,
       changedFiles: [".github/workflows/verify.yml"],
+      reviewComment: comment(invalidLaterIdPanel),
       authorizationComments: [sameSecondLaterId],
     }).deliveryOk,
     false,
@@ -621,7 +647,12 @@ test("native human approval must target the current SHA", () => {
     performed_via_github_app: null,
   }];
   assert.equal(
-    evaluate({ author: "external", changedFiles, nativeApprovals: stale }).ok,
+    evaluate({
+      author: "external",
+      changedFiles,
+      reviewComment: null,
+      nativeApprovals: stale,
+    }).ok,
     false,
   );
   const current = [{
@@ -635,7 +666,10 @@ test("native human approval must target the current SHA", () => {
     evaluate({ author: "external", changedFiles, nativeApprovals: current }).ok,
     true,
   );
-  assert.equal(evaluate({ changedFiles, nativeApprovals: current }).deliveryOk, false);
+  assert.equal(
+    evaluate({ changedFiles, reviewComment: null, nativeApprovals: current }).deliveryOk,
+    false,
+  );
 });
 
 test("latest maintainer review invalidates an earlier approval", () => {
@@ -659,6 +693,7 @@ test("latest maintainer review invalidates an earlier approval", () => {
       evaluate({
         author: "external",
         changedFiles,
+        reviewComment: null,
         nativeApprovals: [approval, later],
       }).ok,
       false,
@@ -707,6 +742,7 @@ test("Bot and App records cannot satisfy human review", () => {
     assert.equal(
       evaluate({
         changedFiles: [".github/workflows/verify.yml"],
+        reviewComment: null,
         nativeApprovals: [review],
       }).deliveryOk,
       false,
@@ -1848,10 +1884,10 @@ test("trusted non-sensitive pull requests receive an autonomous bot approval", a
   assert.equal(result.reviewDecisions[0].commit_id, sha);
 });
 
-test("external and sensitive pull requests cannot receive bot approval without human input", async () => {
+test("external and sensitive pull requests cannot receive bot approval without approval evidence", async () => {
   for (const snapshot of [
-    rawSnapshot({ author: "external" }),
-    rawSnapshot({ files: [{ filename: ".github/workflows/verify.yml" }] }),
+    rawSnapshot({ author: "external", comments: [] }),
+    rawSnapshot({ files: [{ filename: ".github/workflows/verify.yml" }], comments: [] }),
   ]) {
     const result = await runDriver([snapshot, snapshot]);
     assert.equal(result.outcome.outcome, "fail");
@@ -1890,11 +1926,11 @@ test("driver revalidates same-SHA approval dismissal", async () => {
   const dismissed = { ...approval, state: "DISMISSED" };
   const files = [{ filename: ".github/workflows/verify.yml" }];
   const result = await runDriver([
-    rawSnapshot({ files, reviews: [approval] }),
-    rawSnapshot({ files, reviews: [dismissed] }),
+    rawSnapshot({ files, comments: [], reviews: [approval] }),
+    rawSnapshot({ files, comments: [], reviews: [dismissed] }),
   ]);
   assert.equal(result.outcome.outcome, "fail");
-  assert.equal(result.published.at(-1).result.modelOk, true);
+  assert.equal(result.published.at(-1).result.modelOk, false);
   assert.equal(result.published.at(-1).result.deliveryOk, false);
   assert.equal(result.reviewDecisions.at(-1).event, "REQUEST_CHANGES");
 });
