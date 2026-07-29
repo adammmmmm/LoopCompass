@@ -76,7 +76,7 @@ describe("capsule validator", () => {
     );
     assert.match(badDate.errors.join("\n"), /last_verified/);
 
-    for (const expiresAfterDays of ["null", "-1", "1.5", "thirty"]) {
+    for (const expiresAfterDays of ["", "null", "0", "-1", "1.5", "thirty", ["30"]]) {
       const result = classifyRecoveryFreshness(
         {
           last_verified: "2026-07-01",
@@ -86,6 +86,12 @@ describe("capsule validator", () => {
       );
       assert.match(result.errors.join("\n"), /expires_after_days/);
     }
+
+    const emptyDate = classifyRecoveryFreshness(
+      { last_verified: "", expires_after_days: "30" },
+      new Date("2026-07-01T00:00:00Z"),
+    );
+    assert.match(emptyDate.errors.join("\n"), /last_verified/);
 
     const text = readFileSync(path.join(fixtures, "good-recovery.md"), "utf8")
       .replace("last_verified: 2026-07-02", "last_verified: 2026-02-30")

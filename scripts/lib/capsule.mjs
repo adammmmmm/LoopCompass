@@ -52,30 +52,34 @@ export function parseIsoDate(raw) {
  * }}
  */
 export function classifyRecoveryFreshness(fields, asOf = new Date()) {
+  const hasLastVerified = Object.hasOwn(fields, "last_verified");
+  const hasExpiresAfterDays = Object.hasOwn(fields, "expires_after_days");
   const lastVerified = fields.last_verified;
   const expiresAfterDays = fields.expires_after_days;
   const lastVerifiedMissing =
-    lastVerified === undefined ||
+    !hasLastVerified ||
     lastVerified === null ||
-    lastVerified === "" ||
     lastVerified === "null";
-  const expiryMissing =
-    expiresAfterDays === undefined || expiresAfterDays === "";
+  const expiryMissing = !hasExpiresAfterDays;
 
   const errors = [];
-  const verifiedDate = lastVerifiedMissing ? null : parseIsoDate(lastVerified);
+  const verifiedDate =
+    lastVerifiedMissing || typeof lastVerified !== "string"
+      ? null
+      : parseIsoDate(lastVerified);
   if (!lastVerifiedMissing && !verifiedDate) {
     errors.push("last_verified must be YYYY-MM-DD or null");
   }
 
-  const expiryText = String(expiresAfterDays);
+  const expiryText =
+    typeof expiresAfterDays === "string" ? expiresAfterDays : "";
   const expiryDays = Number(expiryText);
   if (
     !expiryMissing &&
-    (!/^(0|[1-9]\d*)$/.test(expiryText) ||
+    (!/^[1-9]\d*$/.test(expiryText) ||
       !Number.isSafeInteger(expiryDays))
   ) {
-    errors.push("expires_after_days must be a non-negative integer");
+    errors.push("expires_after_days must be a positive integer");
   }
 
   if (errors.length) {
