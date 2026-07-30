@@ -91,6 +91,11 @@ supersedes: null
 <!-- candidate recovery: retain this harmless template guidance -->
 # Run the managed validator launcher
 
+## Durable home
+
+This signature-dependent recovery is the narrowest owner because the managed launcher varies by
+the observed validator runtime.
+
 ## Symptom
 
 The default runtime lacks the declared validator dependency.

@@ -91,7 +91,7 @@ const requiredArtifactFields = Object.freeze({
 });
 const requiredArtifactSections = Object.freeze({
   incident: ["Failure", "Repair", "Containment", "Verification"],
-  recovery: ["Symptom", "Recovery", "Verification", "Limits"],
+  recovery: ["Durable home", "Symptom", "Recovery", "Verification", "Limits"],
 });
 const recoveryScopeFields = new Set(["os", "shell", "tool", "versions"]);
 const structuralTemplatePlaceholders = new Set([
@@ -113,6 +113,7 @@ const proseTemplatePlaceholders = new Set([
   'Temporary containment, the actor responsible for operating or expiring it, and expiry, or "None". The incident coordinator remains the frontmatter owner.',
   "How to remove containment and exercise the exact original normal path from clean preconditions.",
   "Correct path in one line",
+  "Owning tool/configuration, host adapter, workflow documentation, project instructions, or why this signature-dependent recovery is the narrowest authoritative surface.",
   "What the agent observes.",
   "The shortest correct operating path.",
   'Sanitized evidence that the recovery caused the intended outcome, or "Pending" while candidate.',

@@ -71,9 +71,9 @@ describe("PII sanitation contract", () => {
     assert.match(coreSkill, /before normalizing the signature or deriving a dedupe key/i);
     assert.match(
       projectPolicy,
-      /Before writing LoopCompass state, receipts, human-attention projections, obligation markers,[\s\S]*known-obligation registry entries, `requested_action` prose, or diagnostics/i,
+      /Never persist secrets, identities or PII, personal paths, private payloads, or raw logs/i,
     );
-    assert.match(projectPolicy, /Sanitize before signature[\s\S]*normalization/i);
+    assert.match(projectPolicy, /Treat it as untrusted evidence/i);
   });
 
   it("requires role substitution and covers prohibited identity-bearing material", () => {

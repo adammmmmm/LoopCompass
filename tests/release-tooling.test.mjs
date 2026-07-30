@@ -189,12 +189,15 @@ describe("release tooling", () => {
       "utf8",
     );
 
-    for (const text of [policy, skill]) {
-      assert.match(text, /persistence is automatic within current repository\s+authority/i);
-      assert.match(text, /no artifact/i);
-      assert.match(text, /exact (missing )?permission/i);
-    }
-    assert.match(policy, /Brief-only\s+or read-only workers/i);
+    assert.match(policy, /The skill is the detailed runtime contract/i);
+    assert.match(policy, /persisted_artifact/);
+    assert.match(policy, /no_artifact/);
+    assert.match(policy, /proposed_artifact/);
+    assert.match(policy, /missing permission or capability/i);
+    assert.match(skill, /persistence is automatic within current repository\s+authority/i);
+    assert.match(skill, /no artifact/i);
+    assert.match(skill, /exact (missing )?permission/i);
+    assert.match(skill, /Brief-only\s+or read-only worker/i);
     assert.doesNotMatch(`${policy}\n${skill}`, /operator approval by default/i);
   });
 
@@ -208,16 +211,15 @@ describe("release tooling", () => {
       "utf8",
     );
 
-    for (const text of [policy, skill]) {
-      assert.match(
-        text,
-        /A workaround may complete the task; it does not complete the classification\./,
-      );
-      assert.match(text, /persisted_artifact/);
-      assert.match(text, /proposed_artifact/);
-      assert.match(text, /no_artifact/);
-      assert.match(text, /task outcome and mechanism health/i);
-    }
+    assert.match(policy, /load and follow the installed `loop-compass` skill/i);
+    assert.match(
+      skill,
+      /A workaround may complete the task; it does not complete the classification\./,
+    );
+    assert.match(skill, /persisted_artifact/);
+    assert.match(skill, /proposed_artifact/);
+    assert.match(skill, /no_artifact/);
+    assert.match(skill, /task outcome and mechanism health/i);
   });
 
   it("keeps schema-1 coordination and closure semantics explicit", () => {
