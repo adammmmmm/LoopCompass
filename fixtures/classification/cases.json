@@ -85,6 +85,30 @@
       "failure": "direct execution of system skill init_skill.py returns permission denied because the documented entrypoint lacks executable mode; python3 init_skill.py succeeds",
       "lane": "incident",
       "rationale": "Interpreter invocation is containment for a distinct launcher-readiness defect until the documented entrypoint contract is repaired and verified."
+    },
+    {
+      "id": "tool-config-owns-cache-location",
+      "failure": "build tool repeatedly selects a read-only cache root because the committed tool configuration omits its supported cache directory setting",
+      "lane": "incident",
+      "rationale": "The owning tool configuration is the durable home; repair and verify it instead of preserving a duplicate signature recovery."
+    },
+    {
+      "id": "host-adapter-owns-skill-discovery",
+      "failure": "host adapter skips repository skills when translating the documented project discovery path",
+      "lane": "incident",
+      "rationale": "The host adapter owns discovery semantics and must be repaired; a recovery would only preserve adapter folklore."
+    },
+    {
+      "id": "workflow-doc-owns-release-order",
+      "failure": "release validation fails because the documented maintainer sequence omits manifest generation before packaging",
+      "lane": "incident",
+      "rationale": "Workflow documentation is the durable home for the shared correct sequence and should be updated and verified before deleting duplicate recovery guidance."
+    },
+    {
+      "id": "project-instructions-own-required-command",
+      "failure": "agents repeatedly invoke the generic formatter although repository instructions require the project wrapper for generated sources",
+      "lane": "incident",
+      "rationale": "Project instructions own this repository-specific choice; update that authority rather than creating a signature-dependent recovery."
     }
   ]
 }

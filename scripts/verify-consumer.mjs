@@ -17,10 +17,12 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { constants as fsConstants } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
 import { validateStateDir } from "./lib/capsule.mjs";
@@ -213,6 +215,60 @@ function inventoryShape(inventory) {
   );
 }
 
+function confinedTo(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === ""
+    || (
+      !path.isAbsolute(relative)
+      && relative !== ".."
+      && !relative.startsWith(`..${path.sep}`)
+    )
+  );
+}
+
+function validateTrackedOneSource(project, inventory) {
+  const sourcePrefix = ".agents/skills/loop-compass";
+  const providerLink = ".claude/skills/loop-compass";
+  const expected = new Map([[providerLink, "120000"]]);
+  for (const [relative, entry] of inventory) {
+    if (entry.type === "file") {
+      expected.set(`${sourcePrefix}/${relative}`, "100");
+    }
+  }
+  const result = spawnSync(
+    "git",
+    [
+      "-C",
+      project,
+      "ls-files",
+      "--stage",
+      "--",
+      sourcePrefix,
+      providerLink,
+    ],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0) return false;
+  const actual = new Map();
+  for (const line of result.stdout.split(/\r?\n/).filter(Boolean)) {
+    const match = line.match(/^(\d{6}) [0-9a-f]+ \d\t(.+)$/);
+    if (!match) return false;
+    actual.set(match[2], match[1]);
+  }
+  if (actual.size !== expected.size) return false;
+  for (const [relative, mode] of expected) {
+    const actualMode = actual.get(relative);
+    if (
+      !actualMode
+      || (mode === "120000" ? actualMode !== mode : !actualMode.startsWith(mode))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function main() {
   const { project, skillPaths } = parseArgs(process.argv.slice(2));
   if (!project) die("usage: node scripts/verify-consumer.mjs --project <repo-root>");
@@ -223,14 +279,18 @@ function main() {
   }
 
   const errors = [];
-  const paths =
-    skillPaths.length > 0
-      ? skillPaths.map((p) => path.resolve(project, p))
-      : [
-          path.join(project, ".agents", "skills", "loop-compass"),
-          path.join(project, ".claude", "skills", "loop-compass"),
-          path.join(project, "skills", "loop-compass"),
-        ].filter((p) => lstatOptional(p));
+  const agentsSkill = path.join(project, ".agents", "skills", "loop-compass");
+  const claudeSkill = path.join(project, ".claude", "skills", "loop-compass");
+  const genericSkill = path.join(project, "skills", "loop-compass");
+  const claudeStat = lstatOptional(claudeSkill);
+  const oneSource = skillPaths.length === 0 && claudeStat?.isSymbolicLink()
+    ? { agentsSkill, claudeSkill }
+    : null;
+  const paths = skillPaths.length > 0
+    ? skillPaths.map((p) => path.resolve(project, p))
+    : oneSource
+      ? [agentsSkill]
+      : [agentsSkill, claudeSkill, genericSkill].filter((p) => lstatOptional(p));
 
   if (paths.length === 0) {
     die("no loop-compass skill install found (looked under .agents, .claude, skills)");
@@ -296,6 +356,31 @@ function main() {
     installs.push({ inventory, skillRoot });
   }
 
+  if (oneSource) {
+    try {
+      const projectReal = realpathSync(project);
+      const agentsReal = realpathSync(oneSource.agentsSkill);
+      const claudeReal = realpathSync(oneSource.claudeSkill);
+      const agentsStat = lstatSync(oneSource.agentsSkill);
+      if (
+        !agentsStat.isDirectory()
+        || agentsStat.isSymbolicLink()
+        || lstatOptional(genericSkill)
+        || !confinedTo(projectReal, claudeReal)
+        || agentsReal !== claudeReal
+      ) {
+        errors.push("one-source skill topology failed confined-target validation");
+      } else if (
+        installs.length !== 1
+        || !validateTrackedOneSource(project, installs[0].inventory)
+      ) {
+        errors.push("one-source skill topology is not fully tracked");
+      }
+    } catch {
+      errors.push("one-source skill topology failed confined-target validation");
+    }
+  }
+
   // Dual-host byte equality when both present
   if (installs.length >= 2) {
     const first = inventoryFingerprint(installs[0].inventory);
@@ -312,9 +397,15 @@ function main() {
     errors.push("canonical project policy is unavailable");
   }
   const policy = policyEntry?.raw.toString("utf8").trim() || "";
-  for (const name of ["AGENTS.md", "CLAUDE.md"]) {
+  const instructionFiles = oneSource ? ["AGENTS.md"] : ["AGENTS.md", "CLAUDE.md"];
+  for (const name of instructionFiles) {
     const p = path.join(project, name);
-    if (!lstatOptional(p)) continue;
+    if (!lstatOptional(p)) {
+      if (oneSource) {
+        errors.push(`${name}: required one-source instruction file is unavailable`);
+      }
+      continue;
+    }
     let text;
     try {
       text = readStableRegular(p).raw.toString("utf8");
@@ -332,6 +423,16 @@ function main() {
     }
     if (text.includes("<!-- loopcompass-policy:")) {
       errors.push(`${name}: legacy policy marker still present`);
+    }
+  }
+  if (oneSource) {
+    const provider = path.join(project, "CLAUDE.md");
+    try {
+      if (readStableRegular(provider).raw.toString("utf8") !== "@AGENTS.md\n") {
+        errors.push("CLAUDE.md: expected exact @AGENTS.md provider import");
+      }
+    } catch {
+      errors.push("CLAUDE.md: expected exact @AGENTS.md provider import");
     }
   }
 

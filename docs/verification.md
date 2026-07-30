@@ -25,7 +25,7 @@ Runs:
 | Evaluation benchmark fixtures + Markdown report | `fixtures/evaluation/cases.json`, `scripts/evaluate.mjs`, `docs/evaluation-benchmark.md`; includes host-enforcement vs skill-decision separation and parent/subagent/missing-skill/missing-instruction dimensions |
 | Capsule schema + state dir + containment expiry | `scripts/lib/capsule.mjs`, `validate-state.mjs` |
 | Recovery/incident field rules + templates | `scripts/lib/frontmatter.mjs`, `tests/artifact-schema.test.mjs` |
-| Project-scope stage, dual-host install, update check | `release.mjs stage-install`, dry-run tests |
+| Project-scope stage, one-source multi-host install, update check | `release.mjs stage-install`, dry-run tests |
 | Consumer integration kit | `scripts/verify-consumer.mjs`, `docs/consumer-verification.md` |
 | Optional human-attention lifecycle, crash repair, fail-closed marker history, and projection reconciliation | `fixtures/human-attention/cases.json`, `tests/human-attention-profile.test.mjs` |
 | Schema-1 ownership evidence, explicit authority/order gaps, and consumer-state byte identity | `fixtures/ownership-probe/cases.json`, `scripts/ownership-probe.mjs`, `tests/ownership-probe.test.mjs` |

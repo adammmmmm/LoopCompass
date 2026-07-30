@@ -700,7 +700,7 @@
     },
     {
       "id": "lc-eval-009-missing-skill-fallback",
-      "scenario": "Skill missing but project policy present falls back to direct .loopcompass search.",
+      "scenario": "Skill missing but project policy present falls back to only the top matching .loopcompass evidence.",
       "scope": {
         "host": "grok-cli-synthetic",
         "agent_role": "parent",

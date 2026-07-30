@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import {
   cpSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -49,7 +51,41 @@ describe("verify-consumer", () => {
     );
   }
 
-  it("passes a dual-host staged project with policy and empty state", () => {
+  function trackOneSource(project) {
+    let result = spawnSync("git", ["init", "-q"], {
+      cwd: project,
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    result = spawnSync(
+      "git",
+      [
+        "add",
+        "-f",
+        ".agents/skills/loop-compass",
+        ".claude/skills/loop-compass",
+        "AGENTS.md",
+        "CLAUDE.md",
+      ],
+      { cwd: project, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
+
+  function writeOneSourcePolicy(project) {
+    const policy = readFileSync(
+      path.join(root, "skills", "loop-compass", "assets", "project-policy.md"),
+      "utf8",
+    ).trim();
+    writeFileSync(
+      path.join(project, "AGENTS.md"),
+      `# Project instructions\n\n${policy}\n`,
+      "utf8",
+    );
+    writeFileSync(path.join(project, "CLAUDE.md"), "@AGENTS.md\n", "utf8");
+  }
+
+  it("passes a tracked one-source project with provider import and empty state", () => {
     const project = path.join(tmp, "consumer");
     mkdirSync(project, { recursive: true });
 
@@ -66,18 +102,14 @@ describe("verify-consumer", () => {
       { encoding: "utf8" },
     );
     assert.equal(stage.status, 0, stage.stderr || stage.stdout);
-
-    const policy = readFileSync(
-      path.join(root, "skills", "loop-compass", "assets", "project-policy.md"),
-      "utf8",
-    ).trim();
-    for (const name of ["AGENTS.md", "CLAUDE.md"]) {
-      writeFileSync(
-        path.join(project, name),
-        `# ${name}\n\n${policy}\n\n## Other\n\nkeep\n`,
-        "utf8",
-      );
-    }
+    assert.equal(
+      lstatSync(
+        path.join(project, ".claude", "skills", "loop-compass"),
+      ).isSymbolicLink(),
+      true,
+    );
+    writeOneSourcePolicy(project);
+    trackOneSource(project);
     mkdirSync(path.join(project, ".loopcompass", "recoveries"), {
       recursive: true,
     });
@@ -96,6 +128,109 @@ describe("verify-consumer", () => {
     );
     assert.equal(r.status, 0, r.stderr || r.stdout);
     assert.match(r.stdout, /verify-consumer ok/);
+  });
+
+  it("rejects one-source symlink escape and a divergent in-repository target", () => {
+    for (const kind of ["escape", "divergent"]) {
+      const project = path.join(tmp, `consumer-${kind}`);
+      const agents = stageOne(project);
+      writeOneSourcePolicy(project);
+      const link = path.join(project, ".claude", "skills", "loop-compass");
+      mkdirSync(path.dirname(link), { recursive: true });
+      if (kind === "escape") {
+        const outside = path.join(tmp, "outside-skill");
+        cpSync(agents, outside, { recursive: true });
+        symlinkSync(outside, link);
+      } else {
+        const divergent = path.join(project, "vendor", "loop-compass");
+        cpSync(agents, divergent, { recursive: true });
+        symlinkSync(path.relative(path.dirname(link), divergent), link);
+      }
+      trackOneSource(project);
+      const result = verify(project);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /confined-target validation/);
+      assert.doesNotMatch(result.stderr, new RegExp(`consumer-${kind}`));
+    }
+  });
+
+  it("rejects untracked one-source installs and drifting provider imports", () => {
+    const untracked = path.join(tmp, "consumer-untracked");
+    mkdirSync(untracked, { recursive: true });
+    const staged = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts", "release.mjs"),
+        "stage-install",
+        "--project",
+        untracked,
+        "--hosts",
+        "agents,claude",
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(staged.status, 0, staged.stderr || staged.stdout);
+    writeOneSourcePolicy(untracked);
+    let result = verify(untracked);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /not fully tracked/);
+
+    const drifting = path.join(tmp, "consumer-provider-drift");
+    mkdirSync(drifting, { recursive: true });
+    const stage = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts", "release.mjs"),
+        "stage-install",
+        "--project",
+        drifting,
+        "--hosts",
+        "agents,claude",
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(stage.status, 0, stage.stderr || stage.stdout);
+    writeOneSourcePolicy(drifting);
+    for (const provider of [
+      "@AGENTS.md",
+      "@AGENTS.md\n# local drift\n",
+      "@./AGENTS.md\n",
+    ]) {
+      writeFileSync(path.join(drifting, "CLAUDE.md"), provider, "utf8");
+      trackOneSource(drifting);
+      result = verify(drifting);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /expected exact @AGENTS\.md provider import/);
+    }
+  });
+
+  it("rejects a one-source project without AGENTS.md and its policy block", () => {
+    const project = path.join(tmp, "consumer-missing-agents-policy");
+    mkdirSync(project, { recursive: true });
+    const stage = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts", "release.mjs"),
+        "stage-install",
+        "--project",
+        project,
+        "--hosts",
+        "agents,claude",
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(stage.status, 0, stage.stderr || stage.stdout);
+    writeOneSourcePolicy(project);
+    trackOneSource(project);
+    rmSync(path.join(project, "AGENTS.md"));
+
+    const result = verify(project);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /AGENTS\.md: required one-source instruction file is unavailable/,
+    );
+    assert.doesNotMatch(result.stderr, /consumer-missing-agents-policy/);
   });
 
   it("rejects an unexpected execution surface even when other files are valid", () => {

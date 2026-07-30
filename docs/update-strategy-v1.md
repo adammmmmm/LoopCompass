@@ -205,6 +205,14 @@ A skill committed into a repository is updated in that repository and reviewed a
 change. The skill and policy versions travel with the project, which provides the most reproducible
 team behavior.
 
+For the supported Codex/Claude one-source layout, `.agents/skills/loop-compass` is the sole regular
+tracked skill tree, `.claude/skills/loop-compass` is a tracked repository-confined symlink resolving
+exactly to it, `AGENTS.md` owns one managed policy block, and `CLAUDE.md` is exactly `@AGENTS.md`
+plus one final newline. The updater replaces the `.agents` source and preserves or recreates only
+that exact symlink and provider import topology. It hard-stops on symlink escape, divergent target,
+or provider-import drift. Independent host installs remain complete regular trees with independent
+policy blocks.
+
 ## Update flow
 
 The updating agent must perform these steps in order:
@@ -212,7 +220,8 @@ The updating agent must perform these steps in order:
 1. Require the operator or calling instruction to select `global` or `project` installation
    scope. Never infer scope from the first discovered skill.
 2. Locate the installed skill for that exact scope. For `project` scope only, also locate the
-   managed project-policy block.
+   managed project-policy block and detect whether the verified one-source provider topology is in
+   use.
 3. A project-scoped update must not replace a global skill. A global update must not edit any
    project without separate authorization.
 4. Read the installed manifest. For `project` scope only, also read the policy marker version.
@@ -233,8 +242,9 @@ The updating agent must perform these steps in order:
 14. Copy the current installed skill to the journaled backup path and verify its file inventory.
 15. Replace the installed skill directory only after backup and staging validation succeed. Do not
     describe this replacement as atomic across hosts.
-16. For `project` scope only, replace the marked LoopCompass policy block. A global update does
-    not modify project policy.
+16. For `project` scope only, replace the marked LoopCompass policy block. In a verified one-source
+    topology, update only the block in `AGENTS.md` and preserve exact `CLAUDE.md` provider import.
+    A global update does not modify project policy.
 17. Run skill validation and host discovery checks.
 18. For a project update, compare the final protected-path snapshot and report any concurrent
     change without modifying that state.
@@ -372,6 +382,10 @@ when no plugin is installed.
 13. A global update does not enumerate or edit projects outside explicitly provided roots.
 14. An expanded permission or execution surface stops for approval.
 15. A rollback failure preserves its journal, backup, staging paths, and manual recovery steps.
+16. A one-source Codex/Claude install verifies one tracked regular source, one confined exact
+    symlink target, one exact provider import, and one policy block.
+17. Symlink escape, divergent targets, and malformed or drifting provider imports stop without
+    mutating the skill, policy, or `.loopcompass` state.
 
 ## Decision audit
 

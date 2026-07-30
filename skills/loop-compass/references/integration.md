@@ -8,7 +8,7 @@ marked block without rewriting its semantics so each host shares one trigger con
 Install the policy between LoopCompass-owned markers:
 
 ```markdown
-<!-- loopcompass:start policy=2 -->
+<!-- loopcompass:start policy=3 -->
 ...canonical LoopCompass policy...
 <!-- loopcompass:end -->
 ```
@@ -19,23 +19,28 @@ nested, malformed, or overlapping markers are a hard stop for updates.
 
 ## Multi-host project layout
 
-Many repos run more than one agent host. Install **one** skill unit and keep copies byte-identical:
+Many repos run more than one agent host. Install **one** skill unit. A Codex/Claude repository may
+use a tracked `.agents` skill as the sole source and a repository-confined `.claude` symlink:
 
 | Host | Skill path (project scope) | Policy file |
 | --- | --- | --- |
 | OpenAI Codex / compatible | `.agents/skills/loop-compass/` | `AGENTS.md` |
-| Claude Code / compatible | `.claude/skills/loop-compass/` | `CLAUDE.md` |
+| Claude Code / compatible | `.claude/skills/loop-compass` symlink to `.agents/skills/loop-compass` | `CLAUDE.md` importing `@AGENTS.md` |
 | Generic / single-host | `skills/loop-compass/` | host instruction file |
 
 Rules:
 
-1. Copy the entire `skills/loop-compass` directory from a release (or stage with
+1. Copy the entire `skills/loop-compass` directory from a release (or stage the supported
+   one-source layout with
    `node scripts/release.mjs stage-install --project <repo> --hosts agents,claude`).
-2. Merge the marked policy block **once** into each instruction file that governs tool-using
-   agents. Never nest or duplicate markers.
+2. In the one-source layout, merge the marked policy block **once** into `AGENTS.md` and make
+   `CLAUDE.md` exactly `@AGENTS.md` plus one final newline. Otherwise merge the block once into each
+   independent host instruction file. Never nest or duplicate markers.
 3. Never modify `.loopcompass/recoveries` or `.loopcompass/incidents` during install or update.
-4. Prefer keeping dual-host skill trees in sync (same digests). `node scripts/verify-consumer.mjs
-   --project <repo>` checks that when both installs exist.
+4. Track the regular `.agents` skill tree and the `.claude` symlink in Git. The verifier rejects
+   untracked sources, symlink escape, divergent targets, and malformed or drifting provider
+   imports. `node scripts/verify-consumer.mjs --project <repo>` checks both this topology and
+   independent installs.
 
 ## Codex
 
@@ -49,7 +54,14 @@ without skill discovery.
 
 ## Claude Code
 
-Merge the marked canonical policy into the repository `CLAUDE.md`. Normal tool-using subagents can
+For the supported one-source layout, make `CLAUDE.md` exactly:
+
+```text
+@AGENTS.md
+```
+
+This imports the policy owned by `AGENTS.md` without duplicating it. For an independent Claude
+installation, merge the marked canonical policy into `CLAUDE.md`. Normal tool-using subagents can
 discover project skills during execution. For custom subagents, preload the skill when appropriate:
 
 ```yaml

@@ -91,13 +91,42 @@ Use `audit` for historical assessment and `enforce` when high-confidence finding
 agent or CI check. Git is required, and scanned state must be tracked, clean, and byte-identical to
 `HEAD`. Neither mode sanitizes content or replaces review before the first write.
 
+## Route learning to its durable home
+
+Before creating or re-verifying a recovery, identify the narrowest authoritative surface that
+should prevent the failure from recurring:
+
+1. the owning tool or its configuration when its normal behavior is wrong or incomplete;
+2. the host adapter when discovery, invocation, permissions, or host translation caused the
+   failure;
+3. workflow documentation when the correct operating path is stable and shared;
+4. project instructions when agents must consistently choose or avoid a project-specific path; or
+5. a recovery only when the correct path genuinely depends on the normalized failure signature
+   and no broader owning surface is more durable.
+
+Prefer repairing or documenting the owning surface over adding a signature capsule. Record the
+chosen surface and why it owns the learning under `## Durable home` in a candidate recovery. If the
+owning surface can be updated within current authority, update and verify it first. A recovery that
+duplicates the now-authoritative guidance must be deleted after that promotion is verified.
+
+If the exact owning surface is outside current authority, return its repository-confined path or
+stable external identifier and the specific missing permission or capability. Do not create a
+daemon, hook, registry, sweeper, automatic cross-repository writer, or other infrastructure to
+bridge the authority gap. A recovery may remain `candidate` only when it is useful as a reviewed
+proposal; do not mark a duplicate workaround `verified`.
+
+Re-verification repeats this routing check. If a former signature-dependent recovery now belongs in
+an owning tool, adapter, workflow document, or project instruction, promote the learning there,
+verify that surface from clean preconditions, and delete the duplicate recovery.
+
 ## Create a recovery
 
 Create one small file under `.loopcompass/recoveries/`. A `candidate` may preserve a proposal for
 review, but agents must not apply or inject it. Promote it to `verified` only after the recovery is
 causally supported and verified within its stated scope.
 
-1. Copy [recovery-template.md](assets/recovery-template.md).
+1. Complete the durable-home routing above, then copy
+   [recovery-template.md](assets/recovery-template.md).
 2. Normalize the signature only after sanitation: first normalize Unicode to NFC, then remove
    volatile paths, IDs, timestamps, and secret-bearing values.
 3. Derive the slug mechanically from the exact normalized signature: lowercase it, replace each

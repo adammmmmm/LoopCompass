@@ -10,7 +10,7 @@ From a LoopCompass checkout (or any copy of these scripts):
 node scripts/verify-consumer.mjs --project /path/to/your/repo
 ```
 
-Optional explicit skill paths (comma-separated, relative to project):
+Optional explicit paths for independent regular installs (comma-separated, relative to project):
 
 ```sh
 node scripts/verify-consumer.mjs --project /path/to/your/repo \
@@ -19,13 +19,19 @@ node scripts/verify-consumer.mjs --project /path/to/your/repo \
 
 ## What it asserts
 
-1. At least one `loop-compass` skill install exists under `.agents`, `.claude`, or `skills`.
+1. At least one `loop-compass` skill install exists under `.agents`, `.claude`, or `skills`. The
+   supported Codex/Claude one-source topology requires one regular tracked `.agents` tree, a tracked
+   repository-confined `.claude` symlink resolving exactly to it, `CLAUDE.md` containing exactly
+   `@AGENTS.md` plus one final newline, and one policy block in `AGENTS.md`.
 2. Required skill files are present and match the manifest digests. The only permitted execution
    surface is a manifested `.mjs` directly beneath the skill's `scripts/` directory; unexpected
    or unmanifested scripts are rejected.
-3. When multiple installs exist, their complete file inventories and bytes are identical.
-4. `AGENTS.md` / `CLAUDE.md` (if present) each contain exactly one managed policy marker pair and
-   the canonical policy body.
+3. When multiple independent installs exist, their complete file inventories and bytes are
+   identical. One-source verification rejects untracked files, symlink escape, divergent targets,
+   and malformed or drifting provider imports.
+4. Independent `AGENTS.md` / `CLAUDE.md` files (if present) each contain exactly one managed policy
+   marker pair and the canonical policy body. In the one-source topology, only `AGENTS.md` owns the
+   policy and `CLAUDE.md` is the exact provider import above.
 5. If `.loopcompass` exists, capsules pass `validate-state` rules (slug, status, verification
    section, open-incident containment expiry).
 

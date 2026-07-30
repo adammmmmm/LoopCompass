@@ -7,8 +7,20 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-30
+
+### Added
+
+- Durable-home routing before recovery creation or re-verification, with explicit promotion and
+  duplicate-recovery removal rules.
+- Supported one-source Codex/Claude consumer verification with a tracked regular `.agents` skill,
+  confined `.claude` symlink, exact `@AGENTS.md` provider import, and negative controls.
+
 ### Changed
 
+- Policy v3 is a compact bootstrap; `SKILL.md` is the sole detailed runtime contract.
+- Multi-host release staging creates one skill source and a provider symlink without touching
+  consumer `.loopcompass` state.
 - Recovery verification freshness is computed non-destructively with an inclusive UTC expiry date;
   only stored `verified` recoveries with current freshness are eligible as verified guidance.
 
@@ -129,7 +141,8 @@ uses [Semantic Versioning](https://semver.org/).
 
 - Duplicate line in design acceptance section.
 
-[Unreleased]: https://github.com/adammmmmm/LoopCompass/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/adammmmmm/LoopCompass/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/adammmmmm/LoopCompass/compare/v0.2.0...v0.2.1

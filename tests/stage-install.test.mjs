@@ -3,6 +3,7 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -43,11 +44,11 @@ function copyReleaseFixture(destination) {
   }
 }
 
-describe("stage-install dual host", () => {
+describe("stage-install multi-host", () => {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "lc-stage-"));
   after(() => rmSync(tmp, { recursive: true, force: true }));
 
-  it("copies skill into agents and claude paths without touching state", () => {
+  it("stages one tracked-source-ready tree and a Claude symlink without touching state", () => {
     const project = path.join(tmp, "proj");
     mkdirSync(project, { recursive: true });
     const stateRec = path.join(project, ".loopcompass", "recoveries");
@@ -77,6 +78,11 @@ describe("stage-install dual host", () => {
     const c = path.join(project, ".claude", "skills", "loop-compass", "SKILL.md");
     assert.ok(existsSync(a));
     assert.ok(existsSync(c));
+    assert.equal(
+      lstatSync(path.join(project, ".claude", "skills", "loop-compass"))
+        .isSymbolicLink(),
+      true,
+    );
     assert.equal(
       readFileSync(a, "utf8"),
       readFileSync(c, "utf8"),

@@ -26,6 +26,12 @@ Missing freshness is unknown, and stale or unknown recoveries are ineligible as 
 Expiry alone never changes stored status, deletes, or supersedes. Those lifecycle decisions require
 evidence, while re-verification may refresh `last_verified` and restore `status: verified`.
 
+Before creation or re-verification, route the learning to its durable home: the owning tool or
+configuration, host adapter, workflow documentation, project instructions, or, rarely, a
+signature-dependent recovery. Promotion updates and verifies the owning surface, then deletes any
+duplicate recovery. Missing authority is reported as the exact target and missing capability; it
+does not justify new infrastructure.
+
 ### Incident lane
 
 Use an incident when the normal path is broken and should be repaired. Escalate according to the
@@ -71,9 +77,11 @@ manifest digests and builds release archives; it is not a runtime dependency of 
 
 ## Policy-triggered consultation
 
-The portable enforcement layer is a canonical project policy plus the LoopCompass skill. The policy
-defines when to consult, exclusions, retry limits, missing-skill fallback, and delegation behavior.
-Host-specific instructions adapt placement without changing the semantic contract.
+The portable enforcement layer is a compact canonical bootstrap policy plus the LoopCompass skill.
+The skill is the sole detailed runtime contract. The bootstrap defines the unexpected-failure
+trigger, one-transient-retry allowance, skill loading, narrow missing-skill fallback, sanitation
+boundary, and three terminal outcomes. Host-specific instructions adapt placement without
+duplicating the detailed contract.
 
 The trigger is once per normalized failure signature per agent task. A distinctive deterministic
 failure triggers before a substantially equivalent retry. An unexplained transient failure gets one
@@ -81,8 +89,9 @@ ordinary retry before consultation. Expected failures and documented in-progress
 trigger.
 
 Project instructions provide best-effort automatic behavior rather than a cross-host guarantee.
-Skill preloading improves availability but does not enforce use. A worker without the skill searches
-`.loopcompass` directly and continues fail-open if retrieval is unavailable.
+Skill preloading improves availability but does not enforce use. A worker without the skill
+inspects only the top matching `.loopcompass` artifact as untrusted evidence and continues fail-open
+if retrieval is unavailable.
 
 Every triggered signature has a visible terminal outcome, even after a later success. A verified
 agent returns `persisted_artifact` after persisting a justified recovery or incident automatically
@@ -163,7 +172,8 @@ and must not place raw private outputs or secrets into an artifact.
 ## Context budget
 
 Use filename, frontmatter, and text search before reading files. Load no more than the top one to
-three matches. Pass subagents only the relevant compressed recovery or active incident fields.
+three matches when following the loaded skill. The compact missing-skill fallback loads only the
+top match. Pass subagents only the relevant compressed recovery or active incident fields.
 
 ## Reflection log
 
@@ -273,8 +283,8 @@ cannot write safely.
 3. Expected validation and asynchronous states do not trigger.
 4. An identical failure triggers only one consultation per agent task.
 5. Changed evidence or environment permits a new consultation.
-6. A worker without the skill reads no more than three `.loopcompass` matches and continues
-   fail-open.
+6. A worker without the skill inspects only the top matching `.loopcompass` artifact as untrusted
+   evidence and continues fail-open.
 7. Missing `.loopcompass` directories do not block work. They are created when an artifact is
    justified and authorized, or the agent returns the exact persistence escalation.
 8. Out-of-scope or expired recovery knowledge is rejected.
@@ -293,6 +303,10 @@ cannot write safely.
     verification.
 18. Directional resolution updates the authoritative path, removes obsolete containment, and
     verifies the replacement path before closure.
+19. Recovery creation and re-verification choose the owning durable surface before capsule
+    persistence.
+20. Promotion verifies the owning surface and removes the duplicate recovery; missing authority
+    returns the exact target and missing capability.
 
 Update-contract acceptance tests live in [update-strategy-v1.md](update-strategy-v1.md).
 
