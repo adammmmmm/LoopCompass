@@ -29,6 +29,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { constants as fsConstants } from "node:fs";
@@ -685,7 +686,8 @@ function cmdStageInstall(args) {
   }
   for (const host of hosts) {
     let candidate = project;
-    for (const segment of map[host].split(path.sep)) {
+    const destinationSegments = map[host].split(path.sep);
+    for (const segment of destinationSegments.slice(0, -1)) {
       candidate = path.join(candidate, segment);
       if (!existsSync(candidate)) break;
       const stat = lstatSync(candidate);
@@ -735,11 +737,23 @@ function cmdStageInstall(args) {
       throw new Error("source manifest changed during staging");
     }
 
+    const oneSource = hosts.includes("agents") && hosts.includes("claude");
     for (const h of hosts) {
+      if (oneSource && h === "claude") continue;
       const dest = path.join(project, map[h]);
       rmSync(dest, { recursive: true, force: true });
       copyTree(stagedSource, dest);
       console.log(`staged ${path.relative(project, dest)}`);
+    }
+    if (oneSource) {
+      const agentsDest = path.join(project, map.agents);
+      const claudeDest = path.join(project, map.claude);
+      rmSync(claudeDest, { recursive: true, force: true });
+      mkdirSync(path.dirname(claudeDest), { recursive: true });
+      symlinkSync(path.relative(path.dirname(claudeDest), agentsDest), claudeDest);
+      console.log(
+        `linked ${path.relative(project, claudeDest)} -> ${path.relative(project, agentsDest)}`,
+      );
     }
   } finally {
     rmSync(temporary, { recursive: true, force: true });

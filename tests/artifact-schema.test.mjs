@@ -25,6 +25,8 @@ describe("artifact templates", () => {
     }
     assert.match(text, /status:\s*candidate/);
     assert.match(text, /id:\s*<slug-from-normalized-signature>/);
+    assert.match(text, /^## Durable home$/m);
+    assert.match(text, /schema:\s*1/);
   });
 
   it("incident template documents required frontmatter keys", () => {

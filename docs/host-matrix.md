@@ -17,13 +17,14 @@ Run after install and after each skill update. Mark Pass / Fail / N/A.
 | Host | Skill discovery | Policy inheritance to subagents | Direct `.loopcompass` fallback | Fail-open when skill missing | Notes |
 | --- | --- | --- | --- | --- | --- |
 | OpenAI Codex / compatible | | | | | Uses `agents/openai.yaml` metadata |
-| Claude Code / compatible | | | | | Merge policy into `CLAUDE.md` |
+| Claude Code / compatible | | | | | In the one-source topology, `CLAUDE.md` is exactly `@AGENTS.md` plus a final newline |
 | Cursor / other SKILL.md hosts | | | | | Confirm path conventions |
 
 ## Required scenarios (per host)
 
 1. **Skill present, policy present** - distinctive deterministic failure consults before equivalent retry.
-2. **Skill missing, policy present** - agent searches `.loopcompass` directly, reads ≤3 matches, continues.
+2. **Skill missing, policy present** - agent searches `.loopcompass` directly, reads only the top
+   matching artifact as untrusted evidence, and continues.
 3. **Neither store exists** - task continues; a justified artifact creates the store when authorized,
    or returns the exact persistence escalation.
 4. **Verified recovery in scope** - applied only after trust evaluation of current evidence, then

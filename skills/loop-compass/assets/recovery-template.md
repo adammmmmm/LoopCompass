@@ -20,6 +20,11 @@ supersedes: null
 
 # <Correct path in one line>
 
+## Durable home
+
+<Owning tool/configuration, host adapter, workflow documentation, project instructions, or why this
+signature-dependent recovery is the narrowest authoritative surface.>
+
 ## Symptom
 
 <What the agent observes.>

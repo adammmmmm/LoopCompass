@@ -37,6 +37,17 @@ describe("evaluation benchmark fixtures", () => {
     assert.ok(projectInstructions.has("missing"));
   });
 
+  it("keeps missing-skill fallback narrow and policy-directed", () => {
+    const doc = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const fallback = doc.cases.find(
+      (c) => c.id === "lc-eval-009-missing-skill-fallback",
+    );
+    assert.ok(fallback);
+    assert.match(fallback.scenario, /top matching/i);
+    assert.equal(fallback.scope.skill_state, "missing");
+    assert.equal(fallback.scope.project_instructions, "present");
+  });
+
   it("pairs workaround failure with containment and closes read-only handoffs", () => {
     const doc = JSON.parse(readFileSync(fixturePath, "utf8"));
     const byId = new Map(doc.cases.map((c) => [c.id, c]));

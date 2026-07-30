@@ -78,6 +78,19 @@ describe("classification fixtures", () => {
     }
   });
 
+  it("routes durable learning across owning surfaces before recovery persistence", () => {
+    const byId = new Map(doc.cases.map((c) => [c.id, c]));
+    for (const [id, owner] of [
+      ["tool-config-owns-cache-location", "tool configuration"],
+      ["host-adapter-owns-skill-discovery", "host adapter"],
+      ["workflow-doc-owns-release-order", "Workflow documentation"],
+      ["project-instructions-own-required-command", "Project instructions"],
+    ]) {
+      assert.match(byId.get(id)?.rationale || "", new RegExp(owner, "i"));
+      assert.equal(byId.get(id)?.lane, "incident");
+    }
+  });
+
   it("volatile noise does not fork identity for uuid-path case", () => {
     const base = doc.cases.find((c) => c.id === "uuid-path-collision-shape");
     assert.ok(base);

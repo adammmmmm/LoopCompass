@@ -6,7 +6,7 @@ A portable skill for agent workflows. No daemon, no global CLI, no database, no 
 hosted service. Ordinary consultation needs no runtime; an optional local Node audit ships inside
 the skill. Small reviewable files. Full fleet memory.
 
-![0.4.0](https://img.shields.io/badge/version-0.4.0-1f2328?style=flat-square&labelColor=21262d&color=58a6ff)
+![0.5.0](https://img.shields.io/badge/version-0.5.0-1f2328?style=flat-square&labelColor=21262d&color=58a6ff)
 ![MIT](https://img.shields.io/badge/license-MIT-1f2328?style=flat-square&labelColor=21262d&color=3fb950)
 ![No required runtime](https://img.shields.io/badge/runtime-none%20required-1f2328?style=flat-square&labelColor=21262d&color=8b949e)
 ![Provider neutral](https://img.shields.io/badge/host-provider--neutral-1f2328?style=flat-square&labelColor=21262d&color=a371f7)
@@ -33,7 +33,7 @@ already happened once, in some other session, and vanished with the transcript.
 | Situation | What happens |
 | --- | --- |
 | Distinctive failure shows up | Agent consults once before blind retry: skill first, or a direct search of `.loopcompass/` |
-| The path is correct tool use | After verification, a short recovery file is saved automatically within repository authority |
+| The path is correct tool use | Route it to the owning tool/config, adapter, workflow docs, or project instructions; keep a recovery only when the signature truly owns the path |
 | The normal path is broken | An incident tracks escalation and repair; the live file goes away when the normal path works again |
 | It was a lucky bypass | Nothing is preserved. Folklore does not become documentation |
 
@@ -45,7 +45,7 @@ papered over.
 
 ## How it works
 
-Consult once. Retrieve first. Classify before preserving anything.
+Consult once. Retrieve first. Classify and choose the durable home before preserving anything.
 
 <p align="center">
   <img src="docs/assets/flowchart-classification.svg" alt="Classification gate: failure, retrieve, classify, then recovery, incident, external, or nothing" width="720"/>
@@ -121,13 +121,14 @@ Prefer an **immutable GitHub release** over floating `main`. Each release ships 
 skill tree (`manifest.yaml` included), docs, and a separate `SHA256SUMS` asset.
 
 1. Copy [`skills/loop-compass`](skills/loop-compass) into your host skill directory (`global`) or
-   this repository (`project`). Multi-host projects often need **both**
-   `.agents/skills/loop-compass` and `.claude/skills/loop-compass` (keep them byte-identical).
-   Helper from a LoopCompass checkout:
+   this repository (`project`). For a Codex/Claude project, use one tracked regular
+   `.agents/skills/loop-compass` source and a tracked repository-confined
+   `.claude/skills/loop-compass` symlink resolving to it. Helper from a LoopCompass checkout:
    `node scripts/release.mjs stage-install --project <repo> --hosts agents,claude`.
 2. Merge the **entire marked** block from
-   [`project-policy.md`](skills/loop-compass/assets/project-policy.md) into `AGENTS.md`,
-   `CLAUDE.md`, or the host equivalent. Keep
+   [`project-policy.md`](skills/loop-compass/assets/project-policy.md) into `AGENTS.md`. In the
+   one-source layout make `CLAUDE.md` exactly `@AGENTS.md` plus one final newline. Independent
+   installs place one block in their host instruction file. Keep
    `<!-- loopcompass:start policy=N -->` … `<!-- loopcompass:end -->` intact.
 3. Confirm `manifest.yaml` is present. Create `.loopcompass/recoveries` and
    `.loopcompass/incidents` now, or let normal use create them.
@@ -146,7 +147,7 @@ Agent one-liner (project scope). Semantics live in
 [docs/update-strategy-v1.md](docs/update-strategy-v1.md):
 
 ```text
-Install LoopCompass v0.4.0 project scope from
+Install LoopCompass v0.5.0 project scope from
 https://github.com/adammmmmm/LoopCompass (commit-pinned release).
 Follow docs/update-strategy-v1.md. Report version, scope, and release commit.
 ```
@@ -241,7 +242,7 @@ for metrics and the fixture contract.
 | Principle | Meaning |
 | --- | --- |
 | Repair mechanisms | Not symptoms |
-| Preserve correct knowledge | Not clever bypasses |
+| Prefer the durable owner | Tool/config, adapter, workflow docs, or project instructions before a signature capsule |
 | Evidence before verified | Confidence is not proof |
 | Repository-local state | Small, reviewable files |
 | Narrow retrieval | Lean briefs; top 1-3 matches |
@@ -281,9 +282,9 @@ Runs unit/fixture/dry-run tests and `scripts/release.mjs validate`.
 
 ## Status
 
-v0.4.0 is being dogfooded in real multi-agent work. The sole focused backlog item is
-[#1 — Evaluate recovery freshness from existing metadata](https://github.com/adammmmmm/LoopCompass/issues/1).
-Formal live-host evidence is provider-specific: Codex has one bounded release-conformance pass;
+v0.5.0 introduces policy v3 durable-home routing and the supported one-source Codex/Claude
+consumer layout. Formal live-host evidence is provider-specific: Codex has one bounded
+v0.4.0 release-conformance pass;
 Claude Code and Grok CLI are explicitly unassessed. Hooks remain deferred behind measured
 persistent consultation or blind-retry failures. V1 updates are release-based and explicit. Silent
 update checks during ordinary use remain deferred.
