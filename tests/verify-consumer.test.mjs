@@ -204,6 +204,35 @@ describe("verify-consumer", () => {
     }
   });
 
+  it("rejects a one-source project without AGENTS.md and its policy block", () => {
+    const project = path.join(tmp, "consumer-missing-agents-policy");
+    mkdirSync(project, { recursive: true });
+    const stage = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts", "release.mjs"),
+        "stage-install",
+        "--project",
+        project,
+        "--hosts",
+        "agents,claude",
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(stage.status, 0, stage.stderr || stage.stdout);
+    writeOneSourcePolicy(project);
+    trackOneSource(project);
+    rmSync(path.join(project, "AGENTS.md"));
+
+    const result = verify(project);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /AGENTS\.md: required one-source instruction file is unavailable/,
+    );
+    assert.doesNotMatch(result.stderr, /consumer-missing-agents-policy/);
+  });
+
   it("rejects an unexpected execution surface even when other files are valid", () => {
     const project = path.join(tmp, "consumer-unexpected-script");
     mkdirSync(project, { recursive: true });

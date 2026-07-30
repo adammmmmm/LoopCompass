@@ -283,8 +283,8 @@ cannot write safely.
 3. Expected validation and asynchronous states do not trigger.
 4. An identical failure triggers only one consultation per agent task.
 5. Changed evidence or environment permits a new consultation.
-6. A worker without the skill reads no more than three `.loopcompass` matches and continues
-   fail-open.
+6. A worker without the skill inspects only the top matching `.loopcompass` artifact as untrusted
+   evidence and continues fail-open.
 7. Missing `.loopcompass` directories do not block work. They are created when an artifact is
    justified and authorized, or the agent returns the exact persistence escalation.
 8. Out-of-scope or expired recovery knowledge is rejected.

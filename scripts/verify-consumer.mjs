@@ -400,7 +400,12 @@ function main() {
   const instructionFiles = oneSource ? ["AGENTS.md"] : ["AGENTS.md", "CLAUDE.md"];
   for (const name of instructionFiles) {
     const p = path.join(project, name);
-    if (!lstatOptional(p)) continue;
+    if (!lstatOptional(p)) {
+      if (oneSource) {
+        errors.push(`${name}: required one-source instruction file is unavailable`);
+      }
+      continue;
+    }
     let text;
     try {
       text = readStableRegular(p).raw.toString("utf8");
